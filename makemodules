@@ -1,0 +1,7 @@
+#!/bin/sh
+
+cat unrealircd.conf | grep "loadmodule" | cut -d "/" -f 3 | cut -d "." -f 1 | grep -v "commands" | grep -v "cloak" |
+while read line
+do
+        make custommodule MODULEFILE=${line}
+done
