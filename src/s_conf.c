@@ -3056,7 +3056,6 @@ int	_test_admin(ConfigFile *conf, ConfigEntry *ce)
 
 	if (requiredstuff.conf_admin)
 	{
-		config_warn_duplicate(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "admin");
 		return 0;
 	}
 
