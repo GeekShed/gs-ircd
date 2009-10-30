@@ -375,13 +375,13 @@ int  inetport(aClient *cptr, char *name, int port)
 	/*
 	 * At first, open a new socket
 	 */
+	sendto_ops("Port flags: %i, %i, %i", cptr->umodes, LISTENER_SCTP, cptr->umodes & LISTENER_SCTP);
 	if (cptr->fd == -1)
 	{
-		report_error("Port flags: %x, %i, %i", cptr->umodes, LISTENER_SCTP, cptr->umodes & LISTENER_SCTP);
 		if (cptr->umodes & LISTENER_SCTP) {
 			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
 		} else {
-			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
 		}
 	}
 	if (cptr->fd < 0)
