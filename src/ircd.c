@@ -1523,7 +1523,7 @@ int InitwIRCD(int argc, char *argv[])
 	    *conf_listen->ip != '*' ? inet_addr(conf_listen->ip) : INADDR_ANY;
 */
 	Debug((DEBUG_ERROR, "Port = %d", portnum));
-	if (inetport(&me, conf_listen->ip, portnum))
+	if (inetport(&me, conf_listen->ip, portnum, 0))
 		exit(1);
 	set_non_blocking(me.fd, &me);
 	conf_listen->options |= LISTENER_BOUND;

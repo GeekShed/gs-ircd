@@ -247,7 +247,7 @@ extern void close_listeners();
 extern int connect_server(ConfigItem_link *, aClient *, struct hostent *);
 extern void get_my_name(aClient *, char *, int);
 extern int get_sockerr(aClient *);
-extern int inetport(aClient *, char *, int);
+extern int inetport(aClient *, char *, int, int);
 extern void init_sys();
 extern void init_modef();
 

@@ -341,7 +341,7 @@ void report_baderror(char *text, aClient *cptr)
  * depending on the IP# mask given by 'name'.  Returns the fd of the
  * socket created or -1 on error.
  */
-int  inetport(aClient *cptr, char *name, int port)
+int  inetport(aClient *cptr, char *name, int port, int options)
 {
 	static struct SOCKADDR_IN server;
 	int  ad[4], len = sizeof(server);
@@ -375,13 +375,12 @@ int  inetport(aClient *cptr, char *name, int port)
 	/*
 	 * At first, open a new socket
 	 */
-	sendto_ops("Port flags: %i, %i, %i", cptr->umodes, LISTENER_SCTP, cptr->umodes & LISTENER_SCTP);
 	if (cptr->fd == -1)
 	{
-		if (cptr->umodes & LISTENER_SCTP) {
+		if (options & LISTENER_SCTP) {
 			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
 		} else {
-			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
 		}
 	}
 	if (cptr->fd < 0)
@@ -479,7 +478,7 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->from = cptr;
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
-	if (inetport(cptr, conf->ip, conf->port))
+	if (inetport(cptr, conf->ip, conf->port, conf->options))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
 	cptr->umodes = conf->options ? conf->options : LISTENER_NORMAL;
