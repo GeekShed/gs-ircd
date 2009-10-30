@@ -375,6 +375,9 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 	/*
 	 * At first, open a new socket
 	 */
+	ircd_log(LOG_ERROR, "Port flags: %x (%d)", options, options);
+	ircd_log(LOG_ERROR, "Test condition: %x (%x)", options & LISTENER_SCTP, LISTENER_SCTP);
+
 	if (cptr->fd == -1)
 	{
 		if (options & LISTENER_SCTP) {
