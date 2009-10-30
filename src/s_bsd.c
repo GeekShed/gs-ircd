@@ -378,9 +378,9 @@ int  inetport(aClient *cptr, char *name, int port)
 	if (cptr->fd == -1)
 	{
 		if (cptr->umodes & LISTENER_SCTP) {
+			sendto_ops("SCTP port enabled ");
 			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
-		}
-		else {
+		} else {
 			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
 		}
 	}
