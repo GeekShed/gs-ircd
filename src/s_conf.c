@@ -4215,6 +4215,7 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 		if (listen->options & LISTENER_BOUND)
 			tmpflags |= LISTENER_BOUND;
 
+		ircd_log(LOG_ERROR, "Port flags %d: 0x%x", listen->port, tmpflags);
 		listen->options = tmpflags;
 		if (isnew)
 			AddListItem(listen, conf_listen);
