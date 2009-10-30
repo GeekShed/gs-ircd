@@ -377,7 +377,12 @@ int  inetport(aClient *cptr, char *name, int port)
 	 */
 	if (cptr->fd == -1)
 	{
-		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
+		if (cptr->umodes & LISTENER_SCTP) {
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
+		}
+		else {
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
+		}
 	}
 	if (cptr->fd < 0)
 	{
