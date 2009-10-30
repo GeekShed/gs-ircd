@@ -249,6 +249,7 @@ static OperFlag _ListenerFlags[] = {
 	{ LISTENER_REMOTEADMIN, "remoteadmin"},
 	{ LISTENER_SERVERSONLY, "serversonly"},
 	{ LISTENER_SSL, 	"ssl"},
+	{ LISTENER_SCTP, 	"sctp"},
 	{ LISTENER_NORMAL, 	"standard"},
 };
 
