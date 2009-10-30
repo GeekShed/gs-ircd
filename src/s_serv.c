@@ -439,6 +439,8 @@ char *get_cptr_status(aClient *acptr)
 			*p++ = 'R';
 		if (acptr->umodes & LISTENER_JAVACLIENT)
 			*p++ = 'J';
+		if (acptr->umodes & LISTENER_SCTP)
+			*p++ = 't';
 	}
 	else
 	{
