@@ -377,7 +377,7 @@ int  inetport(aClient *cptr, char *name, int port)
 	 */
 	if (cptr->fd == -1)
 	{
-		report_error("Port flags: %x", cptr->umodes);
+		report_error("Port flags: %x, %i, %i", cptr->umodes, LISTENER_SCTP, cptr->umodes & LISTENER_SCTP);
 		if (cptr->umodes & LISTENER_SCTP) {
 			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
 		} else {
