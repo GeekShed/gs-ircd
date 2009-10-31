@@ -4198,7 +4198,7 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 			}
 		}
 	}
-	ircd_log(LOG_ERROR, "Port flags 0x%x", tmpflags);
+	ircd_log(LOG_ERROR, "Port flags2 0x%x", tmpflags);
 #ifndef USE_SSL
 	tmpflags &= ~LISTENER_SSL;
 #endif
