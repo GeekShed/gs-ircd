@@ -4198,7 +4198,6 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 			}
 		}
 	}
-	ircd_log(LOG_ERROR, "Port flags2 0x%x", tmpflags);
 #ifndef USE_SSL
 	tmpflags &= ~LISTENER_SSL;
 #endif
@@ -8272,10 +8271,10 @@ void	run_configuration(void)
 
 	for (listenptr = conf_listen; listenptr; listenptr = (ConfigItem_listen *) listenptr->next)
 	{
-		ircd_log(LOG_ERROR, "Port options for %i: 0x%x", listenptr->port, listenptr->options);
+		ircd_log(LOG_ERROR, "%i Port options for: 0x%x", listenptr->port, listenptr->options);
 		if (!(listenptr->options & LISTENER_BOUND))
 		{
-			ircd_log(LOG_ERROR, "Port2 options for %i: 0x%x", listenptr->port, listenptr->options);
+			ircd_log(LOG_ERROR, "%i Port2 options for: 0x%x", listenptr->port, listenptr->options);
 			if (add_listener2(listenptr) == -1)
 			{
 				ircd_log(LOG_ERROR, "Failed to bind to %s:%i", listenptr->ip, listenptr->port);
