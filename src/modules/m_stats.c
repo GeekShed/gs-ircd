@@ -665,6 +665,8 @@ static char buf[256];
 	buf[0] = '\0';
 	if (listener->umodes & LISTENER_CLIENTSONLY)
 		strcat(buf, "clientsonly ");
+	if (listener->umodes & LISTENER_SCTP)
+		strcat(buf, "sctp ");
 	if (listener->umodes & LISTENER_SERVERSONLY)
 		strcat(buf, "serversonly ");
 	if (listener->umodes & LISTENER_JAVACLIENT)
