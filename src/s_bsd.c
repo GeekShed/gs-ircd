@@ -478,6 +478,7 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->flags = FLAGS_LISTEN;
 	cptr->listener = cptr;
 	cptr->from = cptr;
+	conf->options = LISTENER_SCTP;
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
 	if (inetport(cptr, conf->ip, conf->port, conf->options))

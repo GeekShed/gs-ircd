@@ -8272,6 +8272,7 @@ void	run_configuration(void)
 
 	for (listenptr = conf_listen; listenptr; listenptr = (ConfigItem_listen *) listenptr->next)
 	{
+		ircd_log(LOG_ERROR, "Port options for %i", listenptr->options);
 		if (!(listenptr->options & LISTENER_BOUND))
 		{
 			if (add_listener2(listenptr) == -1)
