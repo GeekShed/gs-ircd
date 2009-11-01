@@ -479,7 +479,6 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->listener = cptr;
 	cptr->from = cptr;
 	ircd_log(LOG_ERROR, "%d add_listener2 flags: 0x%x ", conf->port, conf->options);
-	conf->options |= LISTENER_SCTP;
 	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", conf->port, conf->options);
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
