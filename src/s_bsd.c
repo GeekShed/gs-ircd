@@ -478,9 +478,12 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->flags = FLAGS_LISTEN;
 	cptr->listener = cptr;
 	cptr->from = cptr;
-	conf->options = LISTENER_SCTP;
+	ircd_log(LOG_ERROR, "%d add_listener2 flags: 0x%x ", port, conf->options);
+	conf->options |= LISTENER_SCTP;
+	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", port, conf->options);
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
+	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", port, conf->options);
 	if (inetport(cptr, conf->ip, conf->port, conf->options))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
