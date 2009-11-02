@@ -259,6 +259,7 @@ static OperFlag _LinkFlags[] = {
 	{ CONNECT_NODNSCACHE, "nodnscache" },
 	{ CONNECT_NOHOSTCHECK, "nohostcheck" },
 	{ CONNECT_QUARANTINE, "quarantine"},
+	{ CONNECT_SCTP,	"sctp"		  },
 	{ CONNECT_SSL,	"ssl"		  },
 	{ CONNECT_ZIP,	"zip"		  },
 };

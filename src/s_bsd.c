@@ -2538,7 +2538,13 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * Might as well get sockhost from here, the connection is attempted
 	 * with it so if it fails its useless.
 	 */
-	cptr->fd = socket(AFINET, SOCK_STREAM, 0);
+
+	sendto_realops("Socket connection flags  (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
+	if (aconf->options & CONNECT_SCTP) {
+		cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
+	} else {
+		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
+	}
 	if (cptr->fd < 0)
 	{
 		if (ERRNO == P_EMFILE)
