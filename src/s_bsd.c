@@ -2409,6 +2409,7 @@ int  connect_server(ConfigItem_link *aconf, aClient *by, struct hostent *hp)
 		aconf, aconf->refcount, aconf->flag.temporary ? "YES" : "NO");
 #endif
 
+	sendto_realops("Socket connection flags  (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (!hp && (aconf->options & CONNECT_NODNSCACHE)) {
 		/* Remove "cache" if link::options::nodnscache is set */
 		memset(&aconf->ipnum, '\0', sizeof(struct IN_ADDR));
@@ -2539,7 +2540,7 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * with it so if it fails its useless.
 	 */
 
-	sendto_realops("Socket connection flags  (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
+	sendto_realops("Socket connection flags2 (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (aconf->options & CONNECT_SCTP) {
 		cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
 	} else {

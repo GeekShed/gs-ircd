@@ -497,13 +497,13 @@ static TS try_connections(TS currenttime)
 				if (!match(deny->mask, aconf->servername)
 				    && crule_eval(deny->rule))
 					break;
-
+			
+			sendto_realops("Server connect flags3: (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 			if (!deny && connect_server(aconf, (aClient *)NULL,
 			    (struct hostent *)NULL) == 0)
-				sendto_realops
 				    ("Connection to %s[%s] activated.",
 				    aconf->servername, aconf->hostname);
-
+ 
 		}
 		if ((next > aconf->hold) || (next == 0))
 			next = aconf->hold;
