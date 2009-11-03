@@ -413,7 +413,11 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 #ifndef INET6
 		server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
-		inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
+		if (options & LISTENER_SCTP) {
+			server.SINADDR_S_ADDR = INADDR_ANY;
+		} else {
+			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
+		}
 #endif
 		server.SIN_PORT = htons(port);
 		/*
@@ -2575,7 +2579,11 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 #ifndef INET6
 		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
 #else
+	if (aconf->options & CONNECT_SCTP) {
+		server.SIN_ADDR.S_ADDR = INADDR_ANY;
+	} e;se {
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
+	}
 #endif
 	}
 	if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
