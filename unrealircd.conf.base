@@ -43,6 +43,7 @@ include "../%%DATADIR%%/%%IRCDDIR%%/badwords.channel.conf";
 include "../%%DATADIR%%/%%IRCDDIR%%/badwords.message.conf";
 include "../%%DATADIR%%/%%IRCDDIR%%/badwords.quit.conf";
 include "../%%DATADIR%%/%%IRCDDIR%%/spamfilter.conf";
+include "../%%DATADIR%%/%%IRCDDIR%%/autospamfilter.conf";
 include "../%%DATADIR%%/%%IRCDDIR%%/anope.conf";
 include "../%%DATADIR%%/%%IRCDDIR%%/geekshed.network";
 include "../%%DATADIR%%/%%IRCDDIR%%/connection.conf";
