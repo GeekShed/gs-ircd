@@ -417,7 +417,7 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 		server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
 		if (options & LISTENER_SCTP) {
-			server.SIN_ADDR_S_ADDR = inet_addr(ipname);
+			server.SIN_ADDR_S_ADDR = INADDR_ANY;
 		} else {
 			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
 		}
