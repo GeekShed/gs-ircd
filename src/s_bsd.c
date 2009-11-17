@@ -2584,7 +2584,7 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 #else
 	if (aconf->options & CONNECT_SCTP) {
 		server.SIN_ADDR.S_ADDR = INADDR_ANY;
-	} e;se {
+	} else {
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 	}
 #endif
