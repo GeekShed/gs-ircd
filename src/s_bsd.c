@@ -2549,9 +2549,9 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 
 	sendto_realops("Socket connection flags2 (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (aconf->options & CONNECT_SCTP) {
-		cptr->fd = socket(AF_INET, SOCK_STREAM, IPPROTO_SCTP);
+		cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
 	} else {
-		cptr->fd = socket(AF_INET, SOCK_STREAM, 0);
+		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
 	}
 	if (cptr->fd < 0)
 	{
