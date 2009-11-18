@@ -53,7 +53,7 @@
 #define PATCH2  		".2"
 #define PATCH3  		".8"
 #define PATCH4  		"-gs"
-#define PATCH5  		".1"
+#define PATCH5  		".2"
 #define PATCH6  		""
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
