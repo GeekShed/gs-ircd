@@ -2569,33 +2569,31 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 		sendto_realops("No more connections allowed (%s)", cptr->name);
 		return NULL;
 	}
-	mysk.SIN_PORT = 0;
-	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = AFINET;
-	get_sockhost(cptr, aconf->hostname);
+	if (! aconf->options & CONNECT_SCTP) {
+		mysk.SIN_PORT = 0;
+		bzero((char *)&server, sizeof(server));
+		server.SIN_FAMILY = AFINET;
+		get_sockhost(cptr, aconf->hostname);
 	
-	server.SIN_PORT = 0;
-	server.SIN_ADDR = me.ip;
-	server.SIN_FAMILY = AFINET;
-	if (aconf->bindip && strcmp("*", aconf->bindip))
-	{
+		server.SIN_PORT = 0;
+		server.SIN_ADDR = me.ip;
+		server.SIN_FAMILY = AFINET;
+		if (aconf->bindip && strcmp("*", aconf->bindip))
+		{
 #ifndef INET6
-	if (aconf->options & CONNECT_SCTP) {
-		server.SIN_ADDR.S_ADDR = INADDR_ANY;
-	} else {
 		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
-	}
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
+		}
+		if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
+		{
+			report_baderror("error binding to local port for %s:%s", cptr);
+			return NULL;
+		}
+		bzero((char *)&server, sizeof(server));
+		server.SIN_FAMILY = AFINET;
 	}
-	if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
-	{
-		report_baderror("error binding to local port for %s:%s", cptr);
-		return NULL;
-	}
-	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = AFINET;
 	/*
 	 * By this point we should know the IP# of the host listed in the
 	 * conf line, whether as a result of the hostname lookup or the ip#
