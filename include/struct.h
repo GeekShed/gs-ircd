@@ -1199,6 +1199,7 @@ struct _configitem_listen {
 	int		port;
 	int		options, clients;
 	aClient		*listener;
+	char		*ip_protocol;
 };
 
 struct _configitem_vhost {
