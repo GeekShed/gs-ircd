@@ -54,7 +54,7 @@
 #define PATCH3  		".8"
 #define PATCH4  		"-gs"
 #define PATCH5  		".3"
-#define PATCH6  		""
+#define PATCH6  		"r$Revision$"
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
 #define PATCH9  		""
