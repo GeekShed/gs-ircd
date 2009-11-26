@@ -2,7 +2,7 @@
 **
 ** version.h
 ** UnrealIRCd
-** $Id: version.h,v 1.1.1.1.2.25 2009/04/13 11:03:58 syzop Exp $
+** $Id$
 */
 #ifndef __versioninclude
 #define __versioninclude 1
@@ -54,7 +54,7 @@
 #define PATCH3  		".8"
 #define PATCH4  		"-gs"
 #define PATCH5  		".3"
-#define PATCH6  		"r$Revision$"
+#define PATCH6  		"$Id$"
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
 #define PATCH9  		""
