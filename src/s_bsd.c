@@ -415,13 +415,13 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 	 */
 	if (port)
 	{
-		server.SIN_FAMILY = AFINET;
+		server.SIN_FAMILY = cptr->network_protocol;
 		/* per-port bindings, fixes /stats l */
 		
 #ifndef INET6
 			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
-			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
+			inet_pton(cptr->network_protocol, ipname, server.SIN_ADDR.S_ADDR);
 #endif
 		server.SIN_PORT = htons(port);
 		/*
@@ -2580,12 +2580,12 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	}
 	mysk.SIN_PORT = 0;
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = AFINET;
+	server.SIN_FAMILY = cptr->network_protocol;
 	get_sockhost(cptr, aconf->hostname);
 	
 	server.SIN_PORT = 0;
 	server.SIN_ADDR = me.ip;
-	server.SIN_FAMILY = AFINET;
+	server.SIN_FAMILY = cptr->network_protocol;
 	if (aconf->bindip && strcmp("*", aconf->bindip))
 	{
 #ifndef INET6
@@ -2600,7 +2600,7 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 		return NULL;
 	}
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = AFINET;
+	server.SIN_FAMILY = cptr->network_protocol;
 	/*
 	 * By this point we should know the IP# of the host listed in the
 	 * conf line, whether as a result of the hostname lookup or the ip#
