@@ -138,9 +138,6 @@ aClient *make_client(aClient *from, aClient *servr)
 	cptr->serv = NULL;
 	cptr->srvptr = servr;
 	cptr->status = STAT_UNKNOWN;
-	cptr->network_protocol = AFINET;
-	cptr->transport_protocol = IPPROTO_TCP;
-	cptr->sock_type = SOCK_STREAM;
 	
 	(void)strcpy(cptr->username, "unknown");
 	if (size == CLIENT_LOCAL_SIZE)
