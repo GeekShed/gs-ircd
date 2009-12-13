@@ -948,6 +948,9 @@ struct Client {
 	char username[USERLEN + 1];	/* username here now for auth stuff */
 	char info[REALLEN + 1];	/* Free form additional client information */
 	aClient *srvptr;	/* Server introducing this.  May be &me */
+	int network_protocol;		/* network protocol type (ipv4, or ipv6)*/
+	int transport_protocol;		/* transport protocol type (TCP, or SCTP)*/
+	int sock_type;			/* socket type (STREAM, or SEQPACKET)*/
 	short status;		/* client type */
 	/*
 	   ** The following fields are allocated only for local clients
@@ -1012,9 +1015,6 @@ struct Client {
 #ifdef DEBUGMODE
 	TS   cputime;
 #endif
-	int network_protocol;		/* network protocol type (ipv4, or ipv6)*/
-	int transport_protocol;		/* transport protocol type (TCP, or SCTP)*/
-	int sock_type;			/* socket type (STREAM, or SEQPACKET)*/
 
 	char *error_str;	/* Quit reason set by dead_link in case of socket/buffer error */
 };
