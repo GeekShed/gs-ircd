@@ -46,6 +46,12 @@
 #include "malloc.h"
 #endif
 #include <string.h>
+#ifndef _WIN32
+#include <sys/socket.h>
+#else
+#include <io.h>
+#endif
+
 void free_link(Link *);
 Link *make_link();
 extern ircstats IRCstats;
@@ -132,6 +138,9 @@ aClient *make_client(aClient *from, aClient *servr)
 	cptr->serv = NULL;
 	cptr->srvptr = servr;
 	cptr->status = STAT_UNKNOWN;
+	cptr->network_protocol = AFINET;
+	cptr->transport_protocol = IPPROTO_TCP;
+	cptr->sock_type = SOCK_STREAM;
 	
 	(void)strcpy(cptr->username, "unknown");
 	if (size == CLIENT_LOCAL_SIZE)
