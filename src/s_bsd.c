@@ -380,13 +380,18 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 	 */
 	ircd_log(LOG_ERROR, "Port flags %d: 0x%x ", port, options);
 
+	cptr->network_protocol = AFINET;
+	cptr->sock_type = SOCK_STREAM;
+
+	if (options & LISTENER_SCTP) {
+		cptr->transport_protocol = IPPROTO_SCTP;
+	} else {
+		cptr->transport_protocol = IPPROTO_TCP;
+	}
+
 	if (cptr->fd == -1)
 	{
-		if (options & LISTENER_SCTP) {
-			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
-		} else {
-			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
-		}
+		cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
 	}
 	if (cptr->fd < 0)
 	{
@@ -1214,6 +1219,9 @@ aClient *add_connection(aClient *cptr, int fd)
 	int i, j;
 	acptr = make_client(NULL, &me);
 
+	acptr->network_protocol = cptr->network_protocol;
+	acptr->transport_protocol = cptr->transport_protocol;
+	acptr->sock_type = cptr->sock_type;
 	/* Removed preliminary access check. Full check is performed in
 	 * m_server and m_user instead. Also connection time out help to
 	 * get rid of unwanted connections.
@@ -2544,11 +2552,16 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 */
 
 	sendto_realops("Socket connection flags2 (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
+	cptr->network_protocol = AFINET;
+	cptr->sock_type = SOCK_STREAM;
+
 	if (aconf->options & CONNECT_SCTP) {
-		cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
+		cptr->transport_protocol = IPPROTO_SCTP;
 	} else {
-		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
+		cptr->transport_protocol = IPPROTO_TCP;
 	}
+
+	cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
 	if (cptr->fd < 0)
 	{
 		if (ERRNO == P_EMFILE)
