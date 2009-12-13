@@ -1012,7 +1012,10 @@ struct Client {
 #ifdef DEBUGMODE
 	TS   cputime;
 #endif
-	int ip_protocol;
+	int network_protocol;		/* network protocol type (ipv4, or ipv6)*/
+	int transport_protocol;		/* transport protocol type (TCP, or SCTP)*/
+	int sock_type;			/* socket type (STREAM, or SEQPACKET)*/
+
 	char *error_str;	/* Quit reason set by dead_link in case of socket/buffer error */
 };
 
