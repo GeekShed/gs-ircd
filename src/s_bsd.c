@@ -486,7 +486,7 @@ int  inetport2(aClient *cptr, char *name, int port)
 	struct addrinfo hints, *res, *res0;
 	int error;
 	int s[255];
-	int nsock;
+	int nsock = 0;
 	const char *cause = NULL;
 
 	memset(&hints, 0, sizeof(hints));
@@ -498,9 +498,11 @@ int  inetport2(aClient *cptr, char *name, int port)
 	char * textport;
 	textport = malloc(10);
 	snprintf(textport, 10, "%d", port);
-	if (!strncmp(name, "*", 2)) { 
+	if (!strncmp(name, "*", 1)) { 
+		sendto_realops("Attempting to bind to (*) %s:%d", name, port);
 		error = getaddrinfo(NULL, textport, &hints, &res0);
 	} else {
+		sendto_realops("Attempting to bind to %s:%d", name, port);
 		error = getaddrinfo(name, textport, &hints, &res0);
 	}
 	free(textport);
