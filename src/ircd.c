@@ -1518,13 +1518,19 @@ int InitwIRCD(int argc, char *argv[])
 	 */
 	
 	portnum = conf_listen->port;
+
+	if (conf_listen->options & LISTENER_SCTP) {
+		me.transport_protocol = IPPROTO_SCTP;
+	} else {
+		me.transport_protocol = IPPROTO_TCP;
+	}
 /*
  *      This is completely unneeded-Sts
    	me.ip.S_ADDR =
 	    *conf_listen->ip != '*' ? inet_addr(conf_listen->ip) : INADDR_ANY;
 */
 	Debug((DEBUG_ERROR, "Port = %d", portnum));
-	if (inetport(&me, conf_listen->ip, portnum, conf_listen->options))
+	if (inetport(&me, conf_listen->ip, portnum))
 		exit(1);
 	set_non_blocking(me.fd, &me);
 	conf_listen->options |= LISTENER_BOUND;

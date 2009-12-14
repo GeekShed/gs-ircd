@@ -344,7 +344,7 @@ void report_baderror(char *text, aClient *cptr)
  * depending on the IP# mask given by 'name'.  Returns the fd of the
  * socket created or -1 on error.
  */
-int  inetport(aClient *cptr, char *name, int port, int options)
+int  inetport(aClient *cptr, char *name, int port)
 {
 	static struct SOCKADDR_IN server;
 	int  ad[4], len = sizeof(server);
@@ -375,19 +375,10 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 		    name, (unsigned int)port);
 		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
 	}
-	/*
-	 * At first, open a new socket
-	 */
-	ircd_log(LOG_ERROR, "Port flags %d: 0x%x ", port, options);
 
 	cptr->network_protocol = AFINET;
 	cptr->sock_type = SOCK_STREAM;
 
-	if (options & LISTENER_SCTP) {
-		cptr->transport_protocol = IPPROTO_SCTP;
-	} else {
-		cptr->transport_protocol = IPPROTO_TCP;
-	}
 
 	if (cptr->fd == -1)
 	{
@@ -486,7 +477,7 @@ int  inetport(aClient *cptr, char *name, int port, int options)
  * depending on the IP# mask given by 'name'.  Returns the fd of the
  * socket created or -1 on error.
  */
-int  inetport2(aClient *cptr, char *name, int port, int options)
+int  inetport2(aClient *cptr, char *name, int port)
 {
 	static struct SOCKADDR_IN server;
 	int  ad[4], len = sizeof(server);
@@ -517,19 +508,9 @@ int  inetport2(aClient *cptr, char *name, int port, int options)
 		    name, (unsigned int)port);
 		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
 	}
-	/*
-	 * At first, open a new socket
-	 */
-	ircd_log(LOG_ERROR, "Port flags %d: 0x%x ", port, options);
 
 	cptr->network_protocol = AFINET;
 	cptr->sock_type = SOCK_STREAM;
-
-	if (options & LISTENER_SCTP) {
-		cptr->transport_protocol = IPPROTO_SCTP;
-	} else {
-		cptr->transport_protocol = IPPROTO_TCP;
-	}
 
 	if (cptr->fd == -1)
 	{
@@ -628,12 +609,14 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->flags = FLAGS_LISTEN;
 	cptr->listener = cptr;
 	cptr->from = cptr;
-	ircd_log(LOG_ERROR, "%d add_listener2 flags: 0x%x ", conf->port, conf->options);
-	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", conf->port, conf->options);
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
-	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", conf->port, conf->options);
-	if (inetport(cptr, conf->ip, conf->port, conf->options))
+	if (conf->options & LISTENER_SCTP) {
+		cptr->transport_protocol = IPPROTO_SCTP;
+	} else {
+		cptr->transport_protocol = IPPROTO_TCP;
+	}
+	if (inetport(cptr, conf->ip, conf->port))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
 	cptr->umodes = conf->options ? conf->options : LISTENER_NORMAL;
@@ -2562,7 +2545,6 @@ int  connect_server(ConfigItem_link *aconf, aClient *by, struct hostent *hp)
 		aconf, aconf->refcount, aconf->flag.temporary ? "YES" : "NO");
 #endif
 
-	sendto_realops("Socket connection flags  (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (!hp && (aconf->options & CONNECT_NODNSCACHE)) {
 		/* Remove "cache" if link::options::nodnscache is set */
 		memset(&aconf->ipnum, '\0', sizeof(struct IN_ADDR));
@@ -2693,7 +2675,6 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * with it so if it fails its useless.
 	 */
 
-	sendto_realops("Socket connection flags2 (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	cptr->network_protocol = AFINET;
 	cptr->sock_type = SOCK_STREAM;
 
