@@ -2588,10 +2588,12 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
 	}
-	if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
-	{
-		report_baderror("error binding to local port for %s:%s", cptr);
-		return NULL;
+	if (cptr->transport_protocol != IPPROTO_SCTP) {
+		if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
+		{
+			report_baderror("error binding to local port for %s:%s", cptr);
+			return NULL;
+		}
 	}
 	bzero((char *)&server, sizeof(server));
 	server.SIN_FAMILY = cptr->network_protocol;
