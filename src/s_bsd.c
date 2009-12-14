@@ -47,6 +47,8 @@ Computing Center and Jarkko Oikarinen";
 #include "version.h"
 #ifndef _WIN32
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
@@ -350,6 +352,8 @@ int  inetport(aClient *cptr, char *name, int port)
 	int  ad[4], len = sizeof(server);
 	char ipname[64];
 
+	inetport2(cptr, name, port);
+
 	if (BadPtr(name))
 		name = "*";
 	ad[0] = ad[1] = ad[2] = ad[3] = 0;
@@ -479,6 +483,35 @@ int  inetport(aClient *cptr, char *name, int port)
  */
 int  inetport2(aClient *cptr, char *name, int port)
 {
+	struct addrinfo hints, *res, *res0;
+	int error;
+	int s[255];
+	int nsock;
+	const char *cause = NULL;
+
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_family = cptr->network_protocol;
+	hints.ai_socktype = cptr->sock_type;
+	hints.ai_protocol = cptr->transport_protocol;
+	hints.ai_flags = AI_PASSIVE;
+
+	char * textport;
+	textport = malloc(10);
+	snprintf(textport, 10, "%d", port);
+	error = getaddrinfo(name, textport, &hints, &res0);
+	free(textport);
+	if (error) {
+		sendto_realops("Unable to bind to %s:%d %d", name, port, error);
+		return -1;
+	}
+	for (res = res0; res && nsock < 255; res = res->ai_next) {
+		sendto_realops("Address Family: %d", res->ai_family);
+		sendto_realops("Socket type: %d", res->ai_socktype);
+		sendto_realops("IP Protocol: %d", res->ai_protocol);
+		sendto_realops("Address lengths: %d", res->ai_addrlen);
+		nsock++;
+	}
+	return 0;
 	static struct SOCKADDR_IN server;
 	int  ad[4], len = sizeof(server);
 	char ipname[64];
