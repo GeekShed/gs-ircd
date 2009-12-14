@@ -492,7 +492,6 @@ int  inetport2(aClient *cptr, char *name, int port)
 	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = cptr->network_protocol;
 	hints.ai_socktype = cptr->sock_type;
-	hints.ai_protocol = cptr->transport_protocol;
 	hints.ai_flags = AI_PASSIVE;
 
 	char * textport;
