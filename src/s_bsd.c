@@ -478,6 +478,148 @@ int  inetport(aClient *cptr, char *name, int port, int options)
 	return 0;
 }
 
+/*
+ * inetport2
+ *
+ * Create a socket in the AFINET domain, bind it to the port given in
+ * 'port' and listen to it.  Connections are accepted to this socket
+ * depending on the IP# mask given by 'name'.  Returns the fd of the
+ * socket created or -1 on error.
+ */
+int  inetport2(aClient *cptr, char *name, int port, int options)
+{
+	static struct SOCKADDR_IN server;
+	int  ad[4], len = sizeof(server);
+	char ipname[64];
+
+	if (BadPtr(name))
+		name = "*";
+	ad[0] = ad[1] = ad[2] = ad[3] = 0;
+
+	/*
+	 * do it this way because building ip# from separate values for each
+	 * byte requires endian knowledge or some nasty messing. Also means
+	 * easy conversion of "*" 0.0.0.0 or 134.* to 134.0.0.0 :-)
+	 */
+#ifndef INET6
+	(void)sscanf(name, "%d.%d.%d.%d", &ad[0], &ad[1], &ad[2], &ad[3]);
+	(void)ircsprintf(ipname, "%d.%d.%d.%d", ad[0], ad[1], ad[2], ad[3]);
+#else
+	if (*name == '*')
+		ircsprintf(ipname, "::");
+	else
+		strlcpy(ipname, name, sizeof(ipname));
+#endif
+
+	if (cptr != &me)
+	{
+		(void)ircsprintf(cptr->sockhost, "%-.42s.%.u",
+		    name, (unsigned int)port);
+		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
+	}
+	/*
+	 * At first, open a new socket
+	 */
+	ircd_log(LOG_ERROR, "Port flags %d: 0x%x ", port, options);
+
+	cptr->network_protocol = AFINET;
+	cptr->sock_type = SOCK_STREAM;
+
+	if (options & LISTENER_SCTP) {
+		cptr->transport_protocol = IPPROTO_SCTP;
+	} else {
+		cptr->transport_protocol = IPPROTO_TCP;
+	}
+
+	if (cptr->fd == -1)
+	{
+		cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
+	}
+	if (cptr->fd < 0)
+	{
+#if !defined(DEBUGMODE) && !defined(_WIN32)
+#endif
+		report_baderror("Cannot open stream socket() %s:%s", cptr);
+		return -1;
+	}
+	else if (++OpenFiles >= MAXCLIENTS)
+	{
+		sendto_ops("No more connections allowed (%s)", cptr->name);
+		CLOSE_SOCK(cptr->fd);
+		cptr->fd = -1;
+		--OpenFiles;
+		return -1;
+	}
+	set_sock_opts(cptr->fd, cptr);
+	/*
+	 * Bind a port to listen for new connections if port is non-null,
+	 * else assume it is already open and try get something from it.
+	 */
+	if (port)
+	{
+		server.SIN_FAMILY = cptr->network_protocol;
+		/* per-port bindings, fixes /stats l */
+		
+#ifndef INET6
+			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
+#else
+			inet_pton(cptr->network_protocol, ipname, server.SIN_ADDR.S_ADDR);
+#endif
+		server.SIN_PORT = htons(port);
+		/*
+		 * Try 10 times to bind the socket with an interval of 20
+		 * seconds. Do this so we dont have to keepp trying manually
+		 * to bind. Why ? Because a port that has closed often lingers
+		 * around for a short time.
+		 * This used to be the case.  Now it no longer is.
+		 * Could cause the server to hang for too long - avalon
+		 */
+		if (bind(cptr->fd, (struct SOCKADDR *)&server,
+		    sizeof(server)) == -1)
+		{
+			ircsprintf(backupbuf, "Error binding stream socket to IP %s port %i",
+				ipname, port);
+			strlcat(backupbuf, " - %s:%s", sizeof backupbuf);
+			report_baderror(backupbuf, cptr);
+#if !defined(_WIN32) && defined(INET6)
+			/* Check if ipv4-over-ipv6 (::ffff:a.b.c.d, RFC2553
+			 * section 3.7) is disabled, like at newer FreeBSD's. -- Syzop
+			 */
+			if (!strncasecmp(ipname, "::ffff:", 7))
+			{
+				ircd_log(LOG_ERROR, "You are trying to bind to an IPv4 address, "
+				                    "make sure the address exists at your machine. "
+				                    "If you are using *BSD you might need to "
+				                    "enable ipv6_ipv4mapping in /etc/rc.conf "
+				                    "and/or via sysctl.");
+			}
+#endif
+			CLOSE_SOCK(cptr->fd);
+			cptr->fd = -1;
+			--OpenFiles;
+			return -1;
+		}
+	}
+	if (getsockname(cptr->fd, (struct SOCKADDR *)&server, &len))
+	{
+		report_error("getsockname failed for %s:%s", cptr);
+		CLOSE_SOCK(cptr->fd);
+		cptr->fd = -1;
+		--OpenFiles;
+		return -1;
+	}
+
+#ifdef INET6
+	bcopy(server.sin6_addr.s6_addr, cptr->ip.s6_addr, IN6ADDRSZ);
+#else
+	cptr->ip.S_ADDR = name ? inet_addr(ipname) : me.ip.S_ADDR;
+#endif
+	cptr->port = (int)ntohs(server.SIN_PORT);
+	(void)listen(cptr->fd, LISTEN_SIZE);
+	add_local_client(cptr);
+	return 0;
+}
+
 int add_listener2(ConfigItem_listen *conf)
 {
 	aClient *cptr;

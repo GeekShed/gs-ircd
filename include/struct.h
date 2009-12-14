@@ -1003,6 +1003,7 @@ struct Client {
 	int transport_protocol;		/* transport protocol type (TCP, or SCTP)*/
 	int sock_type;			/* socket type (STREAM, or SEQPACKET)*/
 	struct IN_ADDR ip;	/* keep real ip# too */
+	struct sockaddr_in6 newip;
 	u_short port;		/* and the remote port# too :-) */
 	struct hostent *hostp;
 	u_short watches;	/* Keep track of count of notifies */
