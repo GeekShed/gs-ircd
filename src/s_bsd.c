@@ -498,7 +498,11 @@ int  inetport2(aClient *cptr, char *name, int port)
 	char * textport;
 	textport = malloc(10);
 	snprintf(textport, 10, "%d", port);
-	error = getaddrinfo(name, textport, &hints, &res0);
+	if (!strncmp(name, "*", 2)) { 
+		error = getaddrinfo(NULL, textport, &hints, &res0);
+	} else {
+		error = getaddrinfo(name, textport, &hints, &res0);
+	}
 	free(textport);
 	if (error) {
 		sendto_realops("Unable to bind to %s:%d %d", name, port, error);
