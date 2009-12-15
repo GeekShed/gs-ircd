@@ -408,7 +408,7 @@ int _match(const char *mask, const char *name) {
 
 /* Old match() plus some optimizations from bahamut */
 int match(const char *mask, const char *name) {
-	sendto_realops("Match pointer: 0x%x", mask);
+	sendto_realops("Match pointer: 0x%.8x", mask);
 	if (mask != NULL) {
 		if (mask[0] == '*' && mask[1] == '!') {
 			mask += 2;
