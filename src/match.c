@@ -408,26 +408,23 @@ int _match(const char *mask, const char *name) {
 
 /* Old match() plus some optimizations from bahamut */
 int match(const char *mask, const char *name) {
-	sendto_realops("Match pointer: 0x%.8x", mask);
-	if (mask != NULL) {
-		if (mask[0] == '*' && mask[1] == '!') {
-			mask += 2;
-			while (*name != '!' && *name)
-				name++;
-			if (!*name)
-				return 1;
+	sendto_realops("addr: 0x%.8x value: %s", mask, mask);
+	if (mask[0] == '*' && mask[1] == '!') {
+		mask += 2;
+		while (*name != '!' && *name)
 			name++;
-		}
-		
-		if (mask[0] == '*' && mask[1] == '@') {
-			mask += 2;
-			while (*name != '@' && *name)
-				name++;
-			if (!*name)
-				return 1;
-			name++;
-		}
-		return match2(mask,name);
+		if (!*name)
+			return 1;
+		name++;
 	}
-	return 1;
+		
+	if (mask[0] == '*' && mask[1] == '@') {
+		mask += 2;
+		while (*name != '@' && *name)
+			name++;
+		if (!*name)
+			return 1;
+		name++;
+	}
+	return match2(mask,name);
 }
