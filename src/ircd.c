@@ -1044,11 +1044,19 @@ static void generate_cloakkeys()
 }
 #endif
 
+int OldUnreal_main(int argc, char *argv[]);
+
 #ifndef _WIN32
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) {
+	return OldUnreal_main(argc, argv);
+}
 #else
-int InitwIRCD(int argc, char *argv[])
+int InitwIRCD(int argc, char *argv[]) {
+	return OldUnreal_main(argc, argv);
+}
 #endif
+
+int OldUnreal_main(int argc, char *argv[])
 {
 #ifdef _WIN32
 	WORD wVersionRequested = MAKEWORD(1, 1);
