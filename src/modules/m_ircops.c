@@ -80,7 +80,7 @@ DLLFUNC int MOD_INIT(m_ircops)(ModuleInfo *modinfo)
 	otypes[3].umode = &UMODE_COADMIN;
 	otypes[3].text = "a Co Administrator";
 	otypes[4].umode = &UMODE_OPER;
-	otypes[4].text = "a IRC Operator";
+	otypes[4].text = "an IRC Operator";
 	otypes[5].umode = &UMODE_LOCOP;
 	otypes[5].text = "a Local Operator";
 	otypes[6].umode = NULL;
