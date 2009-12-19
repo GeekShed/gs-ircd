@@ -51,7 +51,6 @@ extern void			sendto_one(aClient *to, char *pattern, ...);
 #define MSG_IRCOPS 		"IRCOPS"
 #define TOK_IRCOPS 		NULL
 #define IsAway(x)		(x)->user->away
-#define IsSkoAdmin(sptr)	(IsAdmin(sptr) || IsNetAdmin(sptr) || IsSAdmin(sptr) || IsCoAdmin(sptr))
 #define DelCommand(x)		if (x) CommandDel(x); x = NULL
 
 static int			m_ircops(aClient *cptr, aClient *sptr, int parc, char *parv[]);
