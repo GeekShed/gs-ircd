@@ -72,17 +72,17 @@ ModuleHeader MOD_HEADER(m_ircops)
 DLLFUNC int MOD_INIT(m_ircops)(ModuleInfo *modinfo)
 {
 	otypes[0].umode = &UMODE_NETADMIN;
-	otypes[0].text = "a Fleet Admiral";
+	otypes[0].text = "a Network Administrator";
 	otypes[1].umode = &UMODE_SADMIN;
-	otypes[1].text = "a Commander";
+	otypes[1].text = "a Services Administrator";
 	otypes[2].umode = &UMODE_ADMIN;
-	otypes[2].text = "a Captain";
+	otypes[2].text = "a Server Administrator";
 	otypes[3].umode = &UMODE_COADMIN;
-	otypes[3].text = "an Admiral";
+	otypes[3].text = "a Co Administrator";
 	otypes[4].umode = &UMODE_OPER;
-	otypes[4].text = "a Lieutenant Commander";
+	otypes[4].text = "a IRC Operator";
 	otypes[5].umode = &UMODE_LOCOP;
-	otypes[5].text = "a Lieutenant";
+	otypes[5].text = "a Local Operator";
 	otypes[6].umode = NULL;
 	otypes[6].text = NULL;
 
@@ -186,7 +186,7 @@ static int m_ircops(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		if (!IsAnOper(sptr) && IsHideOper(acptr))
 			continue;
 
-		sendto_one(sptr, ":%s %d %s :\2%s\2 is %s aboard %s" "%s",
+		sendto_one(sptr, ":%s %d %s :\2%s\2 is %s on %s" "%s",
 			me.name, RPL_IRCOPS, sptr->name,
 			acptr->name,
 			find_otype(acptr->umodes),
