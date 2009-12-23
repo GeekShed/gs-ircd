@@ -479,11 +479,7 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->from = cptr;
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
-	if (conf->options & LISTENER_SCTP) {
-		cptr->transport_protocol = IPPROTO_SCTP;
-	} else {
-		cptr->transport_protocol = IPPROTO_TCP;
-	}
+	cptr->transport_protocol = conf->protocol;
 	if (inetport(cptr, conf->ip, conf->port))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
