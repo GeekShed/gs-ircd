@@ -2549,11 +2549,12 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	cptr->network_protocol = AFINET;
 
 	if (aconf->options & CONNECT_SCTP) {
-		cptr->sock_type = SOCK_SEQPACKET;
 		cptr->transport_protocol = IPPROTO_SCTP;
+		cptr->sock_type = SOCK_STREAM;
 	} else {
 		cptr->transport_protocol = IPPROTO_TCP;
 		cptr->sock_type = SOCK_STREAM;
+
 	}
 
 	cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
