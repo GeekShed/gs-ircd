@@ -103,9 +103,6 @@ static unsigned char minus_one[] =
 #define SET_ERRNO(x) WSASetLastError(x)
 #endif /* _WIN32 */
 
-#ifndef IPPROTO_SCTP
-#define IPPROTO_SCTP 132
-#endif
 extern char backupbuf[8192];
 aClient *local[MAXCONNECTIONS];
 short    LastSlot = -1;    /* GLOBAL - last used slot in local */

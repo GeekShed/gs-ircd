@@ -53,7 +53,7 @@
 #define PATCH2  		".2"
 #define PATCH3  		".8"
 #define PATCH4  		"-gs"
-#define PATCH5  		".5"
+#define PATCH5  		".6"
 #define PATCH6  		" $Revision$ $Date$ $Author$"
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO

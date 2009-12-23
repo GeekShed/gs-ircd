@@ -48,6 +48,9 @@
 #ifndef _WIN32
 #include <netinet/in.h>
 #include <netdb.h>
+#ifndef IPPROTO_SCTP
+#define IPPROTO_SCTP 132
+#endif
 #endif
 #ifdef STDDEFH
 # include <stddef.h>
