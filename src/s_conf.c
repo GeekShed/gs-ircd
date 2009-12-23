@@ -248,6 +248,7 @@ static OperFlag _ListenerFlags[] = {
 	{ LISTENER_MASK, 	"mask"},
 	{ LISTENER_REMOTEADMIN, "remoteadmin"},
 	{ LISTENER_SCTP, 	"sctp"},
+	{ LISTENER_SEQPACKET, 	"seqpacket"},
 	{ LISTENER_SERVERSONLY, "serversonly"},
 	{ LISTENER_SSL, 	"ssl"},
 	{ LISTENER_NORMAL, 	"standard"},
@@ -260,6 +261,7 @@ static OperFlag _LinkFlags[] = {
 	{ CONNECT_NOHOSTCHECK, "nohostcheck" },
 	{ CONNECT_QUARANTINE, "quarantine"},
 	{ CONNECT_SCTP,	"sctp"		  },
+	{ CONNECT_SEQPACKET,	"seqpacket"	  },
 	{ CONNECT_SSL,	"ssl"		  },
 	{ CONNECT_ZIP,	"zip"		  },
 };
@@ -2536,7 +2538,7 @@ int j;
 	return count;
 }
 
-ConfigItem_listen	*Find_listen(char *ipmask, int port)
+ConfigItem_listen	*Find_listen(char *ipmask, int port, int protocol)
 {
 	ConfigItem_listen	*p;
 
@@ -2545,9 +2547,9 @@ ConfigItem_listen	*Find_listen(char *ipmask, int port)
 
 	for (p = conf_listen; p; p = (ConfigItem_listen *) p->next)
 	{
-		if (!match(p->ip, ipmask) && (port == p->port))
+		if (!match(p->ip, ipmask) && (port == p->port) && (protocol == p->protocol))
 			return (p);
-		if (!match(ipmask, p->ip) && (port == p->port))
+		if (!match(ipmask, p->ip) && (port == p->port) && (protocol == p->protocol))
 			return (p);
 	}
 	return NULL;
@@ -4170,6 +4172,7 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 	char	    copy[256];
 	char	    *ip;
 	char	    *port;
+	int         protocol;
 	int	    start, end, iport, isnew;
 	int tmpflags =0;
 
@@ -4208,13 +4211,19 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 #ifndef USE_SSL
 	tmpflags &= ~LISTENER_SSL;
 #endif
+	if (tmpflags & LISTENER_SCTP) {
+		protocol = IPPROTO_SCTP;		
+	} else {
+		protocol = IPPROTO_TCP;
+	}
 	for (iport = start; iport < end; iport++)
 	{
-		if (!(listen = Find_listen(ip, iport)))
+		if (!(listen = Find_listen(ip, iport, protocol)))
 		{
 			listen = MyMallocEx(sizeof(ConfigItem_listen));
 			listen->ip = strdup(ip);
 			listen->port = iport;
+			listen->protocol = protocol;
 			isnew = 1;
 		} else
 			isnew = 0;

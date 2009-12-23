@@ -120,7 +120,7 @@ extern void       ipport_seperate(char *string, char **ip, char **port);
 ConfigItem_class	*Find_class(char *name);
 ConfigItem_deny_dcc	*Find_deny_dcc(char *name);
 ConfigItem_oper		*Find_oper(char *name);
-ConfigItem_listen	*Find_listen(char *ipmask, int port);
+ConfigItem_listen	*Find_listen(char *ipmask, int port, int protocol);
 ConfigItem_ulines	*Find_uline(char *host);
 ConfigItem_except	*Find_except(aClient *, char *host, short type);
 ConfigItem_tld		*Find_tld(aClient *cptr, char *host);

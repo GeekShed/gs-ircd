@@ -922,6 +922,7 @@ typedef struct {
 #define LISTENER_SSL		0x000040
 #define LISTENER_BOUND		0x000080
 #define LISTENER_SCTP		0x000100
+#define LISTENER_SEQPACKET	0x000200
 
 #define CONNECT_SSL		0x000001
 #define CONNECT_ZIP		0x000002 
@@ -930,6 +931,7 @@ typedef struct {
 #define CONNECT_NODNSCACHE	0x000010
 #define CONNECT_NOHOSTCHECK	0x000020
 #define CONNECT_SCTP		0x000040
+#define CONNECT_SEQPACKET	0x000080
 
 #define SSLFLAG_FAILIFNOCERT 	0x1
 #define SSLFLAG_VERIFYCERT 	0x2
@@ -1202,9 +1204,9 @@ struct _configitem_listen {
 	ConfigFlag 	flag;
 	char		*ip;
 	int		port;
+	int		protocol;
 	int		options, clients;
 	aClient		*listener;
-	char		*ip_protocol;
 };
 
 struct _configitem_vhost {
