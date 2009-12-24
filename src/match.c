@@ -408,22 +408,26 @@ int _match(const char *mask, const char *name) {
 
 /* Old match() plus some optimizations from bahamut */
 int match(const char *mask, const char *name) {
-	if (mask[0] == '*' && mask[1] == '!') {
-		mask += 2;
-		while (*name != '!' && *name)
+	if (mask != NULL) {
+		if (mask[0] == '*' && mask[1] == '!') {
+			mask += 2;
+			while (*name != '!' && *name)
+				name++;
+			if (!*name)
+				return 1;
 			name++;
-		if (!*name)
-			return 1;
-		name++;
-	}
+		}
 		
-	if (mask[0] == '*' && mask[1] == '@') {
-		mask += 2;
-		while (*name != '@' && *name)
+		if (mask[0] == '*' && mask[1] == '@') {
+			mask += 2;
+			while (*name != '@' && *name)
+				name++;
+			if (!*name)
+				return 1;
 			name++;
-		if (!*name)
-			return 1;
-		name++;
+		}
+		return match2(mask,name);
+	} else {
+		return 1;
 	}
-	return match2(mask,name);
 }
