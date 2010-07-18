@@ -1371,7 +1371,7 @@ struct hostent *he;
 	if (!DONT_RESOLVE)
 	{
 		if (SHOWCONNECTINFO && !acptr->serv)
-			sendto_snomask(SNO_BOPM, "BOPM New User From %s", inet_ntoa(acptr->ip));
+			sendto_snomask(SNO_BOPM, "BOPM New User From unknown unknown %s %s", inet_ntoa(acptr->ip), inet_ntoa(acptr->ip));
 			sendto_one(acptr, "%s", REPORT_DO_DNS);
 		dns_special_flag = 1;
 		he = unrealdns_doclient(acptr);
