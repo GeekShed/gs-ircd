@@ -93,6 +93,7 @@ long SNO_QLINE = 0L;
 long SNO_SPAMF = 0L;
 long SNO_SNOTICE = 0L;
 long SNO_OPER = 0L;
+long SNO_BOPM = 0L;
 
 long AllUmodes;		/* All umodes */
 long SendUmodes;	/* All umodes which are sent to other servers (global umodes) */
@@ -169,6 +170,7 @@ void	umode_init(void)
 	SnomaskAdd(NULL, 'S', umode_allow_opers, &SNO_SPAMF);
 	SnomaskAdd(NULL, 's', umode_allow_all, &SNO_SNOTICE);
 	SnomaskAdd(NULL, 'o', umode_allow_opers, &SNO_OPER);
+	SnomaskAdd(NULL, 'p', umode_allow_opers, &SNO_BOPM);
 }
 
 void make_umodestr(void)
