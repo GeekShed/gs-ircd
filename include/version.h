@@ -51,7 +51,7 @@
 #define UnrealProtocol 		2309
 #define PATCH1  		"3"
 #define PATCH2  		".2"
-#define PATCH3  		".8"
+#define PATCH3  		".9"
 #ifdef INET6
 #define PATCH4  		"-gs-trunk"
 #else
