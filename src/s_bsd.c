@@ -1376,7 +1376,6 @@ struct hostent *he;
 			}
 		}
 	}
-	sendto_one(SNO_BOPM, "BOPM New User From unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
 
 	if (!DONT_RESOLVE)
 	{
