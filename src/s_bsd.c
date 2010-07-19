@@ -268,7 +268,7 @@ void report_error(char *text, aClient *cptr)
 	int errtmp = ERRNO, origerr = ERRNO;
 	char *host, xbuf[256];
 	int  err, len = sizeof(err), n;
-	
+
 	host = (cptr) ? get_client_name(cptr, FALSE) : "";
 
 	Debug((DEBUG_ERROR, text, host, STRERROR(errtmp)));
@@ -408,7 +408,7 @@ int  inetport(aClient *cptr, char *name, int port)
 	{
 		server.SIN_FAMILY = cptr->network_protocol;
 		/* per-port bindings, fixes /stats l */
-		
+
 #ifndef INET6
 			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
@@ -485,7 +485,7 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->class = (ConfigItem_class *)conf;
 	cptr->umodes = conf->options ? conf->options : LISTENER_NORMAL;
 	if (cptr->fd >= 0)
-	{	
+	{
 		cptr->umodes |= LISTENER_BOUND;
 		conf->options |= LISTENER_BOUND;
 		conf->listener = cptr;
@@ -530,7 +530,7 @@ void close_listeners(void)
 			if (aconf->flag.temporary && (aconf->clients == 0))
 			{
 				close_connection(cptr);
-				/* need to start over because close_connection() may have 
+				/* need to start over because close_connection() may have
 				** rearranged local[]!
 				*/
 				reloop = 1;
@@ -765,7 +765,7 @@ int  check_client(aClient *cptr, char *username)
 	static char sockname[HOSTLEN + 1];
 	struct hostent *hp = NULL;
 	int  i;
-	
+
 	ClearAccess(cptr);
 	Debug((DEBUG_DNS, "ch_cl: check access for %s[%s]",
 	    cptr->name, inetntoa((char *)&cptr->ip)));
@@ -1031,7 +1031,7 @@ void set_sock_opts(int fd, aClient *cptr)
 	opt = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_DEBUG, (OPT_TYPE *)&opt,
 	    sizeof(opt)) < 0)
-		
+
 		report_error("setsockopt(SO_DEBUG) %s:%s", cptr);
 #endif /* _SOLARIS */
 #endif
@@ -1161,9 +1161,9 @@ void set_non_blocking(int fd, aClient *cptr)
 
 	if (ioctl(fd, FIONBIO, &res) < 0)
 	{
-		if (cptr) 
+		if (cptr)
 			report_error("ioctl(fd,FIONBIO) failed for %s:%s", cptr);
-		
+
 	}
 #else
 # if !defined(_WIN32)
@@ -1378,7 +1378,7 @@ struct hostent *he;
 		}
 	}
 */
-	sendto_snomask_global(SNO_BOPM, "BOPM New User From unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
+	sendto_snomask_global(SNO_BOPM, "BOPM unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
 	if (!DONT_RESOLVE)
 	{
 		if (SHOWCONNECTINFO && !acptr->serv)
@@ -1412,7 +1412,7 @@ void proceed_normal_client_handshake(aClient *acptr, struct hostent *he)
 	acptr->hostp = he;
 	if (SHOWCONNECTINFO && !acptr->serv)
 		sendto_one(acptr, "%s", acptr->hostp ? REPORT_FIN_DNS : REPORT_FAIL_DNS);
-	
+
 	if (!dns_special_flag && !DoingAuth(acptr))
 		SetAccess(acptr);
 }
@@ -1679,7 +1679,7 @@ int  read_message(time_t delay)
 int  read_message(time_t delay, fdlist *listp)
 #endif
 {
-/* 
+/*
    #undef FD_SET(x,y) do { if (fcntl(x, F_GETFD, &sockerr) == -1) abort(); FD_SET(x,y); } while(0)
 */	aClient *cptr;
 	int  nfds;
@@ -1726,7 +1726,7 @@ int  read_message(time_t delay, fdlist *listp)
 				continue;
 			if (IsLog(cptr))
 				continue;
-			
+
 			if (DoingAuth(cptr))
 			{
 				int s = TStime() - cptr->firsttime;
@@ -1744,9 +1744,9 @@ int  read_message(time_t delay, fdlist *listp)
 					if (cptr->authfd >= 0)
 					{
 						FD_SET(cptr->authfd, &read_set);
-#ifdef _WIN32	
+#ifdef _WIN32
 						FD_SET(cptr->authfd, &excpt_set);
-#endif	
+#endif
 						if (cptr->flags & FLAGS_WRAUTH)
 							FD_SET(cptr->authfd, &write_set);
 					}
@@ -1781,7 +1781,7 @@ int  read_message(time_t delay, fdlist *listp)
 		}
 
 		ares_fds(resolver_channel, &read_set, &write_set);
-		
+
 		if (me.fd >= 0)
 			FD_SET(me.fd, &read_set);
 
@@ -1935,7 +1935,7 @@ int  read_message(time_t delay, fdlist *listp)
 			   nextping = TStime();
 			   if (!cptr->listener)
 				cptr->listener = &me;
-		        
+
                       }
 #ifndef NO_FDLIST
 	for (i = listp->entry[j = 1];  (j <= listp->last_entry); i = listp->entry[++j])
@@ -1993,13 +1993,13 @@ deadsocket:
 		if ((!NoNewLine(cptr) || FD_ISSET(cptr->fd, &read_set)) &&
 		    !(DoingDNS(cptr) || DoingAuth(cptr))
 #ifdef USE_SSL
-			&& 
+			&&
 			!(IsSSLAcceptHandshake(cptr) || IsSSLConnectHandshake(cptr))
-#endif		
+#endif
 			)
 			length = read_packet(cptr, &read_set);
 #ifdef USE_SSL
-		if ((length != FLUSH_BUFFER) && (cptr->ssl != NULL) && 
+		if ((length != FLUSH_BUFFER) && (cptr->ssl != NULL) &&
 			(IsSSLAcceptHandshake(cptr) || IsSSLConnectHandshake(cptr)) &&
 			FD_ISSET(cptr->fd, &read_set))
 		{
@@ -2163,7 +2163,7 @@ int  read_message(time_t delay, fdlist *listp)
 				continue;
 			if (IsLog(cptr))
 				continue;
-			
+
 			if (DoingAuth(cptr))
 			{
 				if (auth == 0)
@@ -2584,14 +2584,14 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	bzero((char *)&server, sizeof(server));
 	server.SIN_FAMILY = cptr->network_protocol;
 	get_sockhost(cptr, aconf->hostname);
-	
+
 	server.SIN_PORT = 0;
 	server.SIN_ADDR = me.ip;
 	server.SIN_FAMILY = cptr->network_protocol;
 	if (aconf->bindip && strcmp("*", aconf->bindip))
 	{
 #ifndef INET6
-		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
+		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
