@@ -52,7 +52,11 @@
 #define PATCH1  		"3"
 #define PATCH2  		".2"
 #define PATCH3  		".8"
+#ifdef INET6
 #define PATCH4  		"-gs-trunk"
+#else
+#define PATCH4  		"-gs-trunk-ipv6"
+#endif
 #define PATCH5  		".7"
 #define PATCH6  		" $Revision$ $Date$ $Author$"
 #define PATCH7  		""
