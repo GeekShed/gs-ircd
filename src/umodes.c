@@ -93,6 +93,7 @@ long SNO_QLINE = 0L;
 long SNO_SPAMF = 0L;
 long SNO_SNOTICE = 0L;
 long SNO_OPER = 0L;
+long SNO_BOPM = 0L;
 
 long AllUmodes;		/* All umodes */
 long SendUmodes;	/* All umodes which are sent to other servers (global umodes) */

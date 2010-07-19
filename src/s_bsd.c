@@ -1318,7 +1318,7 @@ add_con_refuse:
 	}
 
 	acptr->fd = fd;
-    add_local_client(acptr);
+    	add_local_client(acptr);
 	acptr->listener = cptr;
 	if (!acptr->listener->class)
 	{
@@ -1365,6 +1365,7 @@ void	start_of_normal_client_handshake(aClient *acptr)
 struct hostent *he;
 
 	acptr->status = STAT_UNKNOWN;
+	sendto_snomask(SNO_BOPM, "BOPM New User From unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
 
 	if (!DONT_RESOLVE)
 	{
