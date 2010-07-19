@@ -57,7 +57,7 @@
 #else
 #define PATCH4  		"-gs-trunk-ipv6"
 #endif
-#define PATCH5  		".7"
+#define PATCH5  		".8"
 #define PATCH6  		" $Revision$ $Date$ $Author$"
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
