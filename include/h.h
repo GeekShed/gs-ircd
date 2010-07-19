@@ -453,7 +453,6 @@ extern MODVAR long SNO_QLINE;
 extern MODVAR long SNO_SNOTICE;
 extern MODVAR long SNO_SPAMF;
 extern MODVAR long SNO_OPER;
-extern MODVAR long SNO_BOPM;
 
 #ifdef EXTCMODE
 /* Extended chanmodes... */
