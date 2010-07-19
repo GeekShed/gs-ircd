@@ -1365,7 +1365,18 @@ void	start_of_normal_client_handshake(aClient *acptr)
 struct hostent *he;
 
 	acptr->status = STAT_UNKNOWN;
-	sendto_snomask(SNO_BOPM, "BOPM New User From unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
+	aClient *cptr;
+	int i, j;
+	for (i = oper_fdlist.entry[j = 1]; j <= oper_fdlist.last_entry; i = oper_fdlist.entry[++j]) {
+		if (((cptr = local[i])) && (cptr->user->snomask & SNO_BOPM)) {
+			if (IsHybNotice(cptr)) {
+				sendto_one(cptr, ":%s NOTICE %s :unknown unknown %s %s", me.name, cptr->name, Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
+			} else {
+				sendto_one(cptr, ":%s NOTICE %s :unknown unknown %s %s", me.name, cptr->name, Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
+			}
+		}
+	}
+	sendto_one(SNO_BOPM, "BOPM New User From unknown unknown %s %s", Inet_ia2p(&acptr->ip), Inet_ia2p(&acptr->ip));
 
 	if (!DONT_RESOLVE)
 	{
