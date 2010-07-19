@@ -170,6 +170,7 @@ void	umode_init(void)
 	SnomaskAdd(NULL, 'S', umode_allow_opers, &SNO_SPAMF);
 	SnomaskAdd(NULL, 's', umode_allow_all, &SNO_SNOTICE);
 	SnomaskAdd(NULL, 'o', umode_allow_opers, &SNO_OPER);
+	SnomaskAdd(NULL, 'p', umode_allow_opers, &SNO_BOPM);
 }
 
 void make_umodestr(void)
