@@ -45,7 +45,15 @@ DLLFUNC int MOD_TEST(m_antibot)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_antibot)(ModuleInfo *modinfo)
 {
-	LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, m_lconnect);
+/*
+#ifdef GSVERSION
+	if (GSREV >= 20000) {
+	} else
+#endif
+*/
+	{
+		LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, m_lconnect);
+	}
 	return MOD_SUCCESS;
 }
 
@@ -68,17 +76,10 @@ DLLFUNC int m_lconnect(aClient *cptr)
 	if (!MyClient(cptr))
 		return 0;
 	
-#ifdef GSVERSION
-	if (GSREV >= 20000) {
 		sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
+		sendto_snomask_global(SNO_BOPM, "BOPM %s unknown %s %s", cptr->name, Inet_ia2p(&cptr->ip), Inet_ia2p(&cptr->ip));
 		now = TStime();
 		cptr->since = now + 10;
-	} else
-#endif
-	{
-	sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we don't scan your connection for open proxies...", me.name, cptr->name);
-	}
-
 	return 0;
 }
 
