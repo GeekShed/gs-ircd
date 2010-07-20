@@ -23,6 +23,10 @@
 #include "version.h"
 #endif
 
+#ifndef GSVERSION
+long SNO_BOPM = 0L;
+extern MODVAR long SNO_BOPM;
+#endif
 
 DLLFUNC int m_lconnect(aClient *cptr);
 
@@ -45,12 +49,15 @@ DLLFUNC int MOD_TEST(m_antibot)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_antibot)(ModuleInfo *modinfo)
 {
-/*
+#ifndef GSVERSION
+	SnomaskAdd(NULL, 'p', umode_allow_opers, &SNO_BOPM);
+#endif
+
 #ifdef GSVERSION
 	if (GSREV >= 20000) {
+		LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, m_lconnect);
 	} else
 #endif
-*/
 	{
 		LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, m_lconnect);
 	}
