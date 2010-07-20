@@ -69,12 +69,15 @@ DLLFUNC int m_lconnect(aClient *cptr)
 		return 0;
 	
 #ifdef GSVERSION
-	sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
-	now = TStime();
-	cptr->since = now + 30;
-#else
-	sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we don't scan your connection for open proxies...", me.name, cptr->name);
+	if (GSREV >= 20000) {
+		sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
+		now = TStime();
+		cptr->since = now + 30;
+	} else
 #endif
+	{
+	sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we don't scan your connection for open proxies...", me.name, cptr->name);
+	}
 
 	return 0;
 }
