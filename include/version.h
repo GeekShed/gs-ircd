@@ -51,14 +51,10 @@
 #define UnrealProtocol 		2309
 #define PATCH1  		"3"
 #define PATCH2  		".2"
-#define PATCH3  		".9"
-#ifdef INET6
-#define PATCH4  		"-gs-trunk"
-#else
-#define PATCH4  		"-gs-trunk-ipv6"
-#endif
-#define PATCH5  		".8"
-#define PATCH6  		" $Revision$ $Date$ $Author$"
+#define PATCH3  		".8"
+#define PATCH4  		"-gs"
+#define PATCH5  		".9"
+#define PATCH6  		""
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
 #define PATCH9  		""
