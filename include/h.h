@@ -785,3 +785,6 @@ extern void kick_insecure_users(aChannel *);
 extern int file_exists(char* file);
 extern void free_motd(aMotd *m);
 extern void fix_timers(void);
+
+#define GSVERSION 2.0
+#define GSREV	20000
