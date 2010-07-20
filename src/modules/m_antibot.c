@@ -72,7 +72,7 @@ DLLFUNC int m_lconnect(aClient *cptr)
 	if (GSREV >= 20000) {
 		sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
 		now = TStime();
-		cptr->since = now + 30;
+		cptr->since = now + 10;
 	} else
 #endif
 	{
