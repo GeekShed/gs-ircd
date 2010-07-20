@@ -786,5 +786,5 @@ extern int file_exists(char* file);
 extern void free_motd(aMotd *m);
 extern void fix_timers(void);
 
-#define GSVERSION 1.1
+#define GSVERSION "1.0"
 #define GSREV	10000
