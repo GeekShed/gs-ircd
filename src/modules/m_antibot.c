@@ -49,6 +49,7 @@ DLLFUNC int MOD_TEST(m_antibot)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_antibot)(ModuleInfo *modinfo)
 {
+	ModuleSetOptions(modinfo->handle, MOD_OPT_PERM);
 #ifndef GSVERSION
 	SnomaskAdd(NULL, 'p', umode_allow_opers, &SNO_BOPM);
 #endif
