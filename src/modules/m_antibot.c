@@ -80,13 +80,10 @@ DLLFUNC int m_lconnect(aClient *cptr)
 {
 	time_t now;
 
-	if (!MyClient(cptr))
-		return 0;
-	
-		sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
-		sendto_snomask_global(SNO_BOPM, "BOPM unknown unknown %s %s", Inet_ia2p(&cptr->ip), Inet_ia2p(&cptr->ip));
-		now = TStime();
-		cptr->since = now + 12;
+	sendto_one(cptr, ":%s NOTICE %s :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
+	sendto_snomask_global(SNO_BOPM, "BOPM unknown unknown %s %s", Inet_ia2p(&cptr->ip), Inet_ia2p(&cptr->ip));
+	now = TStime();
+	cptr->since = now + 12;
 	return 0;
 }
 
