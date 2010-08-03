@@ -786,5 +786,11 @@ extern int file_exists(char* file);
 extern void free_motd(aMotd *m);
 extern void fix_timers(void);
 
-#define GSVERSION "2.0"
-#define GSREV	20000
+#define _GSREV	20000
+#define _GSCODENAME ""
+#define _GSVERSION_STRING "2.0"
+#define GSVERSION _GSREV
+
+extern long GSREV;
+extern char * GSVERSION_STRING;
+extern char * GSCODENAME;

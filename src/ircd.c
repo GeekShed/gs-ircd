@@ -1047,6 +1047,11 @@ static void generate_cloakkeys()
 int OldUnreal_main(int argc, char *argv[]);
 
 #ifndef _WIN32
+
+long GSREV = _GSREV;
+char * GSVERSION_STRING = _GSVERSION_STRING;
+char * GSCODENAME = _GSCODENAME;
+
 int main(int argc, char *argv[]) {
 	return OldUnreal_main(argc, argv);
 }
