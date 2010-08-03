@@ -54,8 +54,8 @@ DLLFUNC int MOD_INIT(m_antibot)(ModuleInfo *modinfo)
 #endif
 
 #ifdef GSVERSION
-	if (GSREV >= 20000) {
-		LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, m_lconnect);
+	if (GSREV >= 10001) {
+		LocalConnect = HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_PRE_DNS, m_lconnect);
 	} else
 #endif
 	{
