@@ -73,7 +73,7 @@ DLLFUNC int MOD_INIT(m_jumpserver)(ModuleInfo *modinfo)
 {
 	ModuleSetOptions(modinfo->handle, MOD_OPT_PERM);
 	CommandAdd(modinfo->handle, MSG_JUMPSERVER, TOK_JUMPSERVER, m_jumpserver, 3, M_USER);
-	HookAddEx(modinfo->handle, HOOKTYPE_PRE_LOCAL_DNS, jumpserver_preconnect);
+	HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_PRE_DNS, jumpserver_preconnect);
 	return MOD_SUCCESS;
 }
 
