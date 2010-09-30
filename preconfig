@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+PREFIX="--enable-hub --enable-prefixaq --with-showlistmodes --with-listen=5 --with-dpath=${SERVERPWD}/${NETSHORTNAME}-ircd  --with-spath=${SERVERPWD}/${NETSHORTNAME}-ircd/src/ircd --with-nick-history=2000 --with-sendq=3000000 --with-bufferpool=18 --with-hostname=127.0.0.1 --with-permissions=0600 --enable-dynamic-linking"
+
+DEBUGMODE=0
+
+if [ "${1}" != "" ] ; then
+	for VAR in $*
+	do
+		case "${VAR}" in
+			ipv6)
+				POSTFIX="${POSTFIX} --enable-inet6"
+			;;
+			ziplinks)
+				POSTFIX="${POSTFIX} --enable-ziplinks"
+			;;
+			ssl)
+				POSTFIX="${POSTFIX} --enable-ssl"
+			;;
+			debug)
+				DEBUGMODE=1
+			;;
+		esac
+	done
+fi
+
+./configure ${PREFIX} ${POSTFIX}
+
+if [ "${DEBUGMODE}" = 1 ] ; then
+        case "${FLAGS}" in *d*) echo "#define DEBUGMODE" >>"include/config.h";; esac
+        case "${FLAGS}" in *d*) echo "#define DEBUG" >>"include/config.h";; esac
+fi
