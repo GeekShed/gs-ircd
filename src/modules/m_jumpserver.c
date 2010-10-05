@@ -92,15 +92,18 @@ static int do_jumpserver_exit_client(aClient *sptr)
 {
 	if (js_server && js_reason)
 	{
-		if (IsSecure(sptr) && js_ssl_server)
+		if (IsSecure(sptr) && js_ssl_server) {
 			sendto_one(sptr, rpl_str(RPL_REDIR), "UNKNOWN",
 				"*",
 				js_ssl_server, js_ssl_port);
-		else
+		} else {
 			sendto_one(sptr, rpl_str(RPL_REDIR), "UNKNOWN",
 				"*",
 				js_server, js_port);
+		}
 	}
+	close(sptr->authfd);
+
  	return exit_client(sptr, sptr, sptr, js_reason);
 }
 
