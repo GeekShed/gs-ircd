@@ -73,7 +73,7 @@ DLLFUNC int MOD_INIT(m_jumpserver)(ModuleInfo *modinfo)
 {
 	ModuleSetOptions(modinfo->handle, MOD_OPT_PERM);
 	CommandAdd(modinfo->handle, MSG_JUMPSERVER, TOK_JUMPSERVER, m_jumpserver, 3, M_USER);
-	HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_PRE_DNS, jumpserver_preconnect);
+	HookAddEx(modinfo->handle, HOOKTYPE_PRE_LOCAL_CONNECT, jumpserver_preconnect);
 	return MOD_SUCCESS;
 }
 
@@ -92,18 +92,15 @@ static int do_jumpserver_exit_client(aClient *sptr)
 {
 	if (js_server && js_reason)
 	{
-		if (IsSecure(sptr) && js_ssl_server) {
-			sendto_one(sptr, rpl_str(RPL_REDIR), "UNKNOWN",
-				"*",
+		if (IsSecure(sptr) && js_ssl_server)
+			sendto_one(sptr, rpl_str(RPL_REDIR), me.name,
+				BadPtr(sptr->name) ? "*" : sptr->name,
 				js_ssl_server, js_ssl_port);
-		} else {
-			sendto_one(sptr, rpl_str(RPL_REDIR), "UNKNOWN",
-				"*",
+		else
+			sendto_one(sptr, rpl_str(RPL_REDIR), me.name,
+				BadPtr(sptr->name) ? "*" : sptr->name,
 				js_server, js_port);
-		}
 	}
-	close(sptr->authfd);
-
  	return exit_client(sptr, sptr, sptr, js_reason);
 }
 

@@ -120,7 +120,7 @@ extern void       ipport_seperate(char *string, char **ip, char **port);
 ConfigItem_class	*Find_class(char *name);
 ConfigItem_deny_dcc	*Find_deny_dcc(char *name);
 ConfigItem_oper		*Find_oper(char *name);
-ConfigItem_listen	*Find_listen(char *ipmask, int port, int protocol);
+ConfigItem_listen	*Find_listen(char *ipmask, int port);
 ConfigItem_ulines	*Find_uline(char *host);
 ConfigItem_except	*Find_except(aClient *, char *host, short type);
 ConfigItem_tld		*Find_tld(aClient *cptr, char *host);
@@ -247,7 +247,7 @@ extern void close_listeners();
 extern int connect_server(ConfigItem_link *, aClient *, struct hostent *);
 extern void get_my_name(aClient *, char *, int);
 extern int get_sockerr(aClient *);
-extern int inetport(aClient *, char *, int);
+extern int inetport(aClient *, char *, int, int);
 extern void init_sys();
 extern void init_modef();
 
@@ -786,9 +786,9 @@ extern int file_exists(char* file);
 extern void free_motd(aMotd *m);
 extern void fix_timers(void);
 
-#define _GSREV	20000
-#define _GSCODENAME ""
-#define _GSVERSION_STRING "2.0"
+#define _GSREV	10001
+#define _GSCODENAME "Gimpi"
+#define _GSVERSION_STRING "1.1"
 #define GSVERSION _GSREV
 
 extern long GSREV;

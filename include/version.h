@@ -2,7 +2,7 @@
 **
 ** version.h
 ** UnrealIRCd
-** $Id$
+** $Id: version.h,v 1.1.1.1.2.25 2009/04/13 11:03:58 syzop Exp $
 */
 #ifndef __versioninclude
 #define __versioninclude 1

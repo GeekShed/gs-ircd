@@ -1044,24 +1044,16 @@ static void generate_cloakkeys()
 }
 #endif
 
-int OldUnreal_main(int argc, char *argv[]);
-
 
 long GSREV = _GSREV;
 char * GSVERSION_STRING = _GSVERSION_STRING;
 char * GSCODENAME = _GSCODENAME;
 
 #ifndef _WIN32
-int main(int argc, char *argv[]) {
-	return OldUnreal_main(argc, argv);
-}
+int main(int argc, char *argv[])
 #else
-int InitwIRCD(int argc, char *argv[]) {
-	return OldUnreal_main(argc, argv);
-}
+int InitwIRCD(int argc, char *argv[])
 #endif
-
-int OldUnreal_main(int argc, char *argv[])
 {
 #ifdef _WIN32
 	WORD wVersionRequested = MAKEWORD(1, 1);
@@ -1531,19 +1523,13 @@ int OldUnreal_main(int argc, char *argv[])
 	 */
 	
 	portnum = conf_listen->port;
-
-	if (conf_listen->options & LISTENER_SCTP) {
-		me.transport_protocol = IPPROTO_SCTP;
-	} else {
-		me.transport_protocol = IPPROTO_TCP;
-	}
 /*
  *      This is completely unneeded-Sts
    	me.ip.S_ADDR =
 	    *conf_listen->ip != '*' ? inet_addr(conf_listen->ip) : INADDR_ANY;
 */
 	Debug((DEBUG_ERROR, "Port = %d", portnum));
-	if (inetport(&me, conf_listen->ip, portnum))
+	if (inetport(&me, conf_listen->ip, portnum, conf_listen->options))
 		exit(1);
 	set_non_blocking(me.fd, &me);
 	conf_listen->options |= LISTENER_BOUND;
