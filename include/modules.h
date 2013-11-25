@@ -653,7 +653,6 @@ int CallCmdoverride(Cmdoverride *ovr, aClient *cptr, aClient *sptr, int parc, ch
 #define HOOKTYPE_POST_SERVER_CONNECT 48
 #define HOOKTYPE_RAWPACKET_IN 49
 #define HOOKTYPE_LOCAL_NICKPASS 50
-#define HOOKTYPE_LOCAL_PRE_DNS 51
 
 /* Hook return values */
 #define HOOK_CONTINUE 0

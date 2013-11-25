@@ -190,8 +190,6 @@ CMD_FUNC(m_version)
 		    serveropts, extraflags ? extraflags : "",
 		    tainted ? "3" : "",
 		    (IsAnOper(sptr) ? MYOSNAME : "*"), UnrealProtocol);
-	            sendto_one(sptr, ":%s NOTICE %s :gs-ircd v%s (%s) %u", me.name, sptr->name, GSVERSION_STRING, GSCODENAME, GSREV);
-
 #ifdef USE_SSL
 		if (IsAnOper(sptr))
 			sendto_one(sptr, ":%s NOTICE %s :%s", me.name, sptr->name, OPENSSL_VERSION_TEXT);

@@ -47,8 +47,6 @@ Computing Center and Jarkko Oikarinen";
 #include "version.h"
 #ifndef _WIN32
 #include <sys/socket.h>
-#include <sys/types.h>
-#include <netdb.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
@@ -103,6 +101,9 @@ static unsigned char minus_one[] =
 #define SET_ERRNO(x) WSASetLastError(x)
 #endif /* _WIN32 */
 
+#ifndef IPPROTO_SCTP
+#define IPPROTO_SCTP 132
+#endif
 extern char backupbuf[8192];
 aClient *local[MAXCONNECTIONS];
 short    LastSlot = -1;    /* GLOBAL - last used slot in local */
@@ -268,7 +269,7 @@ void report_error(char *text, aClient *cptr)
 	int errtmp = ERRNO, origerr = ERRNO;
 	char *host, xbuf[256];
 	int  err, len = sizeof(err), n;
-
+	
 	host = (cptr) ? get_client_name(cptr, FALSE) : "";
 
 	Debug((DEBUG_ERROR, text, host, STRERROR(errtmp)));
@@ -343,12 +344,11 @@ void report_baderror(char *text, aClient *cptr)
  * depending on the IP# mask given by 'name'.  Returns the fd of the
  * socket created or -1 on error.
  */
-int  inetport(aClient *cptr, char *name, int port)
+int  inetport(aClient *cptr, char *name, int port, int options)
 {
 	static struct SOCKADDR_IN server;
 	int  ad[4], len = sizeof(server);
 	char ipname[64];
-
 
 	if (BadPtr(name))
 		name = "*";
@@ -375,14 +375,18 @@ int  inetport(aClient *cptr, char *name, int port)
 		    name, (unsigned int)port);
 		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
 	}
-
-	cptr->network_protocol = AFINET;
-	cptr->sock_type = SOCK_STREAM;
-
+	/*
+	 * At first, open a new socket
+	 */
+	ircd_log(LOG_ERROR, "Port flags %d: 0x%x ", port, options);
 
 	if (cptr->fd == -1)
 	{
-		cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
+		if (options & LISTENER_SCTP) {
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);			
+		} else {
+			cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_TCP);
+		}
 	}
 	if (cptr->fd < 0)
 	{
@@ -406,13 +410,17 @@ int  inetport(aClient *cptr, char *name, int port)
 	 */
 	if (port)
 	{
-		server.SIN_FAMILY = cptr->network_protocol;
+		server.SIN_FAMILY = AFINET;
 		/* per-port bindings, fixes /stats l */
-
+		
 #ifndef INET6
+		if (options & LISTENER_SCTP) {
+			server.SIN_ADDR.S_ADDR = INADDR_ANY;
+		} else {
 			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
+		}
 #else
-			inet_pton(cptr->network_protocol, ipname, server.SIN_ADDR.S_ADDR);
+			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
 #endif
 		server.SIN_PORT = htons(port);
 		/*
@@ -477,15 +485,17 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->flags = FLAGS_LISTEN;
 	cptr->listener = cptr;
 	cptr->from = cptr;
+	ircd_log(LOG_ERROR, "%d add_listener2 flags: 0x%x ", conf->port, conf->options);
+	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", conf->port, conf->options);
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
-	cptr->transport_protocol = conf->protocol;
-	if (inetport(cptr, conf->ip, conf->port))
+	ircd_log(LOG_ERROR, "%d add_listener2 flags(2): 0x%x ", conf->port, conf->options);
+	if (inetport(cptr, conf->ip, conf->port, conf->options))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
 	cptr->umodes = conf->options ? conf->options : LISTENER_NORMAL;
 	if (cptr->fd >= 0)
-	{
+	{	
 		cptr->umodes |= LISTENER_BOUND;
 		conf->options |= LISTENER_BOUND;
 		conf->listener = cptr;
@@ -530,7 +540,7 @@ void close_listeners(void)
 			if (aconf->flag.temporary && (aconf->clients == 0))
 			{
 				close_connection(cptr);
-				/* need to start over because close_connection() may have
+				/* need to start over because close_connection() may have 
 				** rearranged local[]!
 				*/
 				reloop = 1;
@@ -765,7 +775,7 @@ int  check_client(aClient *cptr, char *username)
 	static char sockname[HOSTLEN + 1];
 	struct hostent *hp = NULL;
 	int  i;
-
+	
 	ClearAccess(cptr);
 	Debug((DEBUG_DNS, "ch_cl: check access for %s[%s]",
 	    cptr->name, inetntoa((char *)&cptr->ip)));
@@ -1031,7 +1041,7 @@ void set_sock_opts(int fd, aClient *cptr)
 	opt = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_DEBUG, (OPT_TYPE *)&opt,
 	    sizeof(opt)) < 0)
-
+		
 		report_error("setsockopt(SO_DEBUG) %s:%s", cptr);
 #endif /* _SOLARIS */
 #endif
@@ -1161,9 +1171,9 @@ void set_non_blocking(int fd, aClient *cptr)
 
 	if (ioctl(fd, FIONBIO, &res) < 0)
 	{
-		if (cptr)
+		if (cptr) 
 			report_error("ioctl(fd,FIONBIO) failed for %s:%s", cptr);
-
+		
 	}
 #else
 # if !defined(_WIN32)
@@ -1208,9 +1218,6 @@ aClient *add_connection(aClient *cptr, int fd)
 	int i, j;
 	acptr = make_client(NULL, &me);
 
-	acptr->network_protocol = cptr->network_protocol;
-	acptr->transport_protocol = cptr->transport_protocol;
-	acptr->sock_type = cptr->sock_type;
 	/* Removed preliminary access check. Full check is performed in
 	 * m_server and m_user instead. Also connection time out help to
 	 * get rid of unwanted connections.
@@ -1318,7 +1325,7 @@ add_con_refuse:
 	}
 
 	acptr->fd = fd;
-    	add_local_client(acptr);
+    add_local_client(acptr);
 	acptr->listener = cptr;
 	if (!acptr->listener->class)
 	{
@@ -1365,11 +1372,7 @@ void	start_of_normal_client_handshake(aClient *acptr)
 struct hostent *he;
 
 	acptr->status = STAT_UNKNOWN;
-	Hook *h;
-	for (h = Hooks[HOOKTYPE_LOCAL_PRE_DNS]; h; h = h->next)
-	{
-		int v = (*(h->func.intfunc))(acptr);
-	}
+
 	if (!DONT_RESOLVE)
 	{
 		if (SHOWCONNECTINFO && !acptr->serv)
@@ -1403,7 +1406,7 @@ void proceed_normal_client_handshake(aClient *acptr, struct hostent *he)
 	acptr->hostp = he;
 	if (SHOWCONNECTINFO && !acptr->serv)
 		sendto_one(acptr, "%s", acptr->hostp ? REPORT_FIN_DNS : REPORT_FAIL_DNS);
-
+	
 	if (!dns_special_flag && !DoingAuth(acptr))
 		SetAccess(acptr);
 }
@@ -1670,7 +1673,7 @@ int  read_message(time_t delay)
 int  read_message(time_t delay, fdlist *listp)
 #endif
 {
-/*
+/* 
    #undef FD_SET(x,y) do { if (fcntl(x, F_GETFD, &sockerr) == -1) abort(); FD_SET(x,y); } while(0)
 */	aClient *cptr;
 	int  nfds;
@@ -1717,7 +1720,7 @@ int  read_message(time_t delay, fdlist *listp)
 				continue;
 			if (IsLog(cptr))
 				continue;
-
+			
 			if (DoingAuth(cptr))
 			{
 				int s = TStime() - cptr->firsttime;
@@ -1735,9 +1738,9 @@ int  read_message(time_t delay, fdlist *listp)
 					if (cptr->authfd >= 0)
 					{
 						FD_SET(cptr->authfd, &read_set);
-#ifdef _WIN32
+#ifdef _WIN32	
 						FD_SET(cptr->authfd, &excpt_set);
-#endif
+#endif	
 						if (cptr->flags & FLAGS_WRAUTH)
 							FD_SET(cptr->authfd, &write_set);
 					}
@@ -1772,7 +1775,7 @@ int  read_message(time_t delay, fdlist *listp)
 		}
 
 		ares_fds(resolver_channel, &read_set, &write_set);
-
+		
 		if (me.fd >= 0)
 			FD_SET(me.fd, &read_set);
 
@@ -1926,7 +1929,7 @@ int  read_message(time_t delay, fdlist *listp)
 			   nextping = TStime();
 			   if (!cptr->listener)
 				cptr->listener = &me;
-
+		        
                       }
 #ifndef NO_FDLIST
 	for (i = listp->entry[j = 1];  (j <= listp->last_entry); i = listp->entry[++j])
@@ -1984,13 +1987,13 @@ deadsocket:
 		if ((!NoNewLine(cptr) || FD_ISSET(cptr->fd, &read_set)) &&
 		    !(DoingDNS(cptr) || DoingAuth(cptr))
 #ifdef USE_SSL
-			&&
+			&& 
 			!(IsSSLAcceptHandshake(cptr) || IsSSLConnectHandshake(cptr))
-#endif
+#endif		
 			)
 			length = read_packet(cptr, &read_set);
 #ifdef USE_SSL
-		if ((length != FLUSH_BUFFER) && (cptr->ssl != NULL) &&
+		if ((length != FLUSH_BUFFER) && (cptr->ssl != NULL) && 
 			(IsSSLAcceptHandshake(cptr) || IsSSLConnectHandshake(cptr)) &&
 			FD_ISSET(cptr->fd, &read_set))
 		{
@@ -2154,7 +2157,7 @@ int  read_message(time_t delay, fdlist *listp)
 				continue;
 			if (IsLog(cptr))
 				continue;
-
+			
 			if (DoingAuth(cptr))
 			{
 				if (auth == 0)
@@ -2413,6 +2416,7 @@ int  connect_server(ConfigItem_link *aconf, aClient *by, struct hostent *hp)
 		aconf, aconf->refcount, aconf->flag.temporary ? "YES" : "NO");
 #endif
 
+	sendto_realops("Socket connection flags  (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (!hp && (aconf->options & CONNECT_NODNSCACHE)) {
 		/* Remove "cache" if link::options::nodnscache is set */
 		memset(&aconf->ipnum, '\0', sizeof(struct IN_ADDR));
@@ -2543,18 +2547,12 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * with it so if it fails its useless.
 	 */
 
-	cptr->network_protocol = AFINET;
-
+	sendto_realops("Socket connection flags2 (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 	if (aconf->options & CONNECT_SCTP) {
-		cptr->transport_protocol = IPPROTO_SCTP;
-		cptr->sock_type = SOCK_STREAM;
+		cptr->fd = socket(AFINET, SOCK_STREAM, IPPROTO_SCTP);
 	} else {
-		cptr->transport_protocol = IPPROTO_TCP;
-		cptr->sock_type = SOCK_STREAM;
-
+		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
 	}
-
-	cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
 	if (cptr->fd < 0)
 	{
 		if (ERRNO == P_EMFILE)
@@ -2573,29 +2571,31 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	}
 	mysk.SIN_PORT = 0;
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = cptr->network_protocol;
+	server.SIN_FAMILY = AFINET;
 	get_sockhost(cptr, aconf->hostname);
-
+	
 	server.SIN_PORT = 0;
 	server.SIN_ADDR = me.ip;
-	server.SIN_FAMILY = cptr->network_protocol;
+	server.SIN_FAMILY = AFINET;
 	if (aconf->bindip && strcmp("*", aconf->bindip))
 	{
 #ifndef INET6
-		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);
+	if (aconf->options & CONNECT_SCTP) {
+		server.SIN_ADDR.S_ADDR = INADDR_ANY;
+	} else {
+		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
+	}
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
 	}
-	if (cptr->transport_protocol != IPPROTO_SCTP) {
-		if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
-		{
-			report_baderror("error binding to local port for %s:%s", cptr);
-			return NULL;
-		}
+	if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
+	{
+		report_baderror("error binding to local port for %s:%s", cptr);
+		return NULL;
 	}
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = cptr->network_protocol;
+	server.SIN_FAMILY = AFINET;
 	/*
 	 * By this point we should know the IP# of the host listed in the
 	 * conf line, whether as a result of the hostname lookup or the ip#
