@@ -1,0 +1,109 @@
+==[ IMPORTANT MESSAGE ABOUT DISABLING NOSPOOF ]==
+Disabling NOSPOOF at windows (w9x, nt, w2k, xp) is NOT recommended since this
+WILL allow users to use "spoofed hosts" (like the IP of someone you trust).
+
+If you have problems with NOSPOOF, fix your client (bot?) instead (you should PONG
+back to the initial PING at connect).
+
+==[ GENERAL GUIDELINES ]==
+First of all you need Microsoft Visual C++ (see below), compiling with
+cygwin is not supported (nor is there any good reason to do so).
+
+Compatible compilers:
+cygwin     NOT supported. Will not work. Should be no reason to use this anyway.
+msvc 6.x   Microsoft Visual Studio 6 does not work, this compiler is too old.
+msvc 7.x   Microsoft Visual Studio 7.x (.NET) will work just fine
+msvc 8.x   Microsoft Visual Studio 8.x (.NET 2005), including the free kit,
+           should work fine (since Unreal3.2.5).
+
+If you don't have the paid version of Microsoft Visual Studio 7.x, then you can
+use the FREE development kit and PSDK as explained below:
+1. Download the MS Visual Studio Development kit at:
+   http://msdn.microsoft.com/visualc/vctoolkit2003/
+2. Install the Platform Software Development Kit (PSDK) from:
+   http://www.microsoft.com/msdownload/platformsdk/sdkupdate/
+3. NOTE: Whenever you need to compile something we say 'Start the Visual Studio
+   .NET Command Prompt' below, but you - a person using the free version - will
+   actually have to start the Platform SDK Prompt instead (check out the
+   Start Menu).
+
+== Simple compile (no SSL/ZIP/Remote includes) ==
+1. Start the Visual Studio .NET Command Prompt
+2. Go to your UnrealIRCd dir (like: cd \dev\unreal3.2) and then compile with:
+   nmake -f makefile.win32
+   This will generate a wircd.exe and unreal.exe
+3. Copy the src\win32\tre.dll to your UnrealIRCd main dir.
+4. Done!
+
+== Compiling modules ==
+1. Put your module (the .c file) in src\modules (eg: c:\dev\unreal3.2\src\modules).
+2. Start the Visual Studio .NET Command Prompt
+3. Go to your UnrealIRCd dir (like: cd \dev\unreal3.2).
+4. Compile the module with:
+   nmake -f makefile.win32 custommodule MODULEFILE=<name>
+   <name> is the name of the module WITHOUT the .c suffix, so if your
+   module has the filename 'm_crappymod.c', then you use:
+   nmake -f makefile.win32 custommodule MODULEFILE=m_crappymod
+5. Done. A .dll file should have been created.
+
+If you compiled with VC7 and used the official source (not a CVS version,
+but for example 3.2.1 source) then the module should work on all these
+versions (binary compatible) and you could for example put them on
+your website so users can download them.
+Such a module will work on both SSL and non-SSL, there should be no need
+for separate versions... unless, of course, you use SSL-specific code in your
+mod.
+DO NOT download a CVS version & compile your mod and then start
+distributing the .dll for use at another (non-CVS) version!!
+Every time we change a struct (and in some other cases) it makes the
+binary/module binary incompatible which practically means that your module
+might seem to work fine at first (or not..) but will CRASH or cause memory
+corruption and other subtle errors.
+
+== COMPILING WITH ZIP LINKS / SSL / REMOTE INCLUDES SUPPORT ==
+First of all, DO NOT use any precompiled libs from the official
+zlib/openssl/curl sites. We require certain compile parameters.
+Versions downloaded from such sites will often CRASH.
+
+The easiest is to download the UnrealIRCd development package
+which contains zlib, openssl and curl precompiled for you.
+See: www.vulnscan.org/unrealwin32dev/
+
+Just extract it somewhere (eg: to c:\dev).
+Then, use compile flags to enable the features + specify where to look.
+Here are examples if you used c:\dev:
+ZIP: nmake -f makefile.win32 USE_ZIPLINKS=1 ZLIB_INC_DIR="c:\dev\zlib" ZLIB_LIB_DIR="c:\dev\zlib\dll32"
+SSL: nmake -f makefile.win32 USE_SSL=1 OPENSSL_INC_DIR="c:\dev\openssl\include" OPENSSL_LIB_DIR="c:\dev\openssl\lib" 
+CURL: nmake -f makefile.win32 USE_REMOTEINC=1 LIBCURL_INC_DIR="c:\dev\curl\include" LIBCURL_LIB_DIR="c:\dev\curl\lib"
+
+Obviously you can (and probably will) combine all these options, like
+to build a zip+ssl+curl version (all in 1 line):
+nmake -f makefile.win32 USE_ZIPLINKS=1 ZLIB_INC_DIR="c:\dev\zlib" ZLIB_LIB_DIR="c:\dev\zlib\dll32"
+USE_SSL=1 OPENSSL_INC_DIR="c:\dev\openssl\include" OPENSSL_LIB_DIR="c:\dev\openssl\lib" USE_REMOTEINC=1
+LIBCURL_INC_DIR="c:\dev\curl\include" LIBCURL_LIB_DIR="c:\dev\curl\lib"
+
+== SYMBOL FILES ==
+If you get something like this:
+
+  Creating library L_COMMANDS.lib and object L_COMMANDS.exp
+M_OPER.obj : error LNK2019: unresolved external symbol _sendto_snomask_global re
+ferenced in function _m_oper
+
+(note: the exact name of the symbol will vary)
+
+Then you will have to rebuild the wircd.def symbol file. You do this by
+downloading http://www.vulnscan.org/tmp/dlltool.exe and putting the file somewhere
+in your path (eg: c:\winnt\system32).
+Then, to compile you do this:
+nmake -f makefile.win32 [your other options here]
+nmake -f makefile.win32 SYMBOLFILE
+nmake -f makefile.win32 [your other options here]
+
+So basically you just run 'nmake -f makefile.win32 SYMBOLFILE' and then restart
+compiling again.
+
+== COMPILING ZLIB/SSL/CURL YOURSELF ==
+This is off-topic and not explained here.
+Again, use the stuff from the win32 development pack unless you have a good
+reason to do otherwise (in which case we might not support your self-compiled version
+because we work with specific versions / compile options).
