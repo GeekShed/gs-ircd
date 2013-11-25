@@ -12,43 +12,36 @@
  .block_old { font-size: 14; }
  .set { font-weight: bold; }
  .desc { margin-left: 15px; }
- pre { font: "times new roman"; font-style: normal; background-color: #eeeeee;}
+ .inline_pre { font-family: monospace; font-style: normal; background-color: #eeeeee;}
+ pre { font-family: monospace; font-style: normal; background-color: #eeeeee;}
 </style>
 </head>
 
-<!-- $Id: unreal32docs.html,v 1.1.6.13 2009/04/13 11:03:56 syzop Exp $ -->
+<!-- $Id$ -->
 
 <body>
 English | 
 <a href="unreal32docs.de.html">German</a> | 
-<a href="unreal32docs.es.html">Spanish</a> | 
 <a href="unreal32docs.hu.html">Hungarian</a> | 
 <a href="unreal32docs.fr.html">French</a> | 
-<a href="unreal32docs.gr.html">Greek</a> | 
-<a href="unreal32docs.nl.html">Dutch</a> | 
 <a href="unreal32docs.ru.html">Russian</a> | 
-<a href="unreal32docs.tr.html">Turkish</a>
+<a href="unreal32docs.tr.html">Turkish</a> |
+<a href="unreal32docs.es.html">Spanish</a>
 <br><br>
 <div align="center"><b><font size="7">UnrealIRCd</font></b><br>
   <font size="4"><a href="http://www.unrealircd.com">http://www.unrealircd.com</a></font><br>
-  <font size="4">Version: 3.2.8</font><br>
-  <b>Last doc update:</b> 2009-01-03</div>
+  <font size="4">Version: 3.2.10.2</font><br>
+  <b>Last doc update:</b> 2013-11-20</div>
 <br>
-  <b>Coders:</b> Stskeeps / codemastr / Syzop / Luke / aquanight / WolfSage <br>
-  <b>Contributors:</b> McSkaf / Zogg / NiQuiL / assyrian / chasm / DrBin / llthangel / Griever / nighthawk<br>
-  <b>Documentation:</b> CKnight^ / Syzop<br>
+  <b>Head coder/maintainer:</b> Syzop<br>
+  <b>Coders:</b> binki<br>
+  <b>Previous coders &amp; contributors:</b> Stskeeps, codemastr, Luke, aquanight,
+  WolfSage, McSkaf, Zogg,  NiQuiL,  assyrian,  chasm,  DrBin,  llthangel,
+  Griever,  nighthawk<br>
+  <b>Documentation:</b> CKnight^ (initial documentation), Syzop (major rewrite), codemastr, and many contributors<br>
 <p>To view this documentation you must have a compatible browser, which are listed below. Up to date docs are 
   available at <a href="http://www.vulnscan.org/UnrealIRCd/unreal32docs.html">http://www.vulnscan.org/UnrealIRCd/unreal32docs.html</a>
   and a FAQ at <a href="http://www.vulnscan.org/UnrealIRCd/faq/" TARGET="_blank">http://www.vulnscan.org/UnrealIRCd/faq/</a>.
-</p>
-<p><b>Compatible Browsers: </b><br>
-<ul>
-<li>Opera 6.02
-<li>Microsoft Internet Explorer 6.X / 5.5
-<li>Netscape Navigator 6.X
-<li>Mozilla 1.2.X
-<li>Lynx (to a point)
-</ul>
 </p>
 <p><font size="+2"><b>INDEX / TABLE OF CONTENTS</b></font><br>
   1. <a href="#IntroductionNotes">Introduction & Notes</a><br>
@@ -74,7 +67,8 @@ English |
   -- 3.16. <a href="#feature_nickchars">Nick Character Sets</a><br>
   -- 3.17. <a href="#feature_cgiirc">CGI:IRC Support</a><br>
   -- 3.18. <a href="#feature_timesync">Time Synchronization</a><br>
-  -- 3.19. <a href="#feature_other">Other features</a><br>
+  -- 3.19. <a href="#feature_authtypes">Authentication Types</a><br>
+  -- 3.20. <a href="#feature_other">Other features</a><br>
   4. <a href="#configuringyourunrealircdconf">Configuring your unrealircd.conf 
   file</a><br>
   ---4.1. <a href="#configurationfileexplained">Configuration file explained</a><br>
@@ -113,7 +107,8 @@ English |
   ---4.34. <a href="#officialchannels">Official Channels Block</a><br>
   ---4.35. <a href="#spamfilter">Spamfilter Block</a><br>
   ---4.36. <a href="#cgiirc">Cgiirc Block</a><br> 
-  ---4.37. <a href="#setblock">Set Block -=- (networks/unrealircd.conf)</a><br>
+  ---4.37. <a href="#setblock">Set Block</a><br>
+  ---4.38. <a href="#filesblock">Files Block</a><br />
   5. <a href="#addtlfiles">Additional Files</a><br>
   6. <a href="#userchannelmodes">User & Channel Modes</a><br>
   7. <a href="#useropercommands">User & Oper Commands</a><br>
@@ -127,7 +122,9 @@ English |
   ---8.7. <a href="#secinformation">Information disclosure</a><br>
   ---8.8. <a href="#secantiexploit">Protecting against exploits</a><br>
   ---8.9. <a href="#secsummary">Summary</a><br>
-  9. <a href="http://www.vulnscan.org/UnrealIRCd/faq/" target="_blank">Frequently Asked Questions (FAQ)</a><br> 
+  9. <a href="http://www.vulnscan.org/UnrealIRCd/faq/" target="_blank">Frequently Asked Questions (FAQ)</a><br />
+  10. <a href="#modules">Modules</a><br />
+  ---10.1. <a href="#modules_m_nopost">m_nopost</a><br />
   A. <a href="#regex">Regular Expressions</a><br>
   ---A.1. <a href="#regexlit">Literals</a><br>
   ---A.2. <a href="#regexdot">Dot Operator</a><br>
@@ -149,8 +146,9 @@ English |
   modified in anyway. &#8211; Copyright UnrealIRCd Development Team 2002-2006</p>
 <p>Please read this manual before asking for help, you also REALLY want to take a look at the 
    <a href="http://www.vulnscan.org/UnrealIRCd/faq/" target="_blank">FAQ</a> since over 80% of your questions/problems are answered in it. If you still
-   need help you can ask for support at irc.ircsystems.net (port 6667) channel #unreal-support (note 
+   need help you can ask for support at irc.unrealircd.org (port 6667) channel #unreal-support (note 
    that we REQUIRE you to read the docs and faq and we only help with UnrealIRCd, not with services!). 
+   You can also use the forums located at <a href="http://forums.unrealircd.com/" TARGET="_blank">http://forums.unrealircd.com</a>. 
    If you have a real bug (like a crash) then report it at 
    <a href="http://bugs.unrealircd.org" TARGET="_blank">http://bugs.unrealircd.org</a>.</p></div>
 
@@ -194,9 +192,9 @@ Windows:<br>
 </ul>
 <li><b>Windows version:</b>
 <ul> 
-<li>Windows 2000 (Pro, Server, Advanced Server)
 <li>Windows XP (Home, Pro)
 <li>Windows 2003 
+<li>Windows 7
 </ul>
 <li><b>Architectures tested:</b>
 <ul>
@@ -246,7 +244,7 @@ because otherwise you will not understand concepts such as 'cloaking', 'snomasks
 <p>A cloaked host is generated by a cloaking module (you are required to have one loaded), currently there's only 1 module included:<br>
    <b>cloak:</b> This is the official cloaking module since 3.2.1, it is much more secure than the old
    algorithm, it uses md5 internally and requires you to have 3 set::cloak-keys:: consisting of mixed lowercase (a-z),
-   uppercase (A-Z) and digit (0-9) charachters [eg: "AopAS6WQH2Os6hfosh4SFJHs"]. See example.conf for an example.<br>
+   uppercase (A-Z) and digit (0-9) characters [eg: "AopAS6WQH2Os6hfosh4SFJHs"]. See example.conf for an example.<br>
 <p>Cloak keys MUST be the same on ALL SERVERS in a network. Also cloak keys should be kept SECRET 
    because it's possible to decode the original host if you know the keys (which makes umode +x useless).</p>
 <p>Hint: If you are on *NIX and have to create new cloak keys, you can run './unreal gencloak' 
@@ -256,7 +254,7 @@ because otherwise you will not understand concepts such as 'cloaking', 'snomasks
 <p>UnrealIRCd supports modules which is nice because:<br>
    - You can load/reload/unload them while the ircd is running (by /rehash). This allows some bugs to be fixed or new features to be added without requiring a restart!<br>
    - Other people can create (3rd party) modules with new commands, usermodes and even channelmodes.<br>
-   UnrealIRCd only comes with a few modules. Take a look at www.unrealircd.com -&gt; modules
+   UnrealIRCd only comes with a few <a href="#modules">modules</a>. Take a look at www.unrealircd.com -&gt; modules
    or use google to find 3rd party modules.<br>
 <p>You need to load at least 2 modules or else you won't be able to boot!:<br>
    - the commands module: commands.so (commands.dll on windows)<br>
@@ -307,8 +305,8 @@ because otherwise you will not understand concepts such as 'cloaking', 'snomasks
    so <i>/helpop</i> becomes <i>/helpop ?</i> and 
    <i>/helpop chmodes</i> becomes <i>/helpop ?chmodes</i> etc..</p></div>
 
-<p><font size="+2"><b>3.6 - Oper access levels</b></font><a name="feature_operaccesslevels"></a></p><div class="desc">
-<p>There are several oper levels in UnrealIRCd and you can add additional rights (like to use /gline) to
+<p id="feature_operaccesslevels"><font size="+2"><b>3.6 - Oper access levels</b></font></p><div class="desc">
+<p>There are several <a href="#operblock_flags">oper levels</a> in UnrealIRCd and you can add additional rights (like to use /gline) to
    each of them, that way you can give each oper the privileges they need.</p>
 <p>This is controlled by the oper flags in the oper block, see the oper block for more information.</p></div>
 
@@ -338,7 +336,7 @@ because otherwise you will not understand concepts such as 'cloaking', 'snomasks
    If you then connect to 127.0.0.1 port 6667, your traffic will be encrypted and forwarded to irc.myserv.com
    port 6697 (an SSL port).</p>
 <p>You should also validate certificates when you connect to servers and not blindly accept them (like in the stunnel example)
-   else you are still vulnerable to "active sniffing" attacks (ssl redirects), that's however too offtopic
+   else you are still vulnerable to "active sniffing" attacks (ssl redirects), that's however too off-topic
    to explain here (learn about SSL, don't ask us). [mIRC and xchat pop up a window asking you to allow/reject a certificate,
    so that's good].</p></div>
 <p><font size="+2"><b>3.9 - IPv6</b></font><a name="feature_ipv6"></a></p><div class="desc">
@@ -474,14 +472,30 @@ If you ban *!*@*.303AEBC6.IP you ban *!*@1.2.*<br>
 This information might be helpful to you when deciding how broad a ban should be.<br>
 <br>
 <b>Extended bantypes</b><br>
-Extended bans look like ~[!]&lt;type&gt;:&lt;stuff&gt;. Currently the following types are available:<br>
+Extended bans look like ~&lt;type&gt;:&lt;parameter&gt;.<br>
+They let you ban (or exempt) based on things other than the traditional nick!user@host mask.
+They also provide support for things like 'quieting' users.<br>
+<br>
+These bantypes specify which actions are affected by a ban:<br>
+<br>
 <table border=1>
 <tr><td>type:</td><td>name</td><td>explanation:</td></tr>
 <tr><td>~q</td><td>quiet</td><td>People matching these bans can join but are unable to speak, 
  unless they have +v or higher. <i>Ex: ~q:*!*@blah.blah.com</i></td></tr>
 <tr><td>~n</td><td>nickchange</td><td>People matching these bans cannot change nicks, 
  unless they have +v or higher. <i>Ex: ~n:*!*@*.aol.com</i></td></tr>
-<tr><td>~c</td><td>[prefix]channel</td><td>If the user is in this channel then (s)he is unable to join. 
+<tr><td>~j</td><td>join</td><td>If a user matches this, he may not join the channel.
+ He may perform all other activities if he is already on the channel, such as speaking and changing his nick.
+ <i>Ex: ~j:*!*@*.aol.com</i><br>
+ Could be useful to prevent people from one ISP from joining, but still make
+ them able to speak/nickchange freely once in the channel, like after an /INVITE.</td></tr>
+</table>
+<br>
+These bantypes introduce new criteria which can be used:<br>
+<br>
+<table border=1>
+<tr><td>type:</td><td>name</td><td>explanation:</td></tr>
+<tr><td>~c</td><td>channel</td><td>If the user is in this channel then (s)he is unable to join. 
  A prefix can also be specified (+/%/@/&amp;/~) which means that it will only match if the user has
  that rights or higher on the specified channel.
 <i>Ex: +b ~c:#lamers, +e ~c:@#trusted </i></td></tr>
@@ -489,9 +503,29 @@ Extended bans look like ~[!]&lt;type&gt;:&lt;stuff&gt;. Currently the following 
  <i>Ex: ~r:*Stupid_bot_script*</i><br>
  NOTE: an underscore ('_') matches both a space (' ') and an underscore ('_'), so this ban would match 
  'Stupid bot script v1.4'.</td></tr>
+<tr><td>~R</td><td>registered</td><td>If a user has identified to services (usually NickServ)
+  and matches this nickname, then this ban will match. This means this ban is really only useful for ban
+  exemptions (+e).<br>
+  Ex: <i>+e ~R:Nick</i> will allow Nick in the channel, regardless of other bans, if he identified to
+  NickServ and is using the nickname Nick.<br>
+  </td></tr>
+<tr><td>~a</td><td>account</td><td>If a user is logged in to services with
+this account name, then this ban will match.<br>
+This is slightly different than ~R, in the sense that a user with nick ABC
+may be logged in under account XYZ.<br>
+Not all services packages support this, in which case you will have to use
+~R instead.<br>
+Ex: <i>+e ~a:SomeName</i> will allow the user(s) logged in to services under
+account name SomeName to join the channel, regardless of bans.<br>
+  </td></tr>
 </table>
-These bantypes are also supported in the channel exception list (+e).<br>
-Modules can also add other extended ban types.<br>
+<br>
+You may stack extended bans from the 1st group with the 2nd, such as <i>+b ~q:~c:#lamers</i>, which 
+would quiet all users who have joined #lamers.<br>
+Ban types from the second group may also be used for invite exceptions (+I),
+such as <i>+I ~c:#trusted</i> and <i>+I ~a:accountname</i>.<br>
+<br>
+Modules can add other extended ban types.<br>
 </p></div>
 
 <p><font size="+2"><b>3.14 - Spamfilter</b></font><a name="feature_spamfilter"></a></p><div class="desc">
@@ -528,6 +562,9 @@ Modules can also add other extended ban types.<br>
 <tr><td>dccblock</td><td>mark the user so (s)he's unable to send any DCCs</td></tr>
 <tr valign="top"><td>viruschan</td><td>part all channels, join set::spamfilter::virus-help-channel, disables all commands 
  except PONG, ADMIN, and msg/notices to set::spamfilter::virus-help-channel</td></tr>
+<tr><td>warn</td><td>send a notice to IRCOps (spamfilter snomask), and
+ inform the user that the message has been intercepted. No further action is
+taken, the message is not blocked.</td></tr>
 </table></tr></td>
    <tr valign="top"><td><b>[tkltime]</b></td><td> The duration of the *line/shun added by the filter, use '-' to use the default or to skip 
    (eg: if action = 'block')</td></tr>
@@ -610,10 +647,10 @@ A table of all possible choices:<br>
 <tr><td>swedish</td><td>Swedish characters</td><td>iso8859-1 (latin1)</td></tr>
 <tr><td><b>latin1</b></td><td>catalan, danish, dutch, french, german, swiss-german, spanish, icelandic, italian, swedish</td><td>iso8859-1 (latin1)</td></tr>
 <tr><td>hungarian</td><td>Hungarian characters</td><td>iso8859-2 (latin2), windows-1250</td></tr>
-<tr><td>polish</td><td>Polish characters</td><td>iso8859-2 (latin2)</td></tr>
+<tr><td>polish-iso</td><td>Polish characters (note that polish-w1250 is more common!)</td><td>iso8859-2 (latin2)</td></tr>
 <tr><td>romanian</td><td>Romanian characters</td><td>iso8859-2 (latin2), windows-1250, iso8859-16</td></tr>
-<tr><td><b>latin2</b></td><td>hungarian, polish, romanian</td><td>iso8859-2 (latin2)</td></tr>
-<tr><td>polish-w1250</td><td>Polish characters, windows variant (unfortunately more common than iso)</td><td>windows-1250</td></tr>
+<tr><td><b>latin2</b></td><td>hungarian, polish-iso, romanian</td><td>iso8859-2 (latin2)</td></tr>
+<tr><td>polish-w1250</td><td>Polish characters, windows variant</td><td>windows-1250</td></tr>
 <tr><td>slovak-w1250</td><td>Slovak characters, windows variant</td><td>windows-1250</td></tr>
 <tr><td>czech-w1250</td><td>Czech characters, windows variant</td><td>windows-1250</td></tr>
 <tr><td><b>windows-1250</b></td><td>polish-w1250, slovak-w1250, czech-w1250, hungarian, romanian</td><td>windows-1250</td></tr>
@@ -671,7 +708,79 @@ the IRCd will continue to boot regardlessly (should rarely happen).</p>
    the <a href="#setblock">set documentation</a> for more information.</p>
 </div>
 
-<p><font size="+2"><b>3.19 - Other features</b></font><a name="feature_other"></a></p><div class="desc">
+<p><font size="+2"><b>3.19 - Authentication Types</b></font><a name="feature_authtypes"></a></p><div class="desc">
+<p>At various places in the configuration file, for example the <a
+href="#operblock">oper block</a>, <a href="#allowblock">allow block</a> and
+<a href="#linkblock">link block</a>, you can authenticate clients by password or other
+means.<br>
+
+You can specify the password as plaintext, but you can also specify an
+authentication type.<br>
+The following auth-types are available:<br>
+<table border="0">
+<TR><TD><b>Auth-type:</b></TD><TD><b>Description:</b></TD><TD><b>Dependencies:</b></TD><TD><b>How to generate:</b></TD></TR>
+<TR><TD><b>crypt</b></TD><TD>UNIX crypt</TD><TD>Windows: OpenSSL required</TD><TD>/MKPASSWD crypt :password</TD></TR>
+<TR><TD><b>md5</b></TD><TD>MD5 with salt</TD><TD>Always available</TD><TD>/MKPASSWD md5 :password</TD></TR>
+<TR><TD><b>sha1</b></TD><TD>SHA1 with salt</TD><TD>OpenSSL required</TD><TD>/MKPASSWD sha1 :password</TD></TR>
+<TR><TD><b>ripemd160</b></TD><TD>RIPEMD160 with salt</TD><TD>OpenSSL required</TD><TD>/MKPASSWD ripemd160 :password</TD></TR>
+<TR><TD><b>sslclientcert</b></TD><TD>SSL Client certificate</TD><TD>OpenSSL required</TD><TD>Path to public certifcate .pem file.</TD></TR>
+<TR><TD><b>sslclientcertfp</b></TD><TD>SSL Client certificate fingerprint</TD><TD>OpenSSL required</TD><TD>openssl x509 -in name-of-pem-file.pem -sha256 -noout -fingerprint</TD></TR>
+</table>
+The /MKPASSWD command can be used online as IRCOp. Alternatively, you can
+use the command line interface from the shell: <i>./unreal mkpasswd hashtype
+password</i>.<br>
+Not all authentication types are available on all systems, see the
+dependencies (prerequisites) in the table of above.<br>
+<br>
+<b>Example: MD5 hashed password in vhost block</b><br>
+1. Say, you want to use the password <i>test</i> and want to use md5 hashed
+passwords.<br>
+ If you are an IRCOp then you can simply type <i>/MKPASSWD md5 :test</i>.<br>
+Alternatively, instead of IRC you can run the following command on the
+shell: <i>./unreal mkpasswd md5 test</i>.<br>
+Using either method, the outputted hashed password will look like <i>$NIV0bSfG$UTMvI/KdMwe4cZqmT/23qw==</i>
+(the exact string will vary!)<br>
+2. Now, put this string in your vhost block and let UnrealIRCd know it's an
+md5 hash. Example:
+<pre>vhost {
+    vhost I.love.Tux;
+    from { userhost *@*; };
+    login Tux;
+    password "$NIV0bSfG$UTMvI/KdMwe4cZqmT/23qw==" { md5; };
+};</pre>
+3. To use this vhost, type /VHOST Tux test<br>
+<br>
+<b>Example: Authentication by SSL Client certificates</b><br>
+<tt>sslclientcert</tt> and <tt>sslclientcertfp</tt> are exceptional
+auth-types which can be used to authenticate SSL users by their client
+certificate.<br>
+With these authentication methods you can be sure the user is using SSL and
+is using the specified client certificate.<br>
+Here's an example of how to use it for the oper block:<br>
+1. Create an SSL client certificate if you don't have one already (search
+   the web for 'create ssl certificate' if you don't know how)<br>
+2. Grab the SHA256 hash of the certificate by running:
+<pre>openssl x509 -in name-of-pem-file.pem -sha256 -noout -fingerprint</pre>
+3. In the configuration file, replace the original password (<i>test</i> in our example) with the hash
+and specify the sslclientcertfp auth-type. Here's an example:<br>
+<pre>oper test {
+     password "E7:4D:46:F1:9F:F4:68:F5:E8:E3:49:CC:28:5D:F9:65:85:BA:4F:16:B6:49:02:E3:34:E6:E7:6A:FE:76:A7:98" { sslclientcertfp; };
+     flags { global; can_override; };
+     class clients;
+   };</pre>
+4. Rehash your server (/REHASH).<br>
+5. Now, connect with your SSL client and make sure it uses your SSL client
+certificate of step #2.<br>
+6. You can now oper up with <i>/oper test x</i>. The password must still
+be specified but may be anything (<i>x</i> in this example), it is ignored
+as the SSL client certificate is used for authentication.<br>
+7. Congratulations, you are now using the most secure authentication method
+available in UnrealIRCd.<br>
+<br>
+Another very useful place to use <tt>sslclientcertfp</tt> is in <a href="#linkblock_passwordreceive">link::password-receive</a>
+</p></div>
+
+<p><font size="+2"><b>3.20 - Other features</b></font><a name="feature_other"></a></p><div class="desc">
 <p>UnrealIRCd has a lot of features so not everything is covered here... You'll find that out by yourself.</p></div>
 
 <p> </p>
@@ -827,6 +936,7 @@ allow {
 	class &lt;connection-class&gt;;
 	password &lt;connection-password&gt; { &lt;auth-type&gt;; };
 	maxperip &lt;max-connections-per-ip&gt;;
+	ipv6-clone-mask &lt;number-of-bits&gt;;
 	redirect-server &lt;server-to-forward-to&gt;;
 	redirect-port &lt;port-to-forward-to&gt;;
 	options {
@@ -856,6 +966,16 @@ allow {
 </p>
 <p><b>maxperip</b> (optional, but recommended)<br>
    Allows you to specify how many connections per IP are allowed to this server (ex: maxperip 4;).
+</p>
+<p id="allowblock_ipv6clonemask"><b>ipv6-clone-mask</b>
+  (optional, defaults to <a href="#set_defaultipv6clonemask">set::default-ipv6-clone-mask</a>)<br />
+  This option controls clone detection. If two clients connect from different IPv6 addresses
+  but only the last few bits are different, there is almost a guarantee that both clients
+  are really one person. This option only affects the enforcement of
+  <a href="#allowblock_maxperip">allow::maxperip</a>. For example, if you set this option to
+  128, then each IPv6 address will be considered unique. Because of current IP allocation
+  policies, it is recommended that your most general <a href="#allowblock">allow block</a>
+  use a value of 64.
 </p>
 <p><b>redirect-server</b> (optional)<br>
    If the class is full, redirect users to this server (if clients supports it [mIRC 6 does]).</p>
@@ -937,8 +1057,8 @@ listen *:6601 {
 <p>listen *:8067;<br>
   listen 213.12.31.126:6667;<br>
   listen *:6660-6669;</p></div>
-<p><font class="block_section">4.7 - </font><font class="block_name">Oper Block</font>
-   <font class="block_recommended">RECOMMENDED</font> <font class="block_old">(Previously known as the O:Line)</font><a name="operblock"></a><div class="desc">
+<p><font class="block_section">4.7 - </font><font id="operblock" class="block_name">Oper Block</font>
+   <font class="block_recommended">RECOMMENDED</font> <font class="block_old">(Previously known as the O:Line)</font><div class="desc">
 </p>
 <p>
 <pre>oper &lt;name&gt; {
@@ -947,6 +1067,7 @@ listen *:6601 {
 		userhost &lt;hostmask&gt;;
 	};
 	password &lt;password&gt; { &lt;auth-type&gt;; };
+	require-modes &lt;modes&gt;
 	class &lt;class-name&gt;;
 	flags &lt;flags&gt;;
 	flags {
@@ -963,18 +1084,27 @@ listen *:6601 {
 <p>The oper block allows you to assign IRC Operators for your server. The <b>oper::</b> 
   specifies the login name for the /oper. The <b>oper::from::userhost</b> is a user@host 
   mask that the user must match, you can specify more than one hostmask by creating 
-  more than one oper::from::userhost. The <b>oper::password</b> is the password the user 
-  must specify, oper::password:: allows you to specify an authentication method 
-  for this password, valid auth-types are crypt, md5, and sha1, ripemd-160. If 
-  you want to use a plain-text password leave this sub-block out.</p>
-<p>Please note that BOTH the login name and password are case sensitive</p>
+  more than one oper::from::userhost. The
+  optional <b>oper::require-modes</b> setting lets one specify modes
+  (such as <em>r</em> or <em>z</em>) that a user must have acquired
+  before being allowed to OPER. This might be used to require users
+  to register with nickserv or be using secure connections before
+  being able to become operators.
+</p>
+<p id="operblock_password">The <b>oper::password::</b> is the password the oper must specify.
+  <b>oper::password::auth-type</b> allows you to specify an authentication method 
+  for this password. Don't specify <b>oper::password::auth-type</b> for plaintext password.
+  Valid auth-types, as was as an example on how to use them with oper
+  blocks, can be found under <a href="#feature_authtypes">Authentication Types</a>.
+</p>
+<p>Please note that BOTH the password and login name are case sensitive.</p>
 <p>The <b>oper::class</b> directive specifies the name of a preexisting (appears before 
   this in the config file) class name that the oper block will use.</p>
 <p>The <b>oper::flags</b> directive has two formats. If you wish to use the old style 
   oper flags i.e., OAa, you use the flags &lt;flags&gt; method, if you want to 
   use the new style,i.e., services-admin, then you use the flags { &lt;flag&gt;; 
   } method. Below is a list of all the flags (in both formats) and what they do.</p>
-<table width="75%" border="1">
+<table width="75%" border="1" id="operblock_flags">
   <tr> 
     <td width="10%"><div align="center"><b>Old Flag</b></div></td>
     <td width="16%"><div align="center"><b>New Flag</b></div></td>
@@ -1285,7 +1415,7 @@ oper bobsmith {
 		global;
 	};
 	swhois "Example of a whois mask";
-	snomask frebWqFv;
+	snomask cFfkoSsqNG;
 };
 </pre></p>
 <a name="operoverride"><b>Some little info about OperOverride:</b><br>
@@ -1304,9 +1434,8 @@ drpass {
 	die &lt;die-password&gt; { &lt;auth-type&gt;; };
 };</pre></p>
 <p>This block sets the /restart and /die passwords with drpass::restart and drpass::die 
-  respectively. The drpass::restart:: and drpass::die:: allow you to specify the 
-  type of authentication used by this item. The currently supported authentication 
-  types are crypt, md5, and sha1, ripemd-160.</p>
+  respectively.
+  Instead of a plaintext password, you can also use other <a href="#feature_authtypes">Authentication Types</a>.</p>
 <p>Example:</p>
 <pre>
 drpass {
@@ -1391,10 +1520,9 @@ log &lt;file-name&gt; {
   <table border=0>
   <tr><td>errors</td><td>self explanatory</td></tr>
   <tr><td>kills</td><td>logs /kill notices</td></tr>
-  <tr><td>tkl</td><td>logs info on *lines, shuns and spamfilters (adding/removing/expire)</td></tr>
+  <tr><td>tkl</td><td>logs info on *lines (/kline, /zline, etc), shuns and spamfilters (adding/removing/expire)</td></tr>
   <tr><td>connects</td><td>logs user connects/disconnects</td></tr>
   <tr><td>server-connects</td><td>logs server connects/squits</td></tr>
-  <tr><td>kline</td><td>logs /kline usage</td></tr>
   <tr><td>oper</td><td>logs oper attempts (both failed and successful)</td></tr>
   <tr><td>sadmin-commands</td><td>logs /sa* (samode, sajoin, sapart, etc.) usage</td></tr>
   <tr><td>chg-commands</td><td>logs /chg* (chghost, chgname, chgident, etc.) usage</td></tr>
@@ -1411,7 +1539,6 @@ log ircd.log {
 		errors;
 		kills;
 		oper;
-		kline;
 		tkl;
 	};
 };
@@ -1600,9 +1727,11 @@ except ban {
 	mask &lt;hostmask&gt;;
 };</pre></p>
 <p>The except ban block allows you to specify a user@host that will override a 
-  ban placed on a broader host. This is useful when you want an ISP banned, but 
+  ban { } and KLINE/ZLINE placed on a broader host. This is useful when you want an ISP banned, but 
   still want specific users to be able to connect. The except::mask directive 
   specifies the user@host mask of the client who will be allowed to connect.</p>
+<p>NOTE: If you want to exempt a host completely from all possible bans
+  (except spamfilter), then you need both an 'except ban' and an 'except tkl' block</p>
 <p>Example:<br>
 <pre>
 except ban {
@@ -1628,9 +1757,11 @@ except tkl {
   still want specific users to be able to connect. The except::mask directive 
   specifies the user@host mask of the client who will be allowed to connect. The 
   except::type specifies which type of ban this should override. Valid types are
-  gline, gzline, qline, gqline, and shun, which make an exception from Glines, 
-  Global Zlines, Qlines, Global Qlines, and shuns. If the type {} format is used,
-  multiple types may be specified.</p>
+  gline, gzline, qline, gqline, shun, and all, which make an exception from Glines, 
+  Global Zlines, Qlines, Global Qlines, shuns, and all bans except
+  KLINE/ZLINE. If the type {} format is used, multiple types may be specified.</p>
+<p>NOTE: If you want to exempt a host completely from all possible bans
+  (except spamfilter), then you need both an 'except ban' and an 'except tkl' block</p>
 <p>Example:<br>
 <pre>
 except tkl {
@@ -1840,8 +1971,10 @@ vhost {
   to be eligible for the vhost. You may specify more than one hostmask. The vhost::login 
   in the login name the user must enter and vhost::password is the password that 
   must be entered. The vhost::password:: allows you to specify the type of 
-  authentication used by this item. The currently supported authentication types 
-  are crypt, md5, and sha1, ripemd-160. Lastly vhost::swhois allows you to add an extra 
+  authentication used by this item. See <a
+  href="#feature_authtypes">Authentication Types</a> for a list of available
+  types.
+  Lastly vhost::swhois allows you to add an extra 
   line to a users whois, exactly as it does in the Oper Block oper::swhois.</p>
 <p>Example:<br>
 <pre>
@@ -1867,16 +2000,22 @@ badword &lt;type&gt; {
 	action &lt;replace|block&gt;;
 };</pre></p>
 <p>The badword block allows you to manipulate the list used for user and channel 
-  mode +G to strip "badwords". The badword:: specifies the type, valid 
-  types are channel, message, quit, and all. channel is for the channel +G list, message 
-  is for the user +G list, quit is for quit message censoring, and all adds it to all three lists. 
-  The badword::word can be a simple word or a regular expression we should search for. The 
-  badword::replace is what we should replace this match with. If badword::replace 
-  is left out, the word is replaced with &lt;censored&gt;. The badword::action defines
+  mode +G to strip "badwords". The <b>badword::</b> specifies the type, which decides
+  what messages this badword filter applies to. The valid types are:</p>
+<ul>
+  <li><tt>channel</tt> applies to channels with mode +G.</li>
+  <li><tt>message</tt> applies to private messages (not in-channel messages) sent by a user with the +G usermode.</li>
+  <li><tt>quit</tt> applies to all quit messages.</li>
+  <li><tt>all</tt> applies to all three of the above situations.</li>
+</ul>
+<p>
+  The <b>badword::word</b> can be a simple word or a regular expression we should search for. The 
+  <b>badword::replace</b> is what we should replace this match with. If <b>badword::replace</b>
+  is left out, the word is replaced with &lt;censored&gt;. The <b>badword::action</b> defines
   what action should be taken if this badword is found. If you specify replace, then the
   badword is replaced, if you specify block, then the entire message is blocked. If you do
-  not specify a badword::action, replace is assumed.</p>
-<p>Example:<br>
+  not specify a <b>badword::action</b>, replace is assumed.</p>
+<p>Example:<br />
 <pre>
 badword channel {
 	word shit;
@@ -1904,8 +2043,8 @@ ulines {
 	stats.mynetwork.com;
 };</pre></p>
 <p></p></div>
-<p><font class="block_section">4.31 - </font><font class="block_name">Link Block</font>
-   <font class="block_optional">OPTIONAL</font> <font class="block_old">(Previously known as C/N/H:Lines)</font><a name="linkblock"></a>
+<p id="linkblock"><font class="block_section">4.31 - </font><font class="block_name">Link Block</font>
+   <font class="block_optional">OPTIONAL</font> <font class="block_old">(Previously known as C/N/H:Lines)</font>
 </p><div class="desc">
 <p>Syntax:<br>
 <pre>
@@ -1955,10 +2094,10 @@ link &lt;server-name&gt; {
 <p><b>password-connect</b><br>
   The password used for connecting to the remote server, must be plain-text.
  </p>
-<p><b>password-receive</b><br>
-  The password used for validating incoming links, can be encrypted (valid methods 
-  are crypt, md5, sha1,  ripemd-160). You can leave the auth-type parameter out to
-  just use plain-text. Often this password is the same as your password-connect.
+<p id="linkblock_passwordreceive"><b>password-receive</b><br> The password used for validating
+  incoming links. It is strongly recommended to use hashed passwords or
+  the <tt>sslclientcertfp</tt> auth-type. See <a href="#feature_authtypes">Authentication
+  Types</a> for more information.<br>
 </p>
 <p><b>hub vs leaf</b><br>
   A hub has multiple servers linked to it, a leaf has only one link... to you. 
@@ -2026,18 +2165,34 @@ alias &lt;name&gt; {
 	type &lt;type-of-alias&gt;;
 	spamfilter &lt;yes|no&gt;;
 };</pre></p>
-<p>(Note: also see <a href="#includedirective">here</a> about the standard alias files UnrealIRCd has)</p>
+<p>(Note that <span class="inline_pre">&lt;name&gt;</span> is referred to using "<b>alias::</b>")</p>
+<p>(Note: see <a href="#includedirective">a description</a> of the standard alias files UnrealIRCd has)</p>
 <p>The alias block [standard alias] allows you to forward a command to a user, 
-  for example /chanserv sends a message to the user chanserv. The alias:: specifies 
-  the name of the command that will be the alias (eg: chanserv), alias::target is 
-  the nickname or channel it will forward to, if the alias:: is the same as the target, it will 
-  forward to, alias::target can be left out. The alias::type specifies the type 
-  of alias, valid types are services (the user is on the services server), stats 
-  (the user is on the stats server), normal (the user is a normal user on 
-  any server), and channel (the target is a channel name). If alias::spamfilter (optional)
-  is set to 'yes', then the spamfilters will be checked (default is 'no').<br>
-  The alias block also has another purpose which is explained below.</p>
-<p>Syntax [command alias]:<br>
+  for example /chanserv sends a message to the user chanserv.
+</p>
+<ul>
+  <li>
+    <b>alias::</b> specifies the name of the command that will be the alias (eg: chanserv)
+  </li>
+  <li>
+    <b>alias::target</b> is the nickname or channel it will forward to. If <b>alias::</b>
+    would be the same as the target, <b>alias::target</b> may be left out.
+  </li>
+  <li>
+    <b>alias::type</b> specifies the type of alias, valid types are
+    <ul>
+      <li><span class="inline_pre">services</span> (the user is on the <a href="#set-services-server">services server</a>),</li>
+      <li><span class="inline_pre">stats</span> (the user is on the <a href="#set-stats-server">stats server</a>),</li>
+      <li><span class="inline_pre">normal</span> (the user is a normal user on any server),</li>
+      <li><span class="inline_pre">channel</span> (the target is a channel name), and</li>
+      <li><span class="inline_pre">command</span> (this is not a "standard alias", see <a href="#aliasblock-command">below</a>).</li>
+    </ul>
+  </li>
+  <li>
+    <b>alias::spamfilter</b> (optional) causes the spamfilters will be checked if set to "yes" (default is 'no').
+    </li>
+</ul>
+<p id="aliasblock-command">Syntax [command alias]:<br>
 <pre>
 alias &lt;name&gt; {
 	/* For aliases to be sent to users/channels */
@@ -2059,25 +2214,49 @@ alias &lt;name&gt; {
 	type command;
 	spamfilter &lt;yes|no&gt;;
 };</pre></p>
-<p>When the alias block is used in this format, it allows you a much broader range 
-  of usage. For example you can create aliases such as /identify. The alias:: 
-  is the same as above, the name of the alias command. The <b>alias::format</b> specifies 
-  a regular expression that compares against the text sent to the alias command, 
-  when matched the sub-entries of that alias::format will be used, you may have 
-  multiple alias::format's to make the command do different things depending on 
-  the text sent to it. The <b>alias::format::target</b> is the target to forward this
-  alias to, however in case of a "real alias" <b>alias::format::command</b> is used instead.
-  The <b>alias::format::type</b> specifies the type of the alias that the
-  message should be forwarded to, besides the types mentioned previously in
-"Syntax [standard alias]", we also allow the type "real" here, for "real
-aliases". The <b>alias::format::parameters</b> is what will 
+<p>
+  When an alias block has <b>alias::type</b> set to <span class="inline_pre">command</span>,
+  as shown <a href="#aliasblock-command">above</a>, it becomes a command alias.
+  When the alias block is used in this format, it is much more flexible.
+  For example, you could create an /identify alias.
+</p>
+<ul>
+  <li>
+    <b>alias::</b> is the name of the alias command as in standard alias block form
+    (<a href="#aliasblock">above</a>).
+  </li>
+  <li>
+    <b>alias::format</b> specifies a <a href="#regex">regular expression</a> which is matched against the
+    text sent to the alias command. The sub-entries of the first matching <b>alias::format</b>
+    will be used. Thus, you may have multiple <b>alias::format</b>s to make a command
+    do different things depending on the text sent to it.
+  </li>
+  <li>
+    <b>alias::format::target</b> is the target to forward this alias to.
+    This value is not used if <b>alias::format::type</b> is "<span class="inline_pre">real</span>".
+  </li>
+  <li>
+    <b>alias::format::type</b> specifies the type of the alias that the
+    message should be forwarded to. In addition to the types mentioned previously in
+    "<a href="#aliasblock">Syntax [standard alias]</a>", "<span class="inline_pre">real</span>"
+    may be specified here for a "real alias" (a "real alias" is an alias that
+    may be rewritten to something other than a PRIVMSG).
+  </li>
+  <li>
+    <b>alias::format::parameters</b> (for "real aliases") is what will 
   be sent as the parameters to this alias. To specify one of the parameters given 
-  to the command alias specify % followed by a number, for example, %1 is the 
-  first parameter. To specify all parameters from a given parameter to the end 
-  do % followed by the number and a -, for example %2- returns all parameters 
-  from the second till the last. Additionally, you may specify %n which will be replaced 
-  by the nickname of the user who executed the command.<br><br>
-  For examples of using the alias block in the command format, consult doc/example.conf.</p>
+    to the command alias specify <span class="inline_pre">%</span> followed by a number.
+    For example, <span class="inline_pre">%1</span> is the first parameter. To specify
+    all parameters from a given parameter to the end, use <span class="inline_pre">%</span>
+    followed by the number and a <span class="inline_pre">-</span>. For example,
+    <span class="inline_pre">%2-</span> returns all parameters from the second through the
+    last. Additionally, you may specify <span class="inline_pre">%n</span> which will be
+    replaced by the nickname of the user who executed the command.
+  </li>
+</ul>
+<p>
+  For examples of using the alias block in the command format, consult doc/example.conf.
+</p>
 <p></p></div>
 <p><font class="block_section">4.33 - </font><font class="block_name">Help Block</font>
    <font class="block_optional">OPTIONAL</font><a name="helpblock"></a>
@@ -2217,14 +2396,13 @@ Then, in your unrealircd.conf you add a cgiirc block:
 };</pre></p>
 </div>
 
-<p><font class="block_section">4.37 - </font><font class="block_name">Set Block</font>
-   <font class="block_required">REQUIRED</font> <font class="block_old">(Previously known as unrealircd.conf/networks file)</font><a name="setblock"></a>
+<p id="setblock"><font class="block_section">4.37 - </font><font class="block_name">Set Block</font>
+   <font class="block_required">REQUIRED</font> <font class="block_old">(Previously known as unrealircd.conf/networks file)</font>
 </p><div class="desc">
-<p>The set file is what use to be our networks/unrealircd.conf and our networks 
-  file. On single server networks, rather than having 3 files you can just put all
-  the set statements in the unrealircd.conf itself, on multi-server networks, I
-  recommend using a seperate networks file.</p>
-  <p>Now, if your server is on a network, chances are you will all basically use 
+<p>On single server networks, rather than having 3 files you can just put all
+  the set statements in the unrealircd.conf itself, on multi-server networks, we
+  recommend using a seperate networks file (see next).</p>
+  <p>If your server is on a network, chances are you will all basically use 
     the same Set settings. Therefore it makes more sense to have a network file, 
     which is loaded with an <a href="#includedirective">include</a> directive. 
     Below you will find all of the set directives available.</p>
@@ -2261,7 +2439,7 @@ set {
 <p>Now if you wanted to make the set statements separate, say you wanted to set 
   your options in a single line.<br>
   Example:<br>
-  set { options { hide-ulines; no-stealth; }; };<br>
+  set { options { hide-ulines; show-connect-info; }; };<br>
 </p>
 <p><font class="set">set::kline-address &lt;email-address&gt;;</font><br>
   The email address that K:line questions should be sent to. This value must be 
@@ -2278,9 +2456,9 @@ set {
   The snomask that will be set on a user when they /oper.</p>
 <p><font class="set">set::modes-on-join &lt;+modes&gt;;</font><br>
   The modes that will be set on a channel when it is first created. Not all modes can be set using this command. +qaohvbeOAzlLk can NOT be set using this command.</p>
-<p><font class="set">set::level-on-join &lt;op|none&gt;;</font><br>
-  The mode that a user will get when he's the first to join a channel. This
-  is either 'op' (channel operator, the default) or 'none'.</p>
+<p><font class="set">set::level-on-join &lt;none|voice|halfop|op|protect|owner&gt;;</font><br>
+  The mode that a user will get when he's the first to join a channel. The
+  default is 'op' (channel operator).</p>
 <p><font class="set">set::restrict-usermodes &lt;modes&gt;</font><br>
   Restrict users to set/unset the modes listed here (don't use + or -).<br>
   For example you can set +G in modes-on-connect and G in restrict-usermodes,
@@ -2302,7 +2480,7 @@ set {
   The channel(s) a user will be forced to join when they /oper. To specify more 
   than one channel use a comma separated list.<br>
   [Note: don't forget to add quotes, like: oper-auto-join "#chan";]</p>
-<p><font class="set">set::anti-spam-quit-message-time &lt;timevalue&gt;;</font><br>
+<p id="set::anti-spam-quit-message-time"><font class="set">set::anti-spam-quit-message-time &lt;timevalue&gt;;</font><br>
   A time value specifying the length of time a user must be connected for before 
   a /quit message will be displayed. Used to prevent spam. A time value is a numeric 
   string with d meaning days, h meaning hours, m meaning minutes, and s meaning 
@@ -2382,6 +2560,29 @@ set {
   Allow shunned user to use /part.</p>
 <p><font class="set">set::options::fail-oper-warn;</font><br>
   If present, a user will be notified that his/her failed /oper attempt has been logged.</p>
+<p><font class="set">set::options::allow-insane-bans;</font><br>
+  Allow insane broad bans like /GLINE *@*.xx. This makes it very easy to
+  accidentally ban everyone on your network, so use with great care!</p>
+<p><font class="set">set::options::disable-cap;</font><br>
+  Disable IRC Client Capabilities Extensions (CAP). Note that this makes
+  SASL and various other features unavailable or harder for clients to
+  use.</p>
+<p id="set_nopost_ban_action"><font class="set">set::nopost::ban-action</font> (requires <a href="#modules_m_nopost">m_nopost</a>)<br />
+  Action to take on a user if he tries to perform an HTTP POST command.
+  The allowed values are: kill, gline, gzline, kline, zline, shun, and tempshun.
+  The default value is kill. If you use a *line value or shun, then note
+  that if gullible user who is tricked into visiting a website exhibiting
+  the XPS IRC spamming attack will experience the shun or *line on his existing
+  connections. The default value of kill protects against such user accidents,
+  but use of *line and especially gzline may be needed in some situations.</p>
+<p id="set_nopost_ban_reason"><font class="set">set::nopost::ban-reason</font> (requires <a href="#modules_m_nopost">m_nopost</a>)<br />
+  The ban reason to set when m_nopost kills or bans a user.</p>
+<p id="set_nopost_ban_time"><font class="set">set::nopost::ban-time</font> (requires <a href="#modules_m_nopost">m_nopost</a>)<br />
+  The duration for shuns, glines, gzlines, klines, and zlines set by m_nopost.
+  Default is 4h.</p>
+<p id="set_nopost_except_hosts"><font class="set">set::nopost::except-hosts</font> (requires <a href="#modules_m_nopost">m_nopost</a>)<br />
+  A list of hostmasks to exempt from m_nopost's killing or *-lining. You should
+  neve need to place any hostmasks in this option.</p>
 <p><font class="set">set::dns::timeout &lt;timevalue&gt;;</font><br>
   A time value specifying the length of time a DNS server has to respond before 
   a timeout. A time value is a numeric string with d meaning days, h meaning hours, 
@@ -2390,8 +2591,11 @@ set {
 <p><font class="set">set::dns::retries &lt;number-of-retries&gt;;</font><br>
   A numeric value specifying the number of times the DNS lookup will be retried 
   if failure occurs. (NOT IMPLEMENTED)</p>
-<p><font class="set">set::dns::nameserver &lt;name-of-dns-server&gt;;</font><br>
-  Specifies the hostname of the server that will be used for DNS lookups. (NOT IMPLEMENTED)</p>
+<p><font class="set">set::dns::nameserver &lt;name-of-dns-server&gt;;</font><br/>
+  Specifies the IP address of the server that will be used for DNS
+  lookups. Used only as a fallback for when c-ares is unable to guess
+  the nameservers (such as if /etc/resolv.conf is empty).
+</p>
 <p><font class="set">set::dns::bind-ip &lt;ip&gt;;</font><br>
   Specifies the IP to bind to for the resolver, rarely ever needed.</p>
 <p><font class="set">set::network-name &lt;name-of-network&gt;;</font><br>
@@ -2400,12 +2604,21 @@ set {
 <p><font class="set">set::default-server &lt;server-name&gt;;</font><br>
   Defines the name of the default server to tell users to connect to if this server 
   is full.</p>
-<p><font class="set">set::services-server &lt;server-name&gt;;</font><br>
+<p id="set_defaultipv6clonemask">
+  <font class="set">set::default-ipv6-clone-mask</font><br />
+  The default IPv6 clone detection mask. See
+  <a href="#allowblock_ipv6clonemask">allow::ipv6-clone-mask</a>. The default value for this
+  setting is 64.
+  </p>
+<p id="set-services-server"><font class="set">set::services-server &lt;server-name&gt;;</font><br>
   Specifies the name of the server that the services bots are connected to. Required, 
   set it to something like services.yournet.com if you don't have services.</p>
-<p><font class="set">set::stats-server &lt;server-name&gt;;</font><br>
+<p id="set-stats-server"><font class="set">set::stats-server &lt;server-name&gt;;</font><br>
   Sets the name of the server on which the stats bot is located. If stats are 
   not run this value may be left out.</p>
+<p id="set-sasl-server"><font class="set">set::sasl-server &lt;server-name&gt;;</font><br>
+  Sets the name of the server to which SASL authenticate messages should be
+  sent.</p>
 <p><font class="set">set::help-channel &lt;network-help-channel&gt;;</font><br>
   Sets the name of the help channel for this network.</p>
 <p><font class="set">set::cloak-keys { &quot;key1&quot;; &quot;key2&quot;; &quot;key3&quot;; };</font><br>
@@ -2416,7 +2629,8 @@ set {
   cloaking module you have loaded, other rules may apply.</p>
 <p><font class="set">set::hiddenhost-prefix &lt;prefix-value&gt;;</font><br>
   Defines the prefix that will be used on hiddenhosts (+x). This is usually three 
-  or four letters representing the network name.</p>
+  or four letters representing the network name.  Linked servers must have
+  the same hidden-host prefix for channel bans to function properly.</p>
 <p><font class="set">set::hosts::local &lt;locop-host-name&gt;;</font><br>
   Defines the hostname that will be assigned to local opers when they set +x. You may
   optionally specify a username@host for this value.</p>
@@ -2467,6 +2681,8 @@ set {
   Disallows connections from people with self-signed certificates.</p>
 <p><font class="set">set::ssl::options::verify-certificate;</font><br>
   Makes Unreal determine if the SSL certificate is valid before allowing connection.</p>
+<p><font class="set">set::ssl::options::no-starttls;</font><br>
+  Disable STARTTLS. STARTTLS allows clients to use SSL on regular (non-SSL) ports.</p>
 <p><font class="set">set::throttle::period &lt;timevalue&gt;</font><br>
   How long a user must wait before reconnecting more than set::throttle::connections
   times.</p>
@@ -2534,17 +2750,54 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
   Maximum time to wait for a time server reply. This is a value between 1 and 5, more is not possible
   because it causes too much inaccuracy. This setting is 3 by default and there's probably
   no good reason to change it.</p>
+ <p><font class="set">set::ping-cookie &lt;yes|no&gt;</font><br>
+  Send a challenge using PING, which clients respond to using PONG. This is helpful for
+  preventing blind HTTP-POST attacks and other things, as well as stopping spoofed TCP on
+  older operating systems with broken TCP stacks. The default is yes.</p>
  <p><font class="set">set::pingpong-warning &lt;yes|no&gt;</font><br>
-  When NOSPOOF is enabled (usually on Windows), send a warning to each user to use
-  '/quote pong ..' if they are having problems connecting? The default is no.</p>
+  When set::ping-cookie is enabled (usually on Windows), send a warning to each user
+  to use '/quote pong ..' if they are having problems connecting? The default is no.</p>
  <p><font class="set">set::watch-away-notification &lt;yes|no&gt;</font><br>
   Allows you to enable/disable AWAY notification in WATCH. The default is yes.</p>
 <p></p> </div>
+<p id="filesblock"><font class="block_section">4.38 - </font><font class="block_name">Files Block</font>
+   <font class="block_optional">OPTIONAL</font><div class="desc">
+</p>
+<p>
+You don't need to use a <a href="#tldblock">TLD block</a> to specify default locations for your MOTDs and rules files. This block controls default settings for those in addition to the pidfile and irc.tune file. Anything not specified here will default to the value documented in <a href="#addtlfiles">Additional Files</a>.
+</p>
+<p>
+Relative pathnames will be interpreted relative to UnrealIRCd's root directory which is normally the directory containing <tt>unrealircd.conf</tt>. This block may be used to facilitate running more than one IRCd out of the same directory/root. In that case, you should at least specify multiple pidfiles and tunefiles&mdash;one for each server.
+</p>
+<p>Syntax:<br>
+<pre>
+files {
+	motd &lt;motd file&gt;;
+	shortmotd &lt;short motd file&gt;;
+	opermotd &lt;oper motd file&gt;;
+	svsmotd &lt;services motd file&gt;;
+	botmotd &lt;bot motd file&gt;;
+
+	rules &lt;rules file&gt;;
+
+	tunefile &lt;tune file&gt;;
+	pidfile &lt;pid file&gt;;
+};
+</pre></p>
+<p>Example:<br />
+<pre>
+files {
+	motd /etc/motd;
+
+	pidfile /var/lib/run/unrealircd.pid;
+};
+</pre>
+</p>
 <p><b><font size="+2">5 &#8211; Additional Files<a name="addtlfiles"></a>
   </font></b></p><div class="desc">
   In addition to the configuration files, Unreal has a few other files, such as MOTD, OperMOTD, 
   BotMOTD, and Rules. Listed below are the names of these files and their uses.<br>
-  Note that the motd files (all types) and rules files can also be specified in a tld block, 
+  Note that the motd files (all types) and rules files can also be specified in a <a href="#tldblock">tld</a> or <a href="#filesblock">files</a> block, 
   these are just the files used by default (and for remote MOTD/RULES's).<p />&nbsp;
 <table width="83%" border="1">
   <tr>
@@ -2679,6 +2932,10 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
     <td><div align="center">Q</div></td>
     <td>Only U:Lined servers can kick users</td>
   </tr>
+  <tr>
+    <td><div align="center">r</div></td>
+    <td>This channel is registered (only settable by services)</td>
+  </tr>
   <tr> 
     <td><div align="center">R</div></td>
     <td>Requires a registered nickname to join</td>
@@ -2693,7 +2950,7 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
   </tr>
    <tr> 
     <td><div align="center">t</div></td>
-    <td>Only chanops can set topic</td>
+    <td>Only halfops, chanops, or better can set topic</td>
   </tr>
   </tr>
    <tr> 
@@ -2716,6 +2973,15 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
     <td><div align="center">z</div></td>
     <td>Only clients on a Secure (SSL) Connection may join</td>
   </tr>
+  <tr> 
+    <td><div align="center">Z</div></td>
+    <td>Set by the server to indicate all users on the channel are on a Secure (SSL)
+    Connection. Only active is +z is also set. ULines (eg: BotServ) are
+    ignored when counting 'insecure users'. It's still up to the server
+    admins to make safe server to server links (which could be with the help
+    of SSL, but also VPN, loopback interface, quantum encryption, etc etc),
+    the IRCd does not and cannot detect this.</td>
+  </tr>
 </table>
 <p>&nbsp;</p>
 <table width="75%" border="1">
@@ -2724,7 +2990,7 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
     <td><div align="center"><b>Description</b></div></td>
   </tr>
   <tr> 
-    <td colspan="2"><div align="center"><b>User Modes</b></div></td>
+    <td colspan="2" id="usermodes"><div align="center"><b>User Modes</b></div></td>
   </tr>
   <tr> 
     <td><div align="center">A</div></td>
@@ -2762,6 +3028,10 @@ AU). Requests to these servers are sent in parallel, fastest reply wins.</p>
   <tr> 
     <td><div align="center">h</div></td>
     <td>Available for help (HelpOp) (Set in OperBlock)</td>
+  </tr>
+  <tr>
+    <td><div style="text-align: center">I</div></td>
+    <td>Hide an oper's idle time (in /whois output) from regular users.</td>
   </tr>
   <tr> 
     <td><div align="center">i</div></td>
@@ -2852,10 +3122,22 @@ to get more information on a command.</p>
     <td>Changes your online nick name. Alerts others to the change of your nick<br></td>
     <td>All</td>
   </tr>
-  <tr> 
+  <tr id="command_whois"> 
     <td>whois &lt;nick&gt;</td>
     <td>Displays information of user requested. Includes Full Name, Host, Channels 
       User is in, and Oper Status<br></td>
+    <td>All</td>
+  </tr>
+  <tr id="command_whois_nicknick">
+    <td>whois &lt;nick&gt; &lt;nick&gt;</td>
+    <td>
+      Performs a remote <a href="#command_whois">WHOIS</a>. If a
+      person is not on the same server as another person, a simple
+      WHOIS will not display all possible WHOIS responses. For
+      example, idle times are not shown in such a case. To request a
+      remote whois, issue a WHOIS with the remote user's nick as the
+      first and as the second arguments.
+    </td>
     <td>All</td>
   </tr>
   <tr> 
@@ -2969,7 +3251,7 @@ to get more information on a command.</p>
     <td>All</td>
   </tr>
   <tr> 
-    <td height="39">Watch +-&lt;nick&gt; +-&lt;nick&gt;<br></td>
+    <td height="39">Watch [+|-]&lt;nick&gt; [+|-]&lt;nick&gt;<br></td>
     <td>Watch is a new notify-type system in UnrealIRCd which is both faster and 
       uses less network resources than any old-style notify system. The server 
       will send you a message when any nickname in your watch list logs on or 
@@ -3076,6 +3358,10 @@ to get more information on a command.</p>
     <td>Returns the IP address of the user in question.</td>
     <td>All</td>
   </tr>
+  <tr>
+    <td height="39">silence [+|-]&lt;nick&gt;<br></td>
+    <td>Ignores messages from a user or list of users at the Server itself.<br></td>
+    <td>All</td>
   <tr> 
     <td height="39">oper &lt;userid&gt; &lt;password&gt;<br></td>
     <td>Command to give a user operator status if they match an Oper Block<br></td>
@@ -3151,14 +3437,15 @@ to get more information on a command.</p>
     <td>IRCop</td>
   </tr>
   <tr> 
-    <td height="39">rehash &lt;server&gt; &#8211;&lt;flags&gt;</td>
+    <td height="39">rehash &lt;server|-global&gt; &lt;flags&gt;</td>
     <td>Rehashes the servers config file. Including a server name allows you to 
-      rehash a remote servers config file. Several flags are also available. They 
+      rehash a remote servers config file, and using -global will rehash all
+      servers on the network (both are NetAdmin-only). Several flags are also available. They 
       Include <br>
-      -motd - Only rehash all MOTD and RULES files (including tld {})<br>
-      -opermotd - Only rehash the OPERMOTD file<br>
-      -botmotd - Only rehash the BOTMOTD file<br>
+      -dns - Reinitializes and reloads the resolver<br>
+      -motd - Only re-read all MOTD, BOTMOTD, OPERMOTD and RULES files (including those in tld{} blocks)<br>
       -garbage - Force garbage collection<br>
+      -ssl - Reloads SSL certificates<br>
     <td>IRCop</td>
   </tr>
   <tr> 
@@ -3280,12 +3567,15 @@ to get more information on a command.</p>
   </tr>
   <tr> 
     <td height="36">addline &lt;text&gt;<br></td>
-    <td>Allows you to add lines to the unrealircd.conf<br></td>
+    <td>Appends the specified text to unrealircd.conf. You must load the m_addline
+      module to use this command since unrealircd-3.2.9.<br></td>
     <td>IRCop</td>
   </tr>
-  <tr> 
-    <td height="36">mkpasswd &lt;password&gt;<br></td>
-    <td>Will encrypt a clear text password to add it to the unrealircd.conf<br></td>
+  <tr id="cmd_mkpasswd"> 
+    <td height="36">mkpasswd &lt;auth-type&gt; &lt;password&gt;<br></td>
+    <td>Will encrypt &lt;password&gt; using the &lt;auth-type&gt; hashing method.
+    See <a href="#feature_authtypes">Authentication Types</a> for available
+    hash methods.</td>
     <td>IRCop</td>
   </tr>
   <tr> 
@@ -3419,13 +3709,14 @@ kind of shared directory. And for backups, make sure they get the correct permis
 (it happens quite frequently everything is secured fine but there's a backup.tar.gz lying 
 around readable by everyone).<br>
 <br>
-You also want to use encrypted passwords wherever possible, if you compile with OpenSSL 
+You also want to use <a href="#passwords" title="Password Types">encrypted passwords</a> wherever possible, if you compile with OpenSSL 
 support (which you do, since you are concerned with security, right?) then I suggest to 
 use <i>sha1</i> or <i>ripemd160</i> password encryption, else use <i>md5</i>. Also if 
 you still have encrypted (oper) blocks left from Unreal3.2.1 or before I suggest you to 
 re-enrypt these (just re-run /mkpasswd), because 3.2.1 introduced some considerable 
 anti-crack improvements (basically a 14x slowdown of active cracks, and making 
-stored-plain-ciphertext cracks impossible).<br>
+stored-plain-ciphertext cracks impossible).
+<br>
 Still, do note that this is just 'yet another layer of security', since if you have weak 
 passwords they can still be cracked relatively easily and if someone manages to get your 
 configfile there are usually other interesting things in it that may aid an attacker, 
@@ -3528,7 +3819,7 @@ files. This requires root privileges, modifying of include/config.h
 recompile.<br>
 <br>
 There's one thing you should definately do, which is to ALWAYS USE THE LATEST VERSION, 
-subscribe to the <a href="http://mail1.sourceforge.net/mailman/listinfo/unreal-notify" target="_blank">unreal-notify mailinglist</a> 
+subscribe to the <a href="http://lists.sourceforge.net/mailman/listinfo/unreal-notify" target="_blank">unreal-notify mailinglist</a> 
 right now so you receive the release announcements (unreal-notify is for release announcements only, 
 so only 1 mail per X months). Usually it's explicitly mentioned in the release announcement if the 
 release contains (high risk) security fixes, but it's good to upgrade anyway.<br> 
@@ -3542,10 +3833,26 @@ Do take the time to secure your network and educate your opers. A lot of people 
 security until they got hacked, try to avoid that :).
 </div></p>
 
-
 <p><font size="+2"><b>9 &#8211; Frequently Asked Questions (FAQ)<a name="faq"></a></b></font></p>
 <div class="desc"><p>The FAQ is available online <a href="http://www.vulnscan.org/UnrealIRCd/faq/" TARGET="_blank">here</a></p></div>
 <p></p>
+
+<p id="modules"><font size="+2"><b>10 &#8211; Modules</b></font></p>
+<div class="desc">
+  <p>The following are some descriptions of modules shipped with
+  UnrealIRCd.  Unfortunately, only one of the modules shipped with
+  UnrealIRCd is documented at the moment.</p>
+</div>
+<p id="modules_m_nopost"><font size="+2"><b>10.1 <a href="#modules_m_nopost">m_nopost</a></b></font><br />
+  This module automatically bans any user who tries to issue an HTTP-style request.
+  This module was written by Syzop in response to the Firefox XPS attack through which
+  AJAX-capable browsers were able to act as IRC spambots. To choose what m_nopost
+  does when it receives such a request, configure the <a href="#set_nopost_ban_action">
+    set::nopost::ban-action</a> and <a href="#set_nopost_ban_time">set::nopost::ban-time</a>
+  settings (and their friends).<br />
+  This module is new as of UnrealIRCd 3.2.9 and is compiled into commands.so. Thus,
+  it is loaded by default in most cases.
+</p>
 
 <p><font size="+2"><b>A Regular Expressions<a name="regex"></a></b></font></p>
 <div class="desc"><p>Regular expressions are used in many places in Unreal, including badwords, spamfilter, and aliases. Regular expressions are a very complex tool used for pattern matching. They are sometimes referred to as "regexp" or "regex." Unreal uses the TRE regular expression library for its regex. This library supports some very complex and advanced expressions that may be confusing. The information below will help you understand how regexps work. If you are interested in more technical and detailed information about the regexp syntax used by Unreal, visit the <a href="http://www.laurikari.net/tre/syntax.html" target="_new">TRE homepage</a>.</p></div>

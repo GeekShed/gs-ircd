@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: dynconf.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 
@@ -42,6 +42,7 @@ struct zNetwork {
 	char *x_prefix_quit;
 	char *x_helpchan;
 	char *x_stats_server;
+	char *x_sasl_server;
 };
 
 enum UHAllowed { UHALLOW_ALWAYS, UHALLOW_NOCHANS, UHALLOW_REJOIN, UHALLOW_NEVER };
@@ -80,7 +81,9 @@ struct zConfiguration {
 	unsigned dont_resolve:1;
 	unsigned use_ban_version:1;
 	unsigned mkpasswd_for_everyone:1;
+	unsigned allow_insane_bans;
 	unsigned allow_part_if_shunned:1;
+	unsigned disable_cap:1;
 	unsigned check_target_nick_bans:1;
 	unsigned use_egd : 1;
 	long host_timeout;
@@ -125,6 +128,7 @@ struct zConfiguration {
 	char *restrict_usermodes;
 	char *restrict_channelmodes;
 	char *restrict_extendedbans;
+	int new_linking_protocol;
 	char *channel_command_prefix;
 	long unknown_flood_bantime;
 	long unknown_flood_amount;
@@ -161,7 +165,12 @@ struct zConfiguration {
 	char *timesynch_server;
 	int pingpong_warning;
 	int watch_away_notification;
+	int uhnames;
 	aNetwork network;
+#ifdef INET6
+	unsigned short default_ipv6_clone_mask;
+#endif /* INET6 */
+	int ping_cookie;
 };
 
 #ifndef DYNCONF_C
@@ -211,6 +220,7 @@ extern MODVAR aConfiguration iConf;
 #define hidden_host			iConf.network.x_hidden_host
 #define helpchan			iConf.network.x_helpchan
 #define STATS_SERVER			iConf.network.x_stats_server
+#define SASL_SERVER			iConf.network.x_sasl_server
 #define iNAH				iConf.network.x_inah
 #define prefix_quit			iConf.network.x_prefix_quit
 #define SSL_SERVER_CERT_PEM		(iConf.x_server_cert_pem ? iConf.x_server_cert_pem : "server.cert.pem")
@@ -222,6 +232,7 @@ extern MODVAR aConfiguration iConf;
 #define RESTRICT_USERMODES		iConf.restrict_usermodes
 #define RESTRICT_CHANNELMODES		iConf.restrict_channelmodes
 #define RESTRICT_EXTENDEDBANS		iConf.restrict_extendedbans
+#define NEW_LINKING_PROTOCOL		iConf.new_linking_protocol
 #ifdef THROTTLING
 #define THROTTLING_PERIOD		iConf.throttle_period
 #define THROTTLING_COUNT		iConf.throttle_count
@@ -243,6 +254,7 @@ extern MODVAR aConfiguration iConf;
 #define IDENT_READ_TIMEOUT		iConf.ident_read_timeout
 
 #define MKPASSWD_FOR_EVERYONE	iConf.mkpasswd_for_everyone
+#define ALLOW_INSANE_BANS		iConf.allow_insane_bans
 #define CHANCMDPFX iConf.channel_command_prefix
 
 #define DEFAULT_BANTIME			iConf.default_bantime
@@ -254,6 +266,8 @@ extern MODVAR aConfiguration iConf;
 #endif
 
 #define ALLOW_PART_IF_SHUNNED	iConf.allow_part_if_shunned
+
+#define DISABLE_CAP	iConf.disable_cap
 
 #define BAN_VERSION_TKL_TIME	iConf.ban_version_tkl_time
 #define SILENCE_LIMIT (iConf.silence_limit ? iConf.silence_limit : 15)
@@ -279,6 +293,8 @@ extern MODVAR aConfiguration iConf;
 
 #define WATCH_AWAY_NOTIFICATION	iConf.watch_away_notification
 
+#define UHNAMES_ENABLED	iConf.uhnames
+
 /* Used for "is present?" and duplicate checking */
 struct SetCheck {
 	unsigned has_show_opermotd:1;
@@ -293,6 +309,7 @@ struct SetCheck {
 	unsigned has_dont_resolve:1;
 	unsigned has_mkpasswd_for_everyone:1;
 	unsigned has_allow_part_if_shunned:1;
+	unsigned has_disable_cap:1;
 	unsigned has_ssl_egd:1;
 	unsigned has_ssl_server_cipher_list :1;
 	unsigned has_dns_timeout:1;
@@ -314,6 +331,7 @@ struct SetCheck {
 	unsigned has_check_target_nick_bans:1;
 	unsigned has_pingpong_warning:1;
 	unsigned has_watch_away_notification:1;
+	unsigned has_uhnames:1;
 	unsigned has_oper_only_stats:1;
 	unsigned has_maxchannelsperuser:1;
 	unsigned has_maxdccallow:1;
@@ -333,6 +351,7 @@ struct SetCheck {
 	unsigned has_restrict_usermodes:1;
 	unsigned has_restrict_channelmodes:1;
 	unsigned has_restrict_extendedbans:1;
+	unsigned has_new_linking_protocol:1;
 	unsigned has_channel_command_prefix:1;
 	unsigned has_anti_flood_unknown_flood_bantime:1;
 	unsigned has_anti_flood_unknown_flood_amount:1;
@@ -364,6 +383,7 @@ struct SetCheck {
 	unsigned has_network_name:1;
 	unsigned has_default_server:1;
 	unsigned has_services_server:1;
+	unsigned has_sasl_server:1;
 	unsigned has_hosts_global:1;
 	unsigned has_hosts_admin:1;
 	unsigned has_hosts_local:1;
@@ -384,10 +404,13 @@ struct SetCheck {
 	unsigned has_options_dont_resolve:1;
 	unsigned has_options_show_connect_info:1;
 	unsigned has_options_mkpasswd_for_everyone:1;
+	unsigned has_options_allow_insane_bans:1;
 	unsigned has_options_allow_part_if_shunned:1;
+	unsigned has_options_disable_cap:1;
 	int cgiirc_type; /* cheat :( */
 	unsigned has_cgiirc_hosts:1;
 	unsigned has_cgiirc_webpass:1;
+	unsigned has_ping_cookie:1;
 };
 
 

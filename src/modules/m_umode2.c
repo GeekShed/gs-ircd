@@ -52,7 +52,7 @@ DLLFUNC int m_umode2(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_umode2)
   = {
 	"m_umode2",
-	"$Id: m_umode2.c,v 1.1.6.10 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /umode2", 
 	"3.2-b8-1",
 	NULL 

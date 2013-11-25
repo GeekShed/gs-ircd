@@ -1,7 +1,7 @@
 ; UnrealIRCd Win32 Installation Script for My Inno Setup Extensions
-; Requires Inno Setup 4.1.6 and ISX 3.0.4 to work
+; Requires Inno Setup 4.1.6 or later
 
-; #define USE_SSL
+;#define USE_SSL
 ; Uncomment the above line to package an SSL build
 #define USE_ZIP
 ; Uncomment the above line to package with ZIP support
@@ -11,7 +11,7 @@
 
 [Setup]
 AppName=UnrealIRCd
-AppVerName=UnrealIRCd3.2.8
+AppVerName=UnrealIRCd3.2.10.2
 AppPublisher=UnrealIRCd Team
 AppPublisherURL=http://www.unrealircd.com
 AppSupportURL=http://www.unrealircd.com
@@ -27,9 +27,10 @@ LicenseFile=.\gplplusssl.rtf
 #endif
 Compression=lzma
 SolidCompression=true
-MinVersion=4.0.1111,4.0.1381
+MinVersion=5.0
 OutputDir=../../
 
+; !!! Make sure to update SSL validation (WizardForm.TasksList.Checked[9]) if tasks are added/removed !!!
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop icon"; GroupDescription: "Additional icons:"
 Name: "quicklaunchicon"; Description: "Create a &Quick Launch icon"; GroupDescription: "Additional icons:"; Flags: unchecked
@@ -41,6 +42,7 @@ Name: "installservice/crashrestart"; Description: "Restart UnrealIRCd if it &cra
 Name: "makecert"; Description: "&Create certificate"; GroupDescription: "SSL options:";
 Name: "enccert"; Description: "&Encrypt certificate"; GroupDescription: "SSL options:"; Flags: unchecked;
 #endif
+Name: "fixperm"; Description: "Make Unreal folder writable by current user";
 
 [Files]
 Source: "..\..\wircd.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -63,35 +65,35 @@ Source: "..\..\Unreal.nfo"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\doc\*.*"; DestDir: "{app}\doc"; Flags: ignoreversion
 Source: "..\..\doc\technical\*.*"; DestDir: "{app}\doc\technical"; Flags: ignoreversion
 Source: "..\..\aliases\*"; DestDir: "{app}\aliases"; Flags: ignoreversion
-Source: "..\..\networks\*"; DestDir: "{app}\networks"; Flags: ignoreversion
 Source: "..\..\unreal.exe"; DestDir: "{app}"; Flags: ignoreversion; MinVersion: 0,4.0
 Source: "..\modules\*.dll"; DestDir: "{app}\modules"; Flags: ignoreversion
-Source: "tre.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "c:\dev\tre\win32\release\tre.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\dev\c-ares\msvc90\cares\dll-release\cares.dll"; DestDir: "{app}"; Flags: ignoreversion
 #ifdef USE_SSL
 Source: "c:\openssl\bin\openssl.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "c:\openssl\bin\ssleay32.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "c:\openssl\bin\libeay32.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "c:\dev\setacl.exe"; DestDir: "{app}\tmp"; Flags: ignoreversion
 Source: ".\makecert.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".\encpem.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\ssl.cnf"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 #ifdef USE_ZIP
-Source: "c:\dev\zlib\dll32\zlibwapi.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "c:\dev\zlib\zlibwapi.dll"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 #ifdef USE_SSL
 #ifdef USE_CURL
 ; curl with ssl support
-Source: "c:\dev\curl-ssl\lib\release\libcurl.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\dev\curl-ssl\builds\libcurl-vc-x86-release-dll-sspi-spnego\bin\libcurl.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\..\curl-ca-bundle.crt"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 #else
 #ifdef USE_CURL
 ; curl without ssl support
-Source: "c:\dev\curl\lib\release\libcurl.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "C:\dev\curl\builds\libcurl-vc-x86-release-dll-sspi-spnego\bin\libcurl.dll"; DestDir: "{app}"; Flags: ignoreversion
 #endif
 #endif
-Source: isxdl.dll; DestDir: {tmp}; Flags: dontcopy
-Source: "..\..\..\dbghelp.dll"; DestDir: "{app}"; Flags: ignoreversion
+;Source: "..\..\..\dbghelp.dll"; DestDir: "{app}"; Flags: ignoreversion
 
 [Dirs]
 Name: "{app}\tmp"
@@ -100,74 +102,106 @@ Name: "{app}\tmp"
 Type: files; Name: "{app}\DbgHelp.Dll"
 
 [Code]
-function isxdl_Download(hWnd: Integer; URL, Filename: PChar): Integer;
-external 'isxdl_Download@files:isxdl.dll stdcall';
-function isxdl_SetOption(Option, Value: PChar): Integer;
-external 'isxdl_SetOption@files:isxdl.dll stdcall';
-const crturl = 'http://www.unrealircd.com/downloads/msvcr71.dll';
-const cpturl = 'http://www.unrealircd.com/downloads/msvcp71.dll';
-var didDbgDl,didCrtDl: Boolean;
-
-function NextButtonClick(CurPage: Integer): Boolean;
 var
-tmp, msvcrt, msvcpt: String;
-hWnd,answer: Integer;
+  uninstaller: String;
+  ErrorCode: Integer;
+
+//*********************************************************************************
+// This is where all starts.
+//*********************************************************************************
+function InitializeSetup(): Boolean;
+
 begin
 
-    if ((CurPage = wpReady)) then begin
-      msvcrt := ExpandConstant('{sys}\msvcr71.Dll');
-      msvcpt := ExpandConstant('{sys}\msvcp71.Dll');
-    if (NOT FileExists(msvcrt)) then begin
-      answer := MsgBox('Unreal requires the MS C Runtime 7.1 in order to run, do you wish to install it now?', mbConfirmation, MB_YESNO);
-      if answer = IDYES then begin
-        tmp := ExpandConstant('{tmp}\msvcr71.Dll');
-        isxdl_SetOption('title', 'Downloading msvcr71.dll');
-        hWnd := StrToInt(ExpandConstant('{wizardhwnd}'));
-        if isxdl_Download(hWnd, crturl, tmp) = 0 then begin
-          MsgBox('Download and installation of msvcr71.dll failed, the file must be manually installed. The file can be downloaded at http://www.unrealircd.com/downloads/mscvr71.dll', mbInformation, MB_OK);
-        end else
-          didCrtDl := true;
-      end else
-        MsgBox('In order for Unreal to properly function, you must manually install msvcr71.dll. The dll can be downloaded from http://www.unrealircd.com/downloads/msvcr71.dll', mbInformation, MB_OK);
-    end;
-    if (NOT FileExists(msvcpt)) then begin
-      answer := MsgBox('Unreal requires the MS C++ Runtime 7.1 in order to run, do you wish to install it now?', mbConfirmation, MB_YESNO);
-      if answer = IDYES then begin
-        tmp := ExpandConstant('{tmp}\msvcp71.Dll');
-        isxdl_SetOption('title', 'Downloading msvcp71.dll');
-        hWnd := StrToInt(ExpandConstant('{wizardhwnd}'));
-        if isxdl_Download(hWnd, cpturl, tmp) = 0 then begin
-          MsgBox('Download and installation of msvcp71.dll failed, the file must be manually installed. The file can be downloaded at http://www.unrealircd.com/downloads/mscvp71.dll', mbInformation, MB_OK);
-        end else
-          didCrtDl := true;
-      end else
-        MsgBox('In order for Unreal to properly function, you must manually install msvcp71.dll. The dll can be downloaded from http://www.unrealircd.com/downloads/msvcp71.dll', mbInformation, MB_OK);
-    end;
+	Result := true;
+    if ((not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{2F73A7B2-E50E-39A6-9ABC-EF89E4C62E36}'))
+         and (not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{E824E81C-80A4-3DFF-B5F9-4842A9FF5F7F}'))
+         and (not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{E7D4E834-93EB-351F-B8FB-82CDAE623003}'))
+         and (not RegKeyExists(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{3D6AD258-61EA-35F5-812C-B7A02152996E}'))
+        ) then
+    begin
+      MsgBox('UnrealIRCd requires the Microsoft Visual C++ Redistributable for Visual Studio 2012 to be installed.' #13 +
+             'After you click OK you will be taken to a download page. There, choose Download -> choose the vcredist_x86 version (last of 3 choices). Then download and install it.', mbInformation, MB_OK);
+      ShellExec('open', 'http://www.microsoft.com/en-us/download/details.aspx?id=30679', '', '', SW_SHOWNORMAL,ewNoWait,ErrorCode);
+      MsgBox('Click OK once you have installed the Microsoft Visual C++ Redistributable for Visual Studio 2012 (vcredist_x86) to continue the UnrealIRCd installer', mbInformation, MB_OK);
 
-  end;
+		end;
+end;
+
+function NextButtonClick(CurPage: Integer): Boolean;
+
+var
+  hWnd: Integer;
+  ResultCode: Integer;
+  ResultXP: boolean;
+  Result2003: boolean;
+  Res: Integer;
+begin
+
   Result := true;
+  ResultXP := true;
+  Result2003 := true;
+
+  // Prevent the user from selecting both 'Install as service' and 'Encrypt SSL certificate'
+  if CurPage = wpSelectTasks then
+  begin
+    if IsTaskSelected('enccert') and IsTaskSelected('installservice') then
+    begin
+      MsgBox('When running UnrealIRCd as a service there is no way to enter the password for an encrypted SSL certificate, therefore you cannot combine the two. Please deselect one of the options.', mbError, MB_OK);
+      Result := False
+    end
+  end;
+
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
+
 var
-input,output: String;
+  hWnd: Integer;
+  ResultCode: Integer;
+  ResultXP: boolean;
+  Result2003: boolean;
+  Res: Integer;
+  s: String;
+  d: String;
 begin
-  if (CurStep = ssPostInstall) then begin
-    if (didDbgDl) then begin
-      input := ExpandConstant('{tmp}\dbghelp.dll');
-      output := ExpandConstant('{app}\dbghelp.dll');
-      FileCopy(input, output, true);
-    end;
-    if (didCrtDl) then begin
-      input := ExpandConstant('{tmp}\msvcr71.dll');
-      output := ExpandConstant('{sys}\msvcr71.dll');
-      FileCopy(input, output, true);
-      input := ExpandConstant('{tmp}\msvcp71.dll');
-      output := ExpandConstant('{sys}\msvcp71.dll');
-      FileCopy(input, output, true);
-    end;
+if CurStep = ssPostInstall then
+	begin
+     d := ExpandConstant('{app}');
+	   if IsTaskSelected('fixperm') then
+	   begin
+	     // This fixes the permissions in the Unreal3.2 folder by granting full access to the user
+	     // running the install.
+	     s := '-on "'+d+'" -ot file -actn ace -ace "n:'+GetUserNameString()+';p:full;m:set';
+	     Exec(d+'\tmp\setacl.exe', s, d, SW_HIDE, ewWaitUntilTerminated, Res);
+	   end
+	   else
+	   begin
+	     MsgBox('You have chosen to not have the installer automatically set write access. Please ensure that the user running the IRCd can write to '+d+', otherwise the IRCd will fail to load.',mbConfirmation, MB_OK);
+	   end
   end;
 end;
+
+//*********************************************************************************
+// Checks if ssl cert file exists
+//*********************************************************************************
+
+#ifdef USE_SSL
+procedure CurPageChanged(CurPage: Integer);
+begin
+  if (CurPage = wpSelectTasks)then
+  begin
+     if FileExists(ExpandConstant('{app}\server.cert.pem')) then
+     begin
+        WizardForm.TasksList.Checked[9]:=false;
+     end
+     else
+     begin
+        WizardForm.TasksList.Checked[9]:=true;
+     end
+  end
+end;
+#endif
 
 [Icons]
 Name: "{group}\UnrealIRCd"; Filename: "{app}\wircd.exe"; WorkingDir: "{app}"
@@ -196,4 +230,3 @@ Filename: "{app}\encpem.bat"; WorkingDir: "{app}"; Tasks: enccert; Flags: postin
 
 [UninstallRun]
 Filename: "{app}\unreal.exe"; Parameters: "uninstall"; Flags: runminimized; RunOnceID: "DelService"; Tasks: installservice
-

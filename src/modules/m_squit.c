@@ -52,7 +52,7 @@ DLLFUNC int m_squit(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_squit)
   = {
 	"m_squit",
-	"$Id: m_squit.c,v 1.1.6.10 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /squit", 
 	"3.2-b8-1",
 	NULL 

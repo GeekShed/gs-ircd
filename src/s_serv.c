@@ -44,6 +44,7 @@ static char sccsid[] =
 #include "proto.h"
 #include <string.h>
 #ifdef USE_LIBCURL
+#include "url.h"
 #include <curl/curl.h>
 #endif
 #ifndef _WIN32
@@ -59,21 +60,25 @@ extern ircstats IRCstats;
 extern int do_garbage_collect;
 /* We need all these for cached MOTDs -- codemastr */
 extern char *buildid;
-aMotd *opermotd;
-aMotd *rules;
-aMotd *motd;
-aMotd *svsmotd;
-aMotd *botmotd;
-aMotd *smotd;
-struct tm motd_tm;
-struct tm smotd_tm;
-aMotd *read_file(char *filename, aMotd **list);
-aMotd *read_file_ex(char *filename, aMotd **list, struct tm *);
-extern aMotd *Find_file(char *, short);
+aMotdFile opermotd;
+aMotdFile rules;
+aMotdFile motd;
+aMotdFile svsmotd;
+aMotdFile botmotd;
+aMotdFile smotd;
+
+void read_motd(const char *filename, aMotdFile *motd);
+void do_read_motd(const char *filename, aMotdFile *themotd);
+#ifdef USE_LIBCURL
+void read_motd_asynch_downloaded(const char *url, const char *filename, const char *errorbuf, int cached, aMotdDownload *motd_download);
+#endif
+
+extern aMotdLine *Find_file(char *, short);
 
 #ifdef USE_SSL
 extern void reinit_ssl(aClient *);
 #endif
+void reread_motdsandrules();
 
 
 /*
@@ -174,8 +179,6 @@ char *p;
 */
 CMD_FUNC(m_version)
 {
-	extern char serveropts[];
-	extern char *IsupportStrings[];
 	int reply, i;
 
 	/* Only allow remote VERSIONs if registered -- Syzop */
@@ -219,67 +222,91 @@ char *num = NULL;
 
 /*
  * send_proto:
- * sends PROTOCTL message to server, taking care of whether ZIP
+ * Sends PROTOCTL message to server, taking care of whether ZIP
  * should be enabled or not.
+ * Now split up into multiple PROTOCTL messages (again), since we have
+ * too many for a single line. If this breaks your services because
+ * you fail to maintain PROTOCTL state, then fix them!
  */
 void send_proto(aClient *cptr, ConfigItem_link *aconf)
 {
 char buf[1024];
 
-	sprintf(buf, "CHANMODES=%s%s,%s%s,%s%s,%s%s NICKCHARS=%s",
+	/* First line */
+	sendto_one(cptr, "PROTOCTL %s", PROTOCTL_SERVER);
+
+	/* Second line */
+	sprintf(buf, "CHANMODES=%s%s,%s%s,%s%s,%s%s NICKCHARS=%s MLOCK",
 		CHPAR1, EXPAR1, CHPAR2, EXPAR2, CHPAR3, EXPAR3, CHPAR4, EXPAR4, langsinuse);
 #ifdef ZIP_LINKS
 	if (aconf->options & CONNECT_ZIP)
-	{
-		sendto_one(cptr, "PROTOCTL %s ZIP %s", PROTOCTL_SERVER, buf);
-	} else {
+		strcat(buf, " ZIP");
 #endif
-		sendto_one(cptr, "PROTOCTL %s %s", PROTOCTL_SERVER, buf);
-#ifdef ZIP_LINKS
-	}
-#endif
+	sendto_one(cptr, "PROTOCTL %s", buf);
 }
 
 #ifndef IRCDTOTALVERSION
 #define IRCDTOTALVERSION BASE_VERSION PATCH1 PATCH2 PATCH3 PATCH4 PATCH5 PATCH6 PATCH7 PATCH8 PATCH9
 #endif
 
+int remotecmdfilter(aClient *sptr, int parc, char *parv[])
+{
+	/* no remote requests permitted from non-ircops */
+	if (MyClient(sptr) && !IsOper(sptr) && !BadPtr(parv[1]))
+	{
+		parv[1] = NULL;
+		parc = 1;
+	}
+
+	/* same as above, but in case an old server forwards a request to us: we ignore it */
+	if (!MyClient(sptr) && !IsOper(sptr))
+		return 1; /* STOP (return) */
+	
+	return 0; /* Continue */
+}
+
+
 /*
  * sends m_info into to sptr
 */
 
+char *unrealinfo[] =
+{
+	"This release was brought to you by the following people:",
+	"",
+	"Head coder:",
+	"* Syzop        <syzop@unrealircd.com>",
+	"",
+	"Coders:",
+	"* binki        <binki@unrealircd.com>",
+	"",
+	"Contributors:",
+	"* nenolod, Adam, warg, Stealth, WolfSage, katsklaw, darkex, fspijkerman,",
+	"  fbi, Apocalypse",
+	"",
+	"RC Testers:",
+	"* therock247uk, katsklaw, nenolod, Han`, Adam, Cronus, warg, Crash,",
+	"  and everyone else who downloaded the release candidates.",
+	"",
+	"Past UnrealIRCd3.2* coders/contributors:",
+	"* Stskeeps (ret. head coder / project leader)",
+	"* codemastr (ret. u3.2 head coder)",
+	"* aquanight, WolfSage, ..",
+	"* McSkaf, Zogg, NiQuiL, chasm, llthangel, nighthawk, ..",
+	NULL
+};
+
 void m_info_send(aClient *sptr)
 {
+char **text = unrealinfo;
+
 	sendto_one(sptr, ":%s %d %s :=-=-=-= %s =-=-=-=",
 	    me.name, RPL_INFO, sptr->name, IRCDTOTALVERSION);
-	sendto_one(sptr, ":%s %d %s :| This release was brought to you by the following people:",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| Coders:", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * Syzop        <syzop@unrealircd.com>",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| Contributors:", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * aquanight    <aquanight@unrealircd.com>",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * WolfSage     <wolfsage@unrealircd.com>",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * Stealth, tabrisnet, Bock, fbi",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| RC Testers:", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * Bock, Apocalypse, StrawberryKittens, wax, Elemental,",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :|   Golden|Wolf, and everyone else who tested the RC's",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| Past UnrealIRCd3.2* coders/contributors:", me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * Stskeeps (ret. head coder / project leader)",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * codemastr (ret. u3.2 head coder)",
-	    me.name, RPL_INFO, sptr->name);
-	sendto_one(sptr, ":%s %d %s :| * McSkaf, Zogg, NiQuiL, chasm, llthangel, nighthawk, ..",
-	    me.name, RPL_INFO, sptr->name);
+
+	while (*text)
+		sendto_one(sptr, ":%s %d %s :| %s", 
+		    me.name, RPL_INFO, sptr->name, *text++);
+
 	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
 	sendto_one(sptr, ":%s %d %s :|", me.name, RPL_INFO, sptr->name);
 	sendto_one(sptr, ":%s %d %s :| Credits - Type /Credits",
@@ -293,19 +320,9 @@ void m_info_send(aClient *sptr)
 	    me.name, RPL_INFO, sptr->name);
 	sendto_one(sptr, ":%s %d %s :|  http://bugs.unrealircd.org/",
 	    me.name, RPL_INFO, sptr->name);
-
 	sendto_one(sptr,
 	    ":%s %d %s :| UnrealIRCd Homepage: http://www.unrealircd.com",
 	    me.name, RPL_INFO, sptr->name);
-
-#ifdef _WIN32
-#ifdef WIN32_SPECIFY
-	sendto_one(sptr, ":%s %d %s :| wIRCd porter: | %s",
-	    me.name, RPL_INFO, sptr->name, WIN32_PORTER);
-	sendto_one(sptr, ":%s %d %s :|     >>URL:    | %s",
-	    me.name, RPL_INFO, sptr->name, WIN32_URL);
-#endif
-#endif
 	sendto_one(sptr,
 	    ":%s %d %s :-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=", me.name,
 	    RPL_INFO, sptr->name);
@@ -327,6 +344,8 @@ void m_info_send(aClient *sptr)
 
 CMD_FUNC(m_info)
 {
+	if (remotecmdfilter(sptr, parc, parv))
+		return 0;
 
 	if (hunt_server_token(cptr, sptr, MSG_INFO, TOK_INFO, ":%s", 1, parc,
 	    parv) == HUNTED_ISME)
@@ -345,6 +364,9 @@ CMD_FUNC(m_info)
 CMD_FUNC(m_dalinfo)
 {
 	char **text = dalinfotext;
+
+	if (remotecmdfilter(sptr, parc, parv))
+		return 0;
 
 	if (hunt_server_token(cptr, sptr, MSG_DALINFO, TOK_DALINFO, ":%s", 1, parc,
 	    parv) == HUNTED_ISME)
@@ -374,6 +396,9 @@ CMD_FUNC(m_license)
 {
 	char **text = gnulicense;
 
+	if (remotecmdfilter(sptr, parc, parv))
+		return 0;
+
 	if (hunt_server_token(cptr, sptr, MSG_LICENSE, TOK_LICENSE, ":%s", 1, parc,
 	    parv) == HUNTED_ISME)
 	{
@@ -396,6 +421,9 @@ CMD_FUNC(m_license)
 CMD_FUNC(m_credits)
 {
 	char **text = unrealcredits;
+
+	if (remotecmdfilter(sptr, parc, parv))
+		return 0;
 
 	if (hunt_server_token(cptr, sptr, MSG_CREDITS, TOK_CREDITS, ":%s", 1, parc,
 	    parv) == HUNTED_ISME)
@@ -551,7 +579,7 @@ EVENT(save_tunefile)
 {
 	FILE *tunefile;
 
-	tunefile = fopen(IRCDTUNE, "w");
+	tunefile = fopen(conf_files->tune_file, "w");
 	if (!tunefile)
 	{
 #if !defined(_WIN32) && !defined(_AMIGA)
@@ -571,7 +599,7 @@ void load_tunefile(void)
 	FILE *tunefile;
 	char buf[1024];
 
-	tunefile = fopen(IRCDTUNE, "r");
+	tunefile = fopen(conf_files->tune_file, "r");
 	if (!tunefile)
 		return;
 	fprintf(stderr, "* Loading tunefile..\n");
@@ -582,34 +610,31 @@ void load_tunefile(void)
 	fclose(tunefile);
 }
 
-/** Rehash motd and rule files (MPATH/RPATH and all tld entries). */
+/** Rehash motd and rule files (motd_file/rules_file and all tld entries). */
 void rehash_motdrules()
 {
 ConfigItem_tld *tlds;
 
-	motd = (aMotd *) read_file_ex(MPATH, &motd, &motd_tm);
-	rules = (aMotd *) read_file(RPATH, &rules);
-	smotd = (aMotd *) read_file_ex(SMPATH, &smotd, &smotd_tm);
+	reread_motdsandrules();
 	for (tlds = conf_tld; tlds; tlds = (ConfigItem_tld *) tlds->next)
 	{
-		tlds->motd = read_file_ex(tlds->motd_file, &tlds->motd, &tlds->motd_tm);
-		tlds->rules = read_file(tlds->rules_file, &tlds->rules);
-		if (tlds->smotd_file)
-			tlds->smotd = read_file_ex(tlds->smotd_file, &tlds->smotd, &tlds->smotd_tm);
-		if (tlds->opermotd_file)
-			tlds->opermotd = read_file(tlds->opermotd_file, &tlds->opermotd);
-		if (tlds->botmotd_file)
-			tlds->botmotd = read_file(tlds->botmotd_file, &tlds->botmotd);
+		/* read_motd() accepts NULL in first arg and acts sanely */
+		read_motd(tlds->motd_file, &tlds->motd);
+		read_motd(tlds->rules_file, &tlds->rules);
+		read_motd(tlds->smotd_file, &tlds->smotd);
+		read_motd(tlds->opermotd_file, &tlds->opermotd);
+		read_motd(tlds->botmotd_file, &tlds->botmotd);
 	}
 }
 
 void reread_motdsandrules()
 {
-	motd = (aMotd *) read_file_ex(MPATH, &motd, &motd_tm);
-	rules = (aMotd *) read_file(RPATH, &rules);
-	smotd = (aMotd *) read_file_ex(SMPATH, &smotd, &smotd_tm);
-	botmotd = (aMotd *) read_file(BPATH, &botmotd);
-	opermotd = (aMotd *) read_file(OPATH, &opermotd);
+	read_motd(conf_files->motd_file, &motd);
+	read_motd(conf_files->rules_file, &rules);
+	read_motd(conf_files->smotd_file, &smotd);
+	read_motd(conf_files->botmotd_file, &botmotd);
+	read_motd(conf_files->opermotd_file, &opermotd);
+	read_motd(conf_files->svsmotd_file, &svsmotd);
 }
 
 extern void reinit_resolver(aClient *sptr);
@@ -650,7 +675,10 @@ CMD_FUNC(m_rehash)
 		else
 			x = hunt_server_token(cptr, sptr, MSG_REHASH, TOK_REHASH, "%s", 1, parc, parv);
 	} else {
-		x = hunt_server_token(cptr, sptr, MSG_REHASH, TOK_REHASH, "%s %s", 1, parc, parv);
+		if (!_match("-glob*", parv[1])) /* This is really ugly... hack to make /rehash -global -something work */
+			x = HUNTED_ISME;
+		else
+			x = hunt_server_token(cptr, sptr, MSG_REHASH, TOK_REHASH, "%s %s", 1, parc, parv);
 	}
 	if (x != HUNTED_ISME)
 		return 0; /* Now forwarded or server didnt exist */
@@ -680,6 +708,49 @@ CMD_FUNC(m_rehash)
 			    (parc > 1) ? ((*parv[1] == 'q') ? 2 : 0) : 0);
 		}
 		parv[1] = parv[2];
+	} else {
+		/* Ok this is in an 'else' because it should be only executed for sptr == cptr,
+		 * but it's totally unrelated to the above ;).
+		 */
+		if (parv[1] && !_match("-glob*", parv[1]))
+		{
+			/* /REHASH -global [options] */
+			Link *lp;
+			aClient *acptr;
+			
+			/* Shift parv's to the left */
+			parv[1] = parv[2];
+			parv[2] = NULL;
+			parc--;
+			/* Only netadmins may use /REHASH -global, which is because:
+			 * a) it makes sense
+			 * b) remote servers don't support remote rehashes by non-netadmins
+			 */
+			if (!IsNetAdmin(sptr))
+			{
+				sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
+				sendnotice(sptr, "'/REHASH -global' requires you to be NetAdmin");
+				return 0;
+			}
+			if (parv[1] && *parv[1] != '-')
+			{
+				sendnotice(sptr, "You cannot specify a server name after /REHASH -global, for obvious reasons");
+				return 0;
+			}
+			/* Broadcast it in an inefficient, but backwards compatible way. */
+			for (lp = Servers; lp; lp = lp->next)
+			{
+				acptr = lp->value.cptr;
+				if (acptr == &me)
+					continue;
+				sendto_one(acptr, ":%s %s %s %s",
+					sptr->name,
+					IsToken(acptr->from) ? TOK_REHASH : MSG_REHASH,
+					acptr->name,
+					parv[1] ? parv[1] : "-all");
+			}
+			/* Don't return, continue, because we need to REHASH ourselves as well. */
+		}
 	}
 
 	if (!BadPtr(parv[1]) && stricmp(parv[1], "-all"))
@@ -721,7 +792,7 @@ CMD_FUNC(m_rehash)
 				    sptr->name);
 				if (cptr != sptr)
 					sendto_serv_butone(&me, ":%s GLOBOPS :%s is remotely rehashing OperMOTD", me.name, sptr->name);
-				opermotd = (aMotd *) read_file(OPATH, &opermotd);
+				read_motd(conf_files->opermotd_file, &opermotd);
 				RunHook3(HOOKTYPE_REHASHFLAG, cptr, sptr, parv[1]);
 				return 0;
 			}
@@ -733,7 +804,7 @@ CMD_FUNC(m_rehash)
 				    sptr->name);
 				if (cptr != sptr)
 					sendto_serv_butone(&me, ":%s GLOBOPS :%s is remotely rehashing BotMOTD", me.name, sptr->name);
-				botmotd = (aMotd *) read_file(BPATH, &botmotd);
+				read_motd(conf_files->botmotd_file, &botmotd);
 				RunHook3(HOOKTYPE_REHASHFLAG, cptr, sptr, parv[1]);
 				return 0;
 			}
@@ -766,10 +837,11 @@ CMD_FUNC(m_rehash)
 	}
 
 	/* Normal rehash, rehash motds&rules too, just like the on in the tld block will :p */
-	reread_motdsandrules();
 	if (cptr == sptr)
 		sendto_one(sptr, rpl_str(RPL_REHASHING), me.name, parv[0], configfile);
-	return rehash(cptr, sptr, (parc > 1) ? ((*parv[1] == 'q') ? 2 : 0) : 0);
+	x = rehash(cptr, sptr, (parc > 1) ? ((*parv[1] == 'q') ? 2 : 0) : 0);
+	reread_motdsandrules();
+	return x;
 }
 
 /*
@@ -852,190 +924,74 @@ char *reason = parv[1];
  * Heavily modified from the ircu m_motd by codemastr
  * Also svsmotd support added
  */
-int short_motd(aClient *sptr) {
-	ConfigItem_tld *ptr;
-	aMotd *temp;
-	struct tm *tm = &smotd_tm;
-	char userhost[HOSTLEN + USERLEN + 6];
-	char is_short = 1;
-	strlcpy(userhost,make_user_host(sptr->user->username, sptr->user->realhost), sizeof userhost);
-	ptr = Find_tld(sptr, userhost);
-
-	if (ptr)
-	{
-		if (ptr->smotd)
-		{
-			temp = ptr->smotd;
-			tm = &ptr->smotd_tm;
-		}
-		else if (smotd)
-			temp = smotd;
-		else
-		{
-			temp = ptr->motd;
-			tm = &ptr->motd_tm;
-			is_short = 0;
-		}
-	}
-	else
-	{
-		if (smotd)
-			temp = smotd;
-		else
-		{
-			temp = motd;
-			tm = &motd_tm;
-			is_short = 0;
-		}
-	}
-
-	if (!temp)
-	{
-		sendto_one(sptr, err_str(ERR_NOMOTD), me.name, sptr->name);
-		return 0;
-	}
-	if (tm)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTDSTART), me.name, sptr->name,
-		    me.name);
-		sendto_one(sptr, ":%s %d %s :- %d/%d/%d %d:%02d", me.name,
-		    RPL_MOTD, sptr->name, tm->tm_mday, tm->tm_mon + 1,
-		    1900 + tm->tm_year, tm->tm_hour, tm->tm_min);
-	}
-	if (is_short)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name,
-			"This is the short MOTD. To view the complete MOTD type /motd");
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name, "");
-	}
-
-	while (temp)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name,
-		    temp->line);
-		temp = temp->next;
-	}
-	sendto_one(sptr, rpl_str(RPL_ENDOFMOTD), me.name, sptr->name);
-	return 0;
-}
-
-
-/*
- * Heavily modified from the ircu m_motd by codemastr
- * Also svsmotd support added
- */
-CMD_FUNC(m_motd)
+int short_motd(aClient *sptr)
 {
-	ConfigItem_tld *ptr;
-	aMotd *temp, *temp2;
-	struct tm *tm = &motd_tm;
-	int  svsnofile = 0;
-	char userhost[HOSTLEN + USERLEN + 6];
+       ConfigItem_tld *tld;
+       aMotdFile *themotd;
+       aMotdLine *motdline;
+       struct tm *tm;
+       char userhost[HOSTLEN + USERLEN + 6];
+       char is_short;
 
-	if (IsServer(sptr))
-		return 0;
-	if (hunt_server_token(cptr, sptr, MSG_MOTD, TOK_MOTD, ":%s", 1, parc, parv) !=
-HUNTED_ISME)
-		return 0;
-#ifndef TLINE_Remote
-	if (!MyConnect(sptr))
-	{
-		temp = motd;
-		goto playmotd;
-	}
-#endif
-	strlcpy(userhost,make_user_host(cptr->user->username, cptr->user->realhost), sizeof userhost);
-	ptr = Find_tld(sptr, userhost);
+       tm = NULL;
+       is_short = 1;
 
-	if (ptr)
-	{
-		temp = ptr->motd;
-		tm = &ptr->motd_tm;
-	}
-	else
-		temp = motd;
+       strlcpy(userhost,make_user_host(sptr->user->username, sptr->user->realhost), sizeof userhost);
+       tld = Find_tld(sptr, userhost);
 
-      playmotd:
-	if (temp == NULL)
-	{
-		sendto_one(sptr, err_str(ERR_NOMOTD), me.name, parv[0]);
-		svsnofile = 1;
-		goto svsmotd;
+       /*
+	* Try different sources of short MOTDs, falling back to the
+	* long MOTD.
+       */
+       themotd = &smotd;
+       if (tld && tld->smotd.lines)
+	       themotd = &tld->smotd;
 
-	}
+       /* try long MOTDs */
+       if (!themotd->lines)
+       {
+	       is_short = 0;
+	       if (tld && tld->motd.lines)
+		       themotd = &tld->motd;
+	       else
+		       themotd = &motd;
+       }
 
-	if (tm)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTDSTART), me.name, parv[0],
-		    me.name);
-		sendto_one(sptr, ":%s %d %s :- %d/%d/%d %d:%02d", me.name,
-		    RPL_MOTD, parv[0], tm->tm_mday, tm->tm_mon + 1,
-		    1900 + tm->tm_year, tm->tm_hour, tm->tm_min);
-	}
+       if (!themotd->lines)
+       {
+               sendto_one(sptr, err_str(ERR_NOMOTD), me.name, sptr->name);
+               return 0;
+       }
+       if (themotd->last_modified.tm_year)
+       {
+	       tm = &themotd->last_modified; /* for readability */
+               sendto_one(sptr, rpl_str(RPL_MOTDSTART), me.name, sptr->name,
+                   me.name);
+               sendto_one(sptr, ":%s %d %s :- %d/%d/%d %d:%02d", me.name,
+                   RPL_MOTD, sptr->name, tm->tm_mday, tm->tm_mon + 1,
+                   1900 + tm->tm_year, tm->tm_hour, tm->tm_min);
+       }
+       if (is_short)
+       {
+               sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name,
+                       "This is the short MOTD. To view the complete MOTD type /motd");
+               sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name, "");
+       }
 
-	while (temp)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, parv[0],
-		    temp->line);
-		temp = temp->next;
-	}
-      svsmotd:
-	temp2 = svsmotd;
-	while (temp2)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, parv[0],
-		    temp2->line);
-		temp2 = temp2->next;
-	}
-	if (svsnofile == 0)
-		sendto_one(sptr, rpl_str(RPL_ENDOFMOTD), me.name, parv[0]);
-	return 0;
+       motdline = NULL;
+       if (themotd)
+	       motdline = themotd->lines;
+       while (motdline)
+       {
+               sendto_one(sptr, rpl_str(RPL_MOTD), me.name, sptr->name,
+                   motdline->line);
+               motdline = motdline->next;
+       }
+       sendto_one(sptr, rpl_str(RPL_ENDOFMOTD), me.name, sptr->name);
+       return 0;
 }
-/*
- * Modified from comstud by codemastr
- */
-CMD_FUNC(m_opermotd)
-{
-	aMotd *temp;
-	ConfigItem_tld *ptr;
-	char userhost[HOSTLEN + USERLEN + 6];
-	strlcpy(userhost,make_user_host(cptr->user->username, cptr->user->realhost), sizeof userhost);
-	ptr = Find_tld(sptr, userhost);
 
-	if (ptr)
-	{
-		if (ptr->opermotd)
-			temp = ptr->opermotd;
-		else
-			temp = opermotd;
-	}
-	else
-		temp = opermotd;
 
-	if (!IsAnOper(sptr))
-	{
-		sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
-		return 0;
-	}
-
-	if (!temp)
-	{
-		sendto_one(sptr, err_str(ERR_NOOPERMOTD), me.name, parv[0]);
-		return 0;
-	}
-	sendto_one(sptr, rpl_str(RPL_MOTDSTART), me.name, parv[0], me.name);
-	sendto_one(sptr, rpl_str(RPL_MOTD), me.name, parv[0],
-	    "IRC Operator Message of the Day");
-
-	while (temp)
-	{
-		sendto_one(sptr, rpl_str(RPL_MOTD), me.name, parv[0],
-		    temp->line);
-		temp = temp->next;
-	}
-	sendto_one(sptr, rpl_str(RPL_ENDOFMOTD), me.name, parv[0]);
-	return 0;
-}
 
 /*
  * A merge from ircu and bahamut, and some extra stuff added by codemastr
@@ -1043,138 +999,220 @@ CMD_FUNC(m_opermotd)
  * Merged read_motd/read_rules stuff into this -- Syzop
  */
 
-/** Read motd-like file, used for rules/motd/botmotd/opermotd/etc.
- * @param filename Filename of file to read.
- * @param list Reference to motd pointer (used for freeing if needed, can be NULL)
- * @returns Pointer to MOTD or NULL if reading failed.
- */
-aMotd *read_file(char *filename, aMotd **list)
-{
-	return read_file_ex(filename, list, NULL);
-}
+#define MOTD_LINE_LEN 81
 
-void free_motd(aMotd *m)
-{
-aMotd *next;
-
-	for (; m; m = next)
-	{
-		next = m->next;
-		MyFree(m->line);
-		MyFree(m);
-	}
-}
 
 /** Read motd-like file, used for rules/motd/botmotd/opermotd/etc.
- * @param filename Filename of file to read.
- * @param list Reference to motd pointer (used for freeing if needed, NULL allowed)
- * @param t Pointer to struct tm to store filedatetime info in (NULL allowed)
- * @returns Pointer to MOTD or NULL if reading failed.
+ *  Multiplexes to either directly reading the MOTD or downloading it asynchronously.
+ * @param filename Filename of file to read or URL. NULL is accepted and causes the *motd to be free()d.
+ * @param motd Reference to motd pointer (used for freeing if needed and for asynchronous remote MOTD support)
  */
-aMotd *read_file_ex(char *filename, aMotd **list, struct tm *t)
+void read_motd(const char *filename, aMotdFile *themotd)
 {
+#ifdef USE_LIBCURL
+	time_t modtime;
+	aMotdDownload *motd_download;
+#endif
 
-	int  fd = open(filename, O_RDONLY);
-	aMotd *temp, *newmotd, *last, *old;
-	char line[82];
-	char *tmp;
-	int  i;
-
-	if (fd == -1)
-		return NULL;
-
-	if (list)
+	/* TODO: if themotd points to a tld's motd,
+	   could a rehash disrupt this pointer?*/
+#ifdef USE_LIBCURL
+	if(themotd->motd_download)
 	{
-		free_motd(*list);
-		*list = NULL;
+		themotd->motd_download->themotd = NULL;
+		/*
+		 * It is not our job to free() motd_download, the
+		 * read_motd_asynch_downloaded() function will do that
+		 * when it sees that ->themod == NULL.
+		 */
+		themotd->motd_download = NULL;
 	}
 
-	if (t)
+	/* if filename is NULL, do_read_motd will catch it */
+	if(filename && url_is_valid(filename))
 	{
-		struct tm *ttmp;
-		struct stat sb;
-		if (!fstat(fd, &sb))
+		/* prepare our payload for read_motd_asynch_downloaded() */
+		motd_download = MyMallocEx(sizeof(aMotdDownload));
+		if(!motd_download)
+			outofmemory();
+		motd_download->themotd = themotd;
+		themotd->motd_download = motd_download;
+
+#ifdef REMOTEINC_SPECIALCACHE
+		modtime = unreal_getfilemodtime(unreal_mkcache(filename));
+#else
+		modtime = 0;
+#endif
+
+		download_file_async(filename, modtime, (vFP)read_motd_asynch_downloaded, motd_download);
+		return;
+	}
+#endif /* USE_LIBCURL */
+
+	do_read_motd(filename, themotd);
+
+	return;
+}
+
+#ifdef USE_LIBCURL
+/**
+   Callback for download_file_async() called from read_motd()
+   below.
+   @param url the URL curl groked or NULL if the MOTD is stored locally.
+   @param filename the path to the local copy of the MOTD or NULL if either cached=1 or there's an error.
+   @param errorbuf NULL or an errorstring if there was an error while downloading the MOTD.
+   @param cached 0 if the URL was downloaded freshly or 1 if the last download was canceled and the local copy should be used.
+ */
+void read_motd_asynch_downloaded(const char *url, const char *filename, const char *errorbuf, int cached, aMotdDownload *motd_download)
+{
+	aMotdFile *themotd;
+
+	themotd = motd_download->themotd;
+	/*
+	  check if the download was soft-canceled. See struct.h's docs on
+	  struct MotdDownload for details.
+	*/
+	if(!themotd)
+	{
+		MyFree(motd_download);
+		return;
+	}
+
+	/* errors -- check for specialcached version if applicable */
+	if(!cached && !filename)
+	{
+#ifdef REMOTEINC_SPECIALCACHE
+		if(has_cached_version(url))
 		{
-			ttmp = localtime(&sb.st_mtime);
-			memcpy(t, ttmp, sizeof(struct tm));
+			config_warn("Error downloading MOTD file from \"%s\": %s -- using cached version instead.", url, errorbuf);
+			filename = unreal_mkcache(url);
 		} else {
-			/* Sure, fstat() shouldn't fail, but... */
-			memset(t, 0, sizeof(struct tm));
+#endif
+			config_error("Error downloading MOTD file from \"%s\": %s", url, errorbuf);
+
+			/* remove reference to this chunk of memory about to be freed. */
+			motd_download->themotd->motd_download = NULL;
+			MyFree(motd_download);
+			return;
+#ifdef REMOTEINC_SPECIALCACHE
 		}
+#endif
 	}
 
-	(void)dgets(-1, NULL, 0);	/* make sure buffer is at empty pos */
-
-	newmotd = last = NULL;
-	while ((i = dgets(fd, line, 81)) > 0)
+#ifdef REMOTEINC_SPECIALCACHE
+	/*
+	 * We need to move our newly downloaded file to its cache file
+	 * if it isn't there already.
+	 */
+	if(!cached)
 	{
-		line[i] = '\0';
-		if ((tmp = (char *)strchr(line, '\n')))
+		/* create specialcached version for later */
+		unreal_copyfileex(filename, unreal_mkcache(url), 1);
+	} else {
+		/*
+		 * The file is cached. Thus we must look for it at the
+		 * cache location where we placed it earlier.
+		 */
+		filename = unreal_mkcache(url);
+	}
+#endif
+
+	do_read_motd(filename, themotd);
+	MyFree(motd_download);
+}
+#endif /* USE_LIBCURL */
+
+
+/**
+   Does the actual reading of the MOTD. To be called only by
+   read_motd() or read_motd_asynch_downloaded().
+ */
+void do_read_motd(const char *filename, aMotdFile *themotd)
+{
+	FILE *fd;
+	struct tm *tm_tmp;
+	time_t modtime;
+
+	char line[512];
+	char *tmp;
+
+	aMotdLine *last, *temp;
+
+	free_motd(themotd);
+
+	if(!filename)
+		return;
+
+	fd = fopen(filename, "r");
+	if (!fd)
+		return;
+
+	/* record file modification time */
+	modtime = unreal_getfilemodtime(filename);
+	tm_tmp = localtime(&modtime);
+	memcpy(&themotd->last_modified, tm_tmp, sizeof(struct tm));
+
+	last = NULL;
+	while (fgets(line, sizeof(line), fd))
+	{
+		if ((tmp = strchr(line, '\n')))
 			*tmp = '\0';
-		if ((tmp = (char *)strchr(line, '\r')))
+		if ((tmp = strchr(line, '\r')))
 			*tmp = '\0';
-		temp = (aMotd *) MyMalloc(sizeof(aMotd));
+		if (strlen(line) > MOTD_LINE_LEN)
+			line[MOTD_LINE_LEN] = '\0';
+
+		temp = MyMalloc(sizeof(aMotdLine));
 		if (!temp)
 			outofmemory();
 		AllocCpy(temp->line, line);
-		temp->next = NULL;
-		if (!newmotd)
-			newmotd = temp;
-		else
+
+		if(last)
 			last->next = temp;
+		else
+			/* handle the special case of the first line */
+			themotd->lines = temp;
+
 		last = temp;
 	}
-	close(fd);
-	return newmotd;
+	/* the file could be zero bytes long? */
+	if(last)
+		last->next = NULL;
 
+	fclose(fd);
+	
+	return;
 }
 
-/*
- * Modified from comstud by codemastr
+/**
+   Frees the contents of a aMotdFile structure.
+   The aMotdFile structure itself should be statically
+   allocated and deallocated. If the caller wants, it must
+   manually free the aMotdFile structure itself.
  */
-CMD_FUNC(m_botmotd)
+void free_motd(aMotdFile *themotd)
 {
-	aMotd *temp;
-	ConfigItem_tld *ptr;
-	char userhost[HOSTLEN + USERLEN + 6];
+	aMotdLine *next, *motdline;
 
-	if (hunt_server_token(cptr, sptr, MSG_BOTMOTD, TOK_BOTMOTD, ":%s", 1, parc,
-	    parv) != HUNTED_ISME)
-		return 0;
+	if(!themotd)
+		return;
 
-	if (!IsPerson(sptr))
-		return 0;
-
-	strlcpy(userhost,make_user_host(sptr->user->username, sptr->user->realhost), sizeof userhost);
-	ptr = Find_tld(sptr, userhost);
-
-	if (ptr)
+	for (motdline = themotd->lines; motdline; motdline = next)
 	{
-		if (ptr->botmotd)
-			temp = ptr->botmotd;
-		else
-			temp = botmotd;
+		next = motdline->next;
+		MyFree(motdline->line);
+		MyFree(motdline);
 	}
-	else
-		temp = botmotd;
 
-	if (!temp)
-	{
-		sendto_one(sptr, ":%s NOTICE %s :BOTMOTD File not found",
-		    me.name, sptr->name);
-		return 0;
-	}
-	sendto_one(sptr, ":%s NOTICE %s :- %s Bot Message of the Day - ",
-	    me.name, sptr->name, me.name);
+	themotd->lines = NULL;
+	memset(&themotd->last_modified, '\0', sizeof(struct tm));
 
-	while (temp)
-	{
-		sendto_one(sptr, ":%s NOTICE %s :- %s", me.name, sptr->name, temp->line);
-		temp = temp->next;
-	}
-	sendto_one(sptr, ":%s NOTICE %s :End of /BOTMOTD command.", me.name, sptr->name);
-	return 0;
+#ifdef USE_LIBCURL
+	/* see struct.h for more information about motd_download */
+	themotd->motd_download = NULL;
+#endif
 }
+
 
 /* m_die, this terminates the server, and it intentionally does not
  * have a reason. If you use it you should first do a GLOBOPS and
@@ -1274,3 +1312,131 @@ aClient *find_match_server(char *mask)
 	}
 	return acptr;
 }
+
+aPendingNet *pendingnet = NULL;
+
+void add_pending_net(aClient *sptr, char *str)
+{
+aPendingNet *e = NULL;
+int num = 1;
+char *p, *name;
+
+	if (BadPtr(str) || !sptr)
+		return;
+
+	/* First, count them */
+	for (p = str; *p; p++)
+		if (*p == ',')
+			num++;
+	
+	/* Allocate */
+	e = MyMallocEx(sizeof(aPendingNet) + (sizeof(int) * num));
+	
+	e->numservers = num;
+	e->sptr = sptr;
+
+	/* Fill in */
+	num = 0;
+	for (name = strtoken(&p, str, ","); name; name = strtoken(&p, NULL, ","))
+	{
+		if (!*name)
+			continue;
+
+		/* skip any non-digit prefixes, if necessary. Possibly needed in the future. */
+		while (*name && !isdigit(*name))
+			name++; 
+
+		e->servers[num++] = atoi(name);
+	}
+	
+	AddListItem(e, pendingnet);
+}
+
+void free_pending_net(aClient *sptr)
+{
+aPendingNet *e, *e_next;
+
+	for (e = pendingnet; e; e = e_next)
+	{
+		e_next = e->next;
+		if (e->sptr == sptr)
+		{
+			DelListItem(e, pendingnet);
+			MyFree(e);
+			/* Don't break, there can be multiple objects */
+		}
+	}
+}
+
+aPendingNet *find_pending_net_by_numeric_butone(int numeric, aClient *exempt)
+{
+aPendingNet *e;
+int i;
+
+	if (numeric <= 0)
+		return NULL;
+
+	for (e = pendingnet; e; e = e->next)
+	{
+		if (e->sptr == exempt)
+			continue;
+		for (i = 0; i < e->numservers; i++)
+			if (e->servers[i] == numeric)
+				return e;
+	}
+	return NULL;
+}
+
+/** Search the pending connections list for any identical numerics */
+aClient *find_pending_net_duplicates(aClient *cptr, aClient **srv, int *numeric)
+{
+aPendingNet *e, *other;
+int i;
+
+	*srv = NULL;
+	*numeric = 0;
+	
+	for (e = pendingnet; e; e = e->next)
+	{
+		if (e->sptr != cptr)
+			continue;
+		/* Ok, found myself */
+		for (i = 0; i < e->numservers; i++)
+		{
+			int curr_numeric = e->servers[i];
+			other = find_pending_net_by_numeric_butone(curr_numeric, cptr);
+			if (other)
+			{
+				*srv = e->sptr;
+				*numeric = curr_numeric;
+				return other->sptr; /* Found another (pending) server with identical numeric */
+			}
+		}
+	}
+	
+	return NULL;
+}
+
+aClient *find_non_pending_net_duplicates(aClient *cptr)
+{
+aPendingNet *e;
+int i;
+aClient *acptr;
+
+	for (e = pendingnet; e; e = e->next)
+	{
+		if (e->sptr != cptr)
+			continue;
+		/* Ok, found myself */
+		for (i = 0; i < e->numservers; i++)
+		{
+			int numeric = e->servers[i];
+			acptr = find_server_by_numeric(numeric);
+			if (acptr)
+				return acptr; /* Found another (fully CONNECTED) server with identical numeric */
+		}
+	}
+	
+	return NULL;
+}
+

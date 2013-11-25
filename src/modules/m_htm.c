@@ -63,7 +63,7 @@ static Hook *ConfTest, *ConfRun, *ServerStats;
 ModuleHeader MOD_HEADER(m_htm)
   = {
 	"htm",	/* Name of module */
-	"$Id: m_htm.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /htm", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

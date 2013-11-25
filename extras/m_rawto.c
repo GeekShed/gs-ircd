@@ -61,7 +61,7 @@ ModuleHeader Mod_Header
 #endif
   = {
 	"rawto",	/* Name of module */
-	"$Id: m_rawto.c,v 1.1.6.13 2009/04/13 11:03:57 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /rawto", /* Short description of module */
 	"3.2-b5",
 	NULL 

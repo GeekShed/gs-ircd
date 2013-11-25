@@ -121,7 +121,7 @@ ModuleInfo *TklModInfo;
 ModuleHeader MOD_HEADER(m_tkl)
   = {
 	"tkl",	/* Name of module */
-	"$Id: m_tkl.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"commands /gline etc", /* Short description of module */
 	"3.2-b8-1",
 	NULL 
@@ -492,7 +492,8 @@ DLLFUNC int m_tzline(aClient *cptr, aClient *sptr, int parc, char *parv[])
 ** parv[3] = reason
 */
 
-DLLFUNC int  m_tkl_line(aClient *cptr, aClient *sptr, int parc, char *parv[], char* type) {
+DLLFUNC int  m_tkl_line(aClient *cptr, aClient *sptr, int parc, char *parv[], char* type)
+{
 	TS   secs;
 	int  whattodo = 0;	/* 0 = add  1 = del */
 	TS  i;
@@ -547,7 +548,7 @@ DLLFUNC int  m_tkl_line(aClient *cptr, aClient *sptr, int parc, char *parv[], ch
 	if (strchr(mask, ' '))
 		return 0;
 
-	/* Check if its a hostmask and legal .. */
+	/* Check if it's a hostmask and legal .. */
 	p = strchr(mask, '@');
 	if (p) {
 		if ((p == mask) || !p[1])
@@ -625,9 +626,10 @@ DLLFUNC int  m_tkl_line(aClient *cptr, aClient *sptr, int parc, char *parv[], ch
 	{
 		char c;
 		
-		if (!strchr(usermask, '*') && !strchr(usermask, '?'))
+		if ((!strchr(usermask, '*') && !strchr(usermask, '?')) || (ALLOW_INSANE_BANS))
 		{
 			/* Allow things like clone@*, dsfsf@*, etc.. */
+			/* Also allow insane bans if set::options::allow-insane-bans is set -- Stealth */
 		} else {
 			/* Check hostmask. */
 			
@@ -1045,10 +1047,13 @@ aTKline *_tkl_del_line(aTKline *tkl)
  */
 void _tkl_check_local_remove_shun(aTKline *tmp)
 {
-long i1, i;
-char *chost, *cname, *cip;
-int  is_ip;
-aClient *acptr;
+	long i1, i;
+	char *chost, *cname, *cip;
+	int  is_ip;
+	aClient *acptr;
+
+	aTKline *tk;
+	int keep_shun;
 
 	for (i1 = 0; i1 <= 5; i1++)
 	{
@@ -1076,13 +1081,38 @@ aClient *acptr;
 					    (!match(tmp->hostmask, chost) || !match(tmp->hostmask, cip))
 					    && !match(tmp->usermask, cname))
 					{
-						ClearShunned(acptr);
+						/*
+						  before blindly marking this user as un-shunned, we need to check
+						  if the user is under any other existing shuns. (#0003906)
+						  Unfortunately, this requires crazy amounts of indentation ;-).
+
+						  This enumeration code is based off of _tkl_stats()
+						 */
+						keep_shun = 0;
+						for(tk = tklines[tkl_hash('s')]; tk && !keep_shun; tk = tk->next)
+							if(tk != tmp && !match(tk->usermask, cname))
+							{
+								if ((*tk->hostmask >= '0') && (*tk->hostmask <= '9')
+								    /* the hostmask is an IP */
+								    && (!match(tk->hostmask, chost) || !match(tk->hostmask, cip)))
+									keep_shun = 1;
+								
+								else
+									/* the hostmask is not an IP */
+									if (!match(tk->hostmask, chost) && !match(tk->usermask, cname))
+										keep_shun = 1;
+							}						
+
+						if(!keep_shun)
+						{
+							ClearShunned(acptr);
 #ifdef SHUN_NOTICES
-						sendto_one(acptr,
-						    ":%s NOTICE %s :*** You are no longer shunned",
-						    me.name,
-						    acptr->name);
+							sendto_one(acptr,
+								   ":%s NOTICE %s :*** You are no longer shunned",
+								   me.name,
+								   acptr->name);
 #endif
+						}
 					}
 				}
 		}
@@ -1457,8 +1487,7 @@ aClient *acptr;
 int spamfilter_check_all_users(aClient *from, aTKline *tk)
 {
 char spamfilter_user[NICKLEN + USERLEN + HOSTLEN + REALLEN + 64]; /* n!u@h:r */
-char buf[1024];
-int i, matches = 0;
+int matches = 0;
 aClient *acptr;
 
 	for (acptr = client; acptr; acptr = acptr->next)

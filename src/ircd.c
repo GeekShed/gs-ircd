@@ -90,12 +90,6 @@ extern MODVAR char *buildid;
 time_t timeofday = 0;
 int  tainted = 0;
 LoopStruct loop;
-extern MODVAR aMotd *opermotd;
-extern MODVAR aMotd *svsmotd;
-extern MODVAR aMotd *motd;
-extern MODVAR aMotd *rules;
-extern MODVAR aMotd *botmotd;
-extern MODVAR aMotd *smotd;
 MODVAR MemoryInfo StatsZ;
 #ifndef _WIN32
 uid_t irc_uid = 0;
@@ -361,8 +355,7 @@ void server_reboot(char *mesg)
 	if (!(bootopt & (BOOT_TTY | BOOT_DEBUG)))
 		(void)close(2);
 	(void)close(1);
-	if ((bootopt & BOOT_CONSOLE) || isatty(0))
-		(void)close(0);
+	(void)close(0);
 	(void)execv(MYNAME, myargv);
 #else
 	close_connections();
@@ -526,6 +519,7 @@ extern TS check_pings(TS currenttime)
 	char killflag = 0;
 	int  i = 0;
 	char banbuf[1024];
+	char scratch[64];
 	int  ping = 0;
 
 	for (i = 0; i <= LastSlot; i++) {
@@ -700,7 +694,9 @@ extern TS check_pings(TS currenttime)
 					Debug((DEBUG_DEBUG, "ssl accept handshake timeout: %s (%li-%li > %li)", cptr->sockhost,
 						currenttime, cptr->since, ping));
 #endif
-				exit_client(cptr, cptr, &me, "Ping timeout");
+				(void)ircsprintf(scratch, "Ping timeout: %ld seconds",
+					(long) (TStime() - cptr->lasttime));
+				exit_client(cptr, cptr, &me, scratch);
 				continue;
 				
 			}
@@ -1002,7 +998,7 @@ struct ThrottlingBucket z = { NULL, NULL, {0}, 0, 0};
 	
 	Debug((DEBUG_DEBUG, "fix_timers(): updating nextping/nextconnect/nextdnscheck/nextexpire (%ld/%ld/%ld/%ld)",
 		nextping, nextconnect, nextdnscheck, nextexpire));	
-	nextping = nextconnect = nextdnscheck = nextexpire = 0;
+	nextping = nextconnect = nextdnscheck = nextexpire = 1;
 }
 
 
@@ -1010,18 +1006,26 @@ struct ThrottlingBucket z = { NULL, NULL, {0}, 0, 0};
 static void generate_cloakkeys()
 {
 	/* Generate 3 cloak keys */
-#define GENERATE_CLOAKKEY_MINLEN 10
-#define GENERATE_CLOAKKEY_MAXLEN 20 /* Length of cloak keys to generate. */
+#define GENERATE_CLOAKKEY_MINLEN 16
+#define GENERATE_CLOAKKEY_MAXLEN 32 /* Length of cloak keys to generate. */
 	char keyBuf[GENERATE_CLOAKKEY_MAXLEN + 1];
 	int keyNum;
 	int keyLen;
 	int charIndex;
 	int value;
 
+	short has_upper;
+	short has_lower;
+	short has_num;
+
 	fprintf(stderr, "Here are 3 random cloak keys:\n");
 
 	for (keyNum = 0; keyNum < 3; ++keyNum)
 	{
+		has_upper = 0;
+		has_lower = 0;
+		has_num = 0;
+
 		keyLen = (getrandom8() % (GENERATE_CLOAKKEY_MAXLEN - GENERATE_CLOAKKEY_MINLEN + 1)) + GENERATE_CLOAKKEY_MINLEN;
 		for (charIndex = 0; charIndex < keyLen; ++charIndex)
 		{
@@ -1029,20 +1033,34 @@ static void generate_cloakkeys()
 			{
 				case 0: /* Uppercase. */
 					keyBuf[charIndex] = (char)('A' + (getrandom8() % ('Z' - 'A')));
+					has_upper = 1;
 					break;
 				case 1: /* Lowercase. */
 					keyBuf[charIndex] = (char)('a' + (getrandom8() % ('z' - 'a')));
+					has_lower = 1;
 					break;
 				case 2: /* Digit. */
 					keyBuf[charIndex] = (char)('0' + (getrandom8() % ('9' - '0')));
+					has_num = 1;
 					break;
 			}
 		}
 		keyBuf[keyLen] = '\0';
-		(void)fprintf(stderr, "%s\n", keyBuf);
+
+		if (has_upper && has_lower && has_num)
+			(void)fprintf(stderr, "%s\n", keyBuf);
+		else
+			/* Try again. For this reason, keyNum must be signed. */
+			keyNum--;
 	}
 }
 #endif
+
+/* MY tdiff... because 'double' sucks.
+ * This should work until 2038, and very likely after that as well
+ * because 'long' should be 64 bit on all systems by then... -- Syzop
+ */
+#define mytdiff(a, b)   ((long)a - (long)b)
 
 #ifndef _WIN32
 int main(int argc, char *argv[])
@@ -1070,6 +1088,14 @@ int InitwIRCD(int argc, char *argv[])
 #ifndef NO_FDLIST
 	TS   nextfdlistcheck = 0;	/*end of priority code */
 #endif
+
+	memset(&botmotd, '\0', sizeof(aMotdFile));
+	memset(&rules, '\0', sizeof(aMotdFile));
+	memset(&opermotd, '\0', sizeof(aMotdFile));
+	memset(&motd, '\0', sizeof(aMotdFile));
+	memset(&smotd, '\0', sizeof(aMotdFile));
+	memset(&svsmotd, '\0', sizeof(aMotdFile));
+
 #ifdef _WIN32
 	CreateMutex(NULL, FALSE, "UnrealMutex");
 	SetErrorMode(SEM_FAILCRITICALERRORS);
@@ -1080,6 +1106,21 @@ int InitwIRCD(int argc, char *argv[])
 	euid = geteuid();
 	gid = getgid();
 	egid = getegid();
+
+#ifndef IRC_USER
+	if (!euid)
+	{
+		fprintf(stderr,
+			"WARNING: You are running UnrealIRCd as root and it is not\n"
+			"         configured to drop priviliges. This is _very_ dangerous,\n"
+			"         as any compromise of your UnrealIRCd is the same as\n"
+			"         giving a cracker root SSH access to your box.\n"
+			"         You should either start UnrealIRCd under a different\n"
+			"         account than root, or set IRC_USER in include/config.h\n"
+			"         to a nonprivileged username and recompile.\n"); 
+	}
+#endif /* IRC_USER */
+
 # ifdef	PROFIL
 	(void)monstartup(0, etext);
 	(void)moncontrol(1);
@@ -1347,7 +1388,7 @@ int InitwIRCD(int argc, char *argv[])
 			  exit(0);
 #endif
 		  default:
-			  bad_command();
+			  return bad_command();
 			  break;
 		}
 	}
@@ -1370,8 +1411,14 @@ int InitwIRCD(int argc, char *argv[])
 #endif
 #ifndef _WIN32
 	mkdir("tmp", S_IRUSR|S_IWUSR|S_IXUSR); /* Create the tmp dir, if it doesn't exist */
+ #if defined(USE_LIBCURL) && defined(REMOTEINC_SPECIALCACHE)
+ 	mkdir("cache", S_IRUSR|S_IWUSR|S_IXUSR); /* Create the cache dir, if using curl and it doesn't exist */
+ #endif
 #else
 	mkdir("tmp");
+ #if defined(USE_LIBCURL) && defined(REMOTEINC_SPECIALCACHE)
+ 	mkdir("cache");
+ #endif
 #endif
 #ifndef _WIN32
 	/*
@@ -1530,12 +1577,15 @@ int InitwIRCD(int argc, char *argv[])
 	me.umodes = conf_listen->options;
 	conf_listen->listener = &me;
 	run_configuration();
-	botmotd = (aMotd *) read_file(BPATH, NULL);
-	rules = (aMotd *) read_file(RPATH, NULL);
-	opermotd = (aMotd *) read_file(OPATH, NULL);
-	motd = (aMotd *) read_file_ex(MPATH, NULL, &motd_tm);
-	smotd = (aMotd *) read_file_ex(SMPATH, NULL, &smotd_tm);
-	svsmotd = (aMotd *) read_file(VPATH, NULL);
+	ircd_log(LOG_ERROR, "UnrealIRCd started.");
+
+	read_motd(conf_files->botmotd_file, &botmotd);
+	read_motd(conf_files->rules_file, &rules);
+	read_motd(conf_files->opermotd_file, &opermotd);
+	read_motd(conf_files->motd_file, &motd);
+	read_motd(conf_files->smotd_file, &smotd);
+	read_motd(conf_files->svsmotd_file, &svsmotd);
+
 	strncpy(me.sockhost, conf_listen->ip, sizeof(me.sockhost) - 1);
 	if (me.name[0] == '\0')
 		strncpyzt(me.name, me.sockhost, sizeof(me.name));
@@ -1617,9 +1667,12 @@ int InitwIRCD(int argc, char *argv[])
 	if (TIMESYNCH)
 	{
 		if (!unreal_time_synch(TIMESYNCH_TIMEOUT))
-			ircd_log(LOG_ERROR, "TIME SYNCH: Unable to synchronize time: %s. This happens sometimes, no error on your part.",
+			ircd_log(LOG_ERROR, "TIME SYNCH: Unable to synchronize time: %s. "
+			                    "This means UnrealIRCd was unable to synchronize the IRCd clock to a known good time source. "
+			                    "As long as the server owner keeps the server clock synchronized through NTP, everything will be fine.",
 				unreal_time_synch_error());
 	}
+	fix_timers(); /* Fix timers AFTER reading tune file AND timesynch */
 	write_pidfile();
 	Debug((DEBUG_NOTICE, "Server ready..."));
 	SetupEvents();
@@ -1679,7 +1732,9 @@ void SocketLoop(void *dummy)
 #define POSITIVE_SHIFT_WARN	20
 
 		timeofday = time(NULL) + TSoffset;
-		if (timeofday - oldtimeofday < NEGATIVE_SHIFT_WARN) {
+		if (oldtimeofday == 0)
+			oldtimeofday = timeofday; /* pretend everything is ok the first time.. */
+		if (mytdiff(timeofday, oldtimeofday) < NEGATIVE_SHIFT_WARN) {
 			/* tdiff = # of seconds of time set backwards (positive number! eg: 60) */
 			long tdiff = oldtimeofday - timeofday;
 			ircd_log(LOG_ERROR, "WARNING: Time running backwards! Clock set back ~%ld seconds (%ld -> %ld)",
@@ -1697,7 +1752,7 @@ void SocketLoop(void *dummy)
 			fix_timers();
 			nextfdlistcheck = 0;
 		} else
-		if ((oldtimeofday > 0) && (timeofday - oldtimeofday > POSITIVE_SHIFT_WARN)) /* do not set too low or you get false positives */
+		if (mytdiff(timeofday, oldtimeofday) > POSITIVE_SHIFT_WARN) /* do not set too low or you get false positives */
 		{
 			/* tdiff = # of seconds of time set forward (eg: 60) */
 			long tdiff = timeofday - oldtimeofday;

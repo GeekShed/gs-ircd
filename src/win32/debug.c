@@ -17,11 +17,8 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
+#include "sys.h"
 #include "setup.h"
-#ifdef INET6
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#endif
 #include <windows.h>
 #include <dbghelp.h>
 #include "struct.h"
@@ -38,7 +35,6 @@ extern OSVERSIONINFO VerInfo;
 extern char OSName[256];
 extern char backupbuf[8192];
 extern char *buildid;
-extern char serveropts[];
 extern char *extraflags;
 extern BOOL IsService;
 void CleanUp(void);
@@ -233,7 +229,7 @@ LONG __stdcall ExceptionFilter(EXCEPTION_POINTERS *e)
 
 	sprintf(text, "UnrealIRCd has encountered a fatal error. Debugging information has"
 		      " been dumped to wircd.%d.core, please email this file to "
-		      "coders@lists.unrealircd.org", getpid());
+		      "file a bug at http://bugs.unrealircd.org/ and attach this file", getpid());
 	fclose(fd);
 
 #ifndef NOMINIDUMP
@@ -255,7 +251,8 @@ LONG __stdcall ExceptionFilter(EXCEPTION_POINTERS *e)
 				if (pDump(GetCurrentProcess(), GetCurrentProcessId(), hDump, MiniDumpNormal, &ExInfo, NULL, NULL))
 				{
 					sprintf(text, "UnrealIRCd has encountered a fatal error. Debugging information has"
-						" been dumped to wircd.%d.core and %s, please email those 2 files to coders@lists.unrealircd.org",
+						" been dumped to wircd.%d.core and %s, please upload those 2 files to http://bugs.unrealircd.org/"
+						" after filing a bug.",
 						getpid(), minidumpf);
 				}
 				CloseHandle(hDump);
@@ -289,16 +286,16 @@ LONG __stdcall ExceptionFilter(EXCEPTION_POINTERS *e)
 		if (fd)
 		{
 			fprintf(fd, "UnrealIRCd has encountered a fatal error. Debugging information "
-					"has been dumped to wircd.%d.core, please email this file to "
-					"coders@lists.unrealircd.org.", getpid());
+					"has been dumped to wircd.%d.core, please file a bug and upload "
+					"this file to http://bugs.unrealircd.org/.", getpid());
 			fclose(fd);
 		}
 #ifdef _DEBUG
 		else
 		{
 			OutputDebugString("UnrealIRCd has encountered a fatal error. Debugging information "
-					"has been dumped to wircd.%d.core, please email this file to "
-					"coders@lists.unrealircd.org.", getpid());
+					"has been dumped to wircd.%d.core, please file a bug and upload "
+					"this file to http://bugs.unrealircd.org/.", getpid());
 		}
 #endif
 	}

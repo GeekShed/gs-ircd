@@ -16,7 +16,7 @@
 #*   along with this program; if not, write to the Free Software
 #*   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #*   
-#*   $Id: Makefile,v 1.1.1.1.2.24 2009/04/13 11:03:58 syzop Exp $
+#*   $Id$
 #*/
 
 CC = danger will robinson
@@ -41,14 +41,14 @@ MAKEARGS =	'CFLAGS=${CFLAGS}' 'CC=${CC}' 'IRCDLIBS=${IRCDLIBS}' \
 		'CRYPTOLIB=${CRYPTOLIB}' \
 		'CRYPTOINCLUDES=${CRYPTOINCLUDES}' 'URL=${URL}' \
 
-MAKE = make $(MAKEARGS)
+MY_MAKE = $(MAKE) $(MAKEARGS)
 
 INCLUDES = ../include/auth.h ../include/badwords.h ../include/channel.h \
 	../include/class.h ../include/common.h ../include/config.h ../include/dbuf.h \
 	../include/dynconf.h ../include/events.h ../include/fdlist.h ../include/h.h \
 	../include/hash.h ../include/inet.h ../include/ircsprintf.h \
 	../include/license.h ../include/macros.h ../include/md5.h \
-	../include/modules.h ../include/modversion.h ../include/msg.h ../include/nameser.h \
+	../include/modules.h ../include/modversion.h ../include/msg.h \
 	../include/numeric.h ../include/proto.h \
 	../include/resource.h ../include/setup.h ../include/sjoin.h \
 	../include/sock.h ../include/ssl.h ../include/struct.h ../include/sys.h \
@@ -60,7 +60,7 @@ all: build
 build: ircd mods
 
 custommodule:
-	cd modules; $(MAKE) MODULEFILE=$(MODULEFILE) 'EXLIBS=$(EXLIBS)' custommodule
+	+cd modules; $(MY_MAKE) MODULEFILE=$(MODULEFILE) 'EXLIBS=$(EXLIBS)' custommodule
 
 ircd: $(OBJS)
 	$(CC) $(CFLAGS) $(CRYPTOLIB) -o ircd $(OBJS) $(LDFLAGS) $(IRCDLIBS) $(CRYPTOLIB)
@@ -83,12 +83,12 @@ mods:
 	@if [ ! -r modules ] ; then \
 		echo "You havent done cvs update -P -d"; \
 	fi
-	cd modules; $(MAKE) all
+	+cd modules; $(MY_MAKE) all
 
 version.c: version.c.SH ../Changes
 	$(SHELL) version.c.SH
 
-version.o: version.c ../include/version.h
+version.o: version.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c version.c
 
 parse.o: parse.c $(INCLUDES)
@@ -122,6 +122,8 @@ ssl.o: ssl.c $(INCLUDES)
 
 match.o: match.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c match.c
+
+modules.o: modules.c $(INCLUDES)
 
 support.o: support.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c support.c

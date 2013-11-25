@@ -55,7 +55,7 @@ DLLFUNC int m_svsnline(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_svsnline)
   = {
 	"svsnline",	/* Name of module */
-	"$Id: m_svsnline.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /svsnline", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

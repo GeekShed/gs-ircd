@@ -52,7 +52,7 @@ DLLFUNC int m_stats(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_stats)
   = {
 	"m_stats",
-	"$Id: m_stats.c,v 1.1.6.10 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /stats", 
 	"3.2-b8-1",
 	NULL 
@@ -333,7 +333,7 @@ inline int stats_operonly_short(char c)
 	l = tolower(c);
 	/* Hack for the flags that are case insensitive */
 	if (l == 'o' || l == 'y' || l == 'k' || l == 'g' || l == 'x' || l == 'c' || 
-		l =='f' || l == 'i' || l == 'h')
+		l =='f' || l == 'i' || l == 'h' || l == 'm')
 	{
 		if (islower(c) && strchr(OPER_ONLY_STATS, toupper(c)))
 			return 1;
@@ -531,7 +531,7 @@ int stats_links(aClient *sptr, char *para)
 	}
 #ifdef DEBUGMODE
 	for (acptr = client; acptr; acptr = acptr->next)
-		if (MyConnect(acptr) && IsServer(acptr))
+		if (MyConnect(acptr) && acptr->serv && !IsMe(acptr))
 		{
 			if (!acptr->serv->conf)
 				sendnotice(sptr, "client '%s' (%p) has NO CONF attached (? :P)",
@@ -1329,6 +1329,8 @@ int stats_set(aClient *sptr, char *para)
 	    sptr->name, DONT_RESOLVE);
 	sendto_one(sptr, ":%s %i %s :options::mkpasswd-for-everyone: %d", me.name, RPL_TEXT,
 	    sptr->name, MKPASSWD_FOR_EVERYONE);
+	sendto_one(sptr, ":%s %i %s :options::allow-insane-bans: %d", me.name, RPL_TEXT,
+	    sptr->name, ALLOW_INSANE_BANS);
 	sendto_one(sptr, ":%s %i %s :options::allow-part-if-shunned: %d", me.name, RPL_TEXT,
 	    sptr->name, ALLOW_PART_IF_SHUNNED);
 	sendto_one(sptr, ":%s %i %s :maxchannelsperuser: %i", me.name, RPL_TEXT,

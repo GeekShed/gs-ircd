@@ -52,7 +52,7 @@ DLLFUNC int m_invite(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_invite)
   = {
 	"m_invite",
-	"$Id: m_invite.c,v 1.1.6.10 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /invite", 
 	"3.2-b8-1",
 	NULL 
@@ -249,11 +249,6 @@ DLLFUNC CMD_FUNC(m_invite)
                         /* Logging implementation added by XeRXeS */
 			ircd_log(LOG_OVERRIDE,"OVERRIDE: %s (%s@%s) invited him/herself into %s (Overriding Secure Mode)",
 				sptr->name, sptr->user->username, sptr->user->realhost, chptr->chname);
-
-				sendto_one(sptr, ":%s NOTICE %s :The channel is +z and you are trying to OperOverride, "
-					"you'll have to override explicitly after this invite with the command '/join %s override'"
-					" (use override as a key) this will set the channel -z and then join you",
-					me.name, sptr->name, chptr->chname);
 	        }
 	        else if (is_banned(sptr, chptr, BANCHK_JOIN))
         	{

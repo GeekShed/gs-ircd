@@ -54,7 +54,7 @@ DLLFUNC int m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_whois)
   = {
 	"whois",	/* Name of module */
-	"$Id: m_whois.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /whois", /* Short description of module */
 	"3.2-b8-1",
 	NULL 
@@ -322,15 +322,22 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 					    name, acptr->user->swhois);
 
 			/*
-			 * Fix /whois to not show idle times of
-			 * global opers to anyone except another
-			 * global oper or services.
-			 * -CodeM/Barubary
+			 * display services account name if it's actually a services account name and
+			 * not a legacy timestamp.  --nenolod
 			 */
-			if (MyConnect(acptr))
+			if (!isdigit(*user->svid))
+				sendto_one(sptr, rpl_str(RPL_WHOISLOGGEDIN), me.name, parv[0], name, user->svid);
+
+			/*
+			 * Umode +I hides an oper's idle time from regular users.
+			 * -Nath.
+			 */
+			if (MyConnect(acptr) && (IsAnOper(sptr) || !(acptr->umodes & UMODE_HIDLE)))
+			{
 				sendto_one(sptr, rpl_str(RPL_WHOISIDLE),
 				    me.name, parv[0], name,
 				    TStime() - acptr->last, acptr->firsttime);
+			}
 		}
 		if (!found)
 			sendto_one(sptr, err_str(ERR_NOSUCHNICK),

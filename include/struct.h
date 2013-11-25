@@ -17,13 +17,14 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- *   $Id: struct.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 #ifndef	__struct_include__
 #define __struct_include__
 
 #include "config.h"
+#include "sys.h"
 /* need to include ssl stuff here coz otherwise you get
  * conflicting types with isalnum/isalpha/etc @ redhat. -- Syzop
  */
@@ -64,18 +65,14 @@
 #include "zip.h"
 #endif
 #include "auth.h" 
-#ifndef _WIN32
 #include "tre/regex.h"
-#else
-#include "win32/regex.h"
-#endif
 
 #include "channel.h"
 
-#if defined(_WIN32) && !defined(NOSPOOF)
- #error "Compiling win32 without nospoof is VERY insecure and NOT supported"
+#if defined(_MSC_VER)
+/* needed to workaround a warning / prototype/dll inconsistency crap */
+#define vsnprintf unrl_vsnprintf
 #endif
-
 
 extern MODVAR int sendanyways;
 
@@ -94,6 +91,7 @@ typedef struct _configflag_ban ConfigFlag_ban;
 typedef struct _configflag_tld ConfigFlag_tld;
 typedef struct _configitem ConfigItem;
 typedef struct _configitem_me ConfigItem_me;
+typedef struct _configitem_files ConfigItem_files;
 typedef struct _configitem_admin ConfigItem_admin;
 typedef struct _configitem_class ConfigItem_class;
 typedef struct _configitem_oper ConfigItem_oper;
@@ -142,7 +140,12 @@ typedef struct SChanFloodProt ChanFloodProt;
 typedef struct SRemoveFld RemoveFld;
 typedef struct ListOptions LOpts;
 typedef struct FloodOpt aFloodOpt;
-typedef struct MotdItem aMotd;
+typedef struct Motd aMotdFile; /* represents a whole MOTD, including remote MOTD support info */
+typedef struct MotdItem aMotdLine; /* one line of a MOTD stored as a linked list */
+#ifdef USE_LIBCURL
+typedef struct MotdDownload aMotdDownload; /* used to coordinate download of a remote MOTD */
+#endif
+
 typedef struct trecord aTrecord;
 typedef struct Command aCommand;
 typedef struct _cmdoverride Cmdoverride;
@@ -150,6 +153,7 @@ typedef struct SMember Member;
 typedef struct SMembership Membership;
 typedef struct SMembershipL MembershipL;
 typedef struct JFlood aJFlood;
+typedef struct PendingNet aPendingNet;
 
 #ifdef ZIP_LINKS
 typedef struct  Zdata   aZdata;
@@ -231,6 +235,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 
 #define	STAT_LOG	-7	/* logfile for -x */
 #define	STAT_CONNECTING	-6
+#define STAT_SSL_STARTTLS_HANDSHAKE -8
 #define STAT_SSL_CONNECT_HANDSHAKE -5
 #define STAT_SSL_ACCEPT_HANDSHAKE -4
 #define	STAT_HANDSHAKE	-3
@@ -253,9 +258,11 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	IsLog(x)		((x)->status == STAT_LOG)
 
 #ifdef USE_SSL
+#define IsSSLStartTLSHandshake(x)	((x)->status == STAT_SSL_STARTTLS_HANDSHAKE)
 #define IsSSLAcceptHandshake(x)	((x)->status == STAT_SSL_ACCEPT_HANDSHAKE)
 #define IsSSLConnectHandshake(x)	((x)->status == STAT_SSL_CONNECT_HANDSHAKE)
-#define IsSSLHandshake(x) (IsSSLAcceptHandshake(x) || IsSSLConnectHandshake(x))
+#define IsSSLHandshake(x) (IsSSLAcceptHandshake(x) || IsSSLConnectHandshake(x) | IsSSLStartTLSHandshake(x))
+#define SetSSLStartTLSHandshake(x)	((x)->status = STAT_SSL_STARTTLS_HANDSHAKE)
 #define SetSSLAcceptHandshake(x)	((x)->status = STAT_SSL_ACCEPT_HANDSHAKE)
 #define SetSSLConnectHandshake(x)	((x)->status = STAT_SSL_CONNECT_HANDSHAKE)
 #endif
@@ -269,6 +276,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	SetLog(x)		((x)->status = STAT_LOG)
 
 #define IsSynched(x)	(x->serv->flags.synced)
+#define IsServerSent(x) (x->serv && x->serv->flags.server_sent)
 
 /* opt.. */
 #define OPT_SJOIN	0x0001
@@ -313,7 +321,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define FLAGS_SQUIT      0x20000	/* Server has been /squit by an oper */
 #define FLAGS_PROTOCTL   0x40000	/* Received a PROTOCTL message */
 #define FLAGS_PING       0x80000
-#define FLAGS_ASKEDPING  0x100000
+#define FLAGS_EAUTH      0x100000
 #define FLAGS_NETINFO    0x200000
 #define FLAGS_HYBNOTICE  0x400000
 #define FLAGS_QUARANTINE 0x800000
@@ -362,6 +370,12 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define PROTO_NAMESX	0x4000  /* Send all rights in NAMES output */
 #define PROTO_CLK		0x8000	/* Send cloaked host in the NICK command (regardless of +x/-x) */
 #define PROTO_UHNAMES	0x10000  /* Send n!u@h in NAMES */
+#define PROTO_CLICAP	0x20000  /* client capability negotiation in process */
+#define PROTO_STARTTLS	0x40000	 /* client supports STARTTLS */
+#define PROTO_SASL	0x80000  /* client is doing SASL */
+#define PROTO_AWAY_NOTIFY	0x100000	/* client supports away-notify */
+#define PROTO_ACCOUNT_NOTIFY	0x200000	/* client supports account-notify */
+#define PROTO_MLOCK		0x400000	/* server supports MLOCK */
 
 /*
  * flags macros.
@@ -408,7 +422,8 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define GotNetInfo(x) 		((x)->flags & FLAGS_NETINFO)
 #define SetNetInfo(x)		((x)->flags |= FLAGS_NETINFO)
 #define IsCGIIRC(x)			((x)->flags & FLAGS_CGIIRC)
-
+#define SetEAuth(x)		((x)->flags |= FLAGS_EAUTH)
+#define IsEAuth(x)		((x)->flags & FLAGS_EAUTH)
 #define IsShunned(x)		((x)->flags & FLAGS_SHUNNED)
 #define SetShunned(x)		((x)->flags |= FLAGS_SHUNNED)
 #define ClearShunned(x)		((x)->flags &= ~FLAGS_SHUNNED)
@@ -443,11 +458,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #ifdef USE_SSL
 #define IsSSL(x)		IsSecure(x)
 #endif
-#ifdef NOSPOOF
 #define	IsNotSpoof(x)		((x)->nospoof == 0)
-#else
-#define IsNotSpoof(x)           (1)
-#endif
 
 #define GetHost(x)			(IsHidden(x) ? (x)->user->virthost : (x)->user->realhost)
 #define GetIP(x)			((x->user && x->user->ip_str) ? x->user->ip_str : (MyConnect(x) ? Inet_ia2p(&x->ip) : NULL))
@@ -713,6 +724,46 @@ struct FloodOpt {
 	TS   firstmsg;
 };
 
+#ifdef USE_LIBCURL
+struct Motd;
+struct MotdDownload
+{
+	struct Motd *themotd;
+};
+#endif /* USE_LIBCURL */
+
+struct Motd 
+{
+	struct MotdItem *lines;
+	struct tm last_modified; /* store the last modification time */
+
+#ifdef USE_LIBCURL
+	/*
+	  This pointer is used to communicate with an asynchronous MOTD
+	  download. The problem is that a download may take 10 seconds or
+	  more to complete and, in that time, the IRCd could be rehashed.
+	  This would mean that TLD blocks are reallocated and thus the
+	  aMotd structs would be free()d in the meantime.
+
+	  To prevent such a situation from leading to a segfault, we
+	  introduce this remote control pointer. It works like this:
+	  1. read_motd() is called with a URL. A new MotdDownload is
+	     allocated and the pointer is placed here. This pointer is
+	     also passed to the asynchrnous download handler.
+	  2.a. The download is completed and read_motd_asynch_downloaded()
+	       is called with the same pointer. From this function, this pointer
+	       if free()d. No other code may free() the pointer. Not even free_motd().
+	    OR
+	  2.b. The user rehashes the IRCd before the download is completed.
+	       free_motd() is called, which sets motd_download->themotd to NULL
+	       to signal to read_motd_asynch_downloaded() that it should ignore
+	       the download. read_motd_asynch_downloaded() is eventually called
+	       and frees motd_download.
+	 */
+	struct MotdDownload *motd_download;
+#endif /* USE_LIBCURL */
+};
+
 struct MotdItem {
 	char *line;
 	struct MotdItem *next;
@@ -756,7 +807,15 @@ struct User {
 	Link *silence;		/* chain of silence pointer blocks */
 	Link *dccallow;		/* chain of dccallowed entries */
 	char *away;		/* pointer to away message */
-	u_int32_t servicestamp;	/* Services' time stamp variable */
+
+	/*
+	 * svid: a value that is assigned by services to this user record.
+	 * in previous versions of Unreal, this was strictly a timestamp value,
+	 * which is less useful in the modern world of IRC where nicks are grouped to
+	 * accounts, so it is now a string.
+	 */
+	char svid[NICKLEN + 1];
+
 	signed char refcnt;	/* Number of times this block is referenced */
 	unsigned short joined;		/* number of channels joined */
 	char username[USERLEN + 1];
@@ -801,6 +860,7 @@ struct Server {
 #endif
 	struct {
 		unsigned synced:1;		/* Server linked? (3.2beta18+) */
+		unsigned server_sent:1;		/* SERVER message sent to this link? (for outgoing links) */
 	} flags;
 };
 
@@ -922,6 +982,8 @@ typedef struct {
 #define LISTENER_SSL		0x000040
 #define LISTENER_BOUND		0x000080
 
+#define IsServersOnlyListener(x)	((x) && ((x)->umodes & LISTENER_SERVERSONLY))
+
 #define CONNECT_SSL		0x000001
 #define CONNECT_ZIP		0x000002 
 #define CONNECT_AUTO		0x000004
@@ -932,6 +994,8 @@ typedef struct {
 #define SSLFLAG_FAILIFNOCERT 	0x1
 #define SSLFLAG_VERIFYCERT 	0x2
 #define SSLFLAG_DONOTACCEPTSELFSIGNED 0x4
+#define SSLFLAG_NOSTARTTLS	0x8
+
 struct Client {
 	struct Client *next, *prev, *hnext;
 	anUser *user;		/* ...defined, if this is a User */
@@ -969,9 +1033,7 @@ struct Client {
 	short lastsq;		/* # of 2k blocks when sendqueued called last */
 	dbuf sendQ;		/* Outgoing message queue--if socket full */
 	dbuf recvQ;		/* Hold for data incoming yet to be parsed */
-#ifdef NOSPOOF
 	u_int32_t nospoof;	/* Anti-spoofing random number */
-#endif
 	int proto;		/* ProtoCtl options */
 	long sendM;		/* Statistics: protocol messages send */
 	long sendK;		/* Statistics: total k-bytes send */
@@ -1011,6 +1073,11 @@ struct Client {
 	TS   cputime;
 #endif
 	char *error_str;	/* Quit reason set by dead_link in case of socket/buffer error */
+
+	char sasl_agent[NICKLEN + 1];
+	unsigned char sasl_out;
+	unsigned char sasl_complete;
+	u_short sasl_cookie;
 };
 
 
@@ -1109,6 +1176,12 @@ struct _configitem_me {
 	unsigned short	   numeric;
 };
 
+struct _configitem_files {
+	char	*motd_file, *rules_file, *smotd_file;
+	char	*botmotd_file, *opermotd_file, *svsmotd_file;
+	char	*pid_file, *tune_file;
+};
+
 struct _configitem_admin {
 	ConfigItem *prev, *next;
 	ConfigFlag flag;
@@ -1145,6 +1218,9 @@ struct _configitem_allow {
 	ConfigItem_class	*class;
 	struct irc_netmask	*netmask;
 	ConfigFlag_allow	flags;
+#ifdef INET6
+	unsigned short ipv6_clone_mask;
+#endif /* INET6 */
 };
 
 struct _configitem_oper {
@@ -1154,7 +1230,7 @@ struct _configitem_oper {
 	anAuthStruct	 *auth;
 	ConfigItem_class *class;
 	ConfigItem	 *from;
-	unsigned long	 modes;
+	unsigned long	 modes, require_modes;
 	long		 oflags;
 	int			maxlogins;
 };
@@ -1183,10 +1259,10 @@ struct _configitem_ulines {
 struct _configitem_tld {
 	ConfigItem 	*prev, *next;
 	ConfigFlag_tld 	flag;
-	char 		*mask, *motd_file, *rules_file, *smotd_file;
-	char 		*botmotd_file, *opermotd_file, *channel;
-	struct tm	motd_tm, smotd_tm;
-	aMotd		*rules, *motd, *smotd, *botmotd, *opermotd;
+	char 		*mask, *channel;
+	char 		*motd_file, *rules_file, *smotd_file;
+	char 		*botmotd_file, *opermotd_file;
+	aMotdFile	rules, motd, smotd, botmotd, opermotd;
 	u_short		options;
 };
 
@@ -1307,14 +1383,14 @@ struct _configitem_deny_version {
 struct _configitem_deny_channel {
 	ConfigItem		*prev, *next;
 	ConfigFlag		flag;
-	char			*channel, *reason, *redirect;
+	char			*channel, *reason, *redirect, *class;
 	unsigned char	warn;
 };
 
 struct _configitem_allow_channel {
 	ConfigItem		*prev, *next;
 	ConfigFlag		flag;
-	char			*channel;
+	char			*channel, *class;
 };
 
 struct _configitem_allow_dcc {
@@ -1369,9 +1445,21 @@ struct _configitem_alias_format {
 	regex_t expr;
 };
 
+/**
+ * In a rehash scenario, conf_include will contain all of the included
+ * configs that are actually in use. It also will contain includes
+ * that are being processed so that the configuration may be updated.
+ * INCLUDE_NOTLOADED is set on all of the config files that are being
+ * loaded and unset on already-loaded files. See
+ * unload_loaded_includes() and load_includes().
+ */
 #define INCLUDE_NOTLOADED  0x1
 #define INCLUDE_REMOTE     0x2
 #define INCLUDE_DLQUEUED   0x4
+/**
+ * Marks that an include was loaded without error. This seems to
+ * overlap with the INCLUDE_NOTLOADED meaning(?). --binki
+ */
 #define INCLUDE_USED       0x8
 	
 struct _configitem_include {
@@ -1382,13 +1470,15 @@ struct _configitem_include {
 	char *url;
 	char *errorbuf;
 #endif
+	char *included_from;
+	int included_from_line;
 };
 
 struct _configitem_help {
 	ConfigItem *prev, *next;
 	ConfigFlag flag;
 	char *command;
-	aMotd *text;
+	aMotdLine *text;
 };
 
 struct _configitem_offchans {
@@ -1555,6 +1645,7 @@ struct Channel {
 #ifdef JOINTHROTTLE
 	aJFlood *jflood;
 #endif
+	char *mode_lock;
 	char chname[1];
 };
 
@@ -1747,7 +1838,7 @@ struct liststruct {
 
 /* misc variable externs */
 
-extern MODVAR char *version, *infotext[], *dalinfotext[], *unrealcredits[];
+extern MODVAR char *version, *infotext[], *dalinfotext[], *unrealcredits[], *unrealinfo[];
 extern MODVAR char *generation, *creation;
 extern MODVAR char *gnulicense[];
 /* misc defines */
@@ -1757,6 +1848,8 @@ extern MODVAR char *gnulicense[];
 
 #define PARTFMT		":%s PART %s"
 #define PARTFMT2	":%s PART %s :%s"
+
+#define isexcept void
 
 #ifdef USE_SSL
 #include "ssl.h"
@@ -1840,6 +1933,13 @@ struct JFlood {
 	unsigned short numjoins;
 };
 #endif
+
+struct PendingNet {
+        aPendingNet *prev, *next; /* Previous and next in list */
+        aClient *sptr; /**< Client to which these servers belong */
+        int numservers; /**< Amount of servers in list */
+        int servers[1]; /** The list of servers (array of integer server numerics) */
+};
 
 void	init_throttling_hash();
 int	hash_throttling(struct IN_ADDR *in);

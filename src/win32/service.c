@@ -18,6 +18,7 @@
  */
 
 
+#include <winsock2.h>
 #include <windows.h>
 #include <winsvc.h>
 #include "struct.h"
@@ -86,7 +87,10 @@ VOID WINAPI IRCDCtrlHandler(DWORD opcode)
 	}
 	/* Rehash */
 	else if (opcode == IRCD_SERVICE_CONTROL_REHASH) 
+	{
 		rehash(&me,&me,0);
+		reread_motdsandrules();
+	}
 
 	SetServiceStatus(IRCDStatusHandle, &IRCDStatus);
 } 
@@ -123,7 +127,7 @@ VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv)
  
 	VerInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx(&VerInfo);
-	GetOSName(VerInfo, OSName);
+	GetOSName(OSName);
 
 	InitDebug();
 

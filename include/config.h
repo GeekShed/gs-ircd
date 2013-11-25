@@ -2,7 +2,7 @@
  *   Unreal Internet Relay Chat Daemon, include/config.h
  *   Copyright (C) 1990 Jarkko Oikarinen
  *
- *   $Id: config.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -71,6 +71,16 @@
 #undef NO_FDLIST
 
 /*
+ * Defining this will enable poll() usage instead of select().
+ * This is the default on *NIX as of 3.2.10.
+ * On Windows this would require Vista or newer so we stick with
+ * select for now.
+ */
+#ifndef _WIN32
+#define USE_POLL
+#endif
+
+/*
  * Defining this will allow all ircops to see people in +s channels
  * By default, only net/tech admins can see this
  */
@@ -98,6 +108,24 @@
   Remote rehash
 */
 #define REMOTE_REHASH
+
+/*
+ * Special remote include caching, see this Changelog item:
+ * - Added special caching of remote includes. When a remote include fails to
+ *   load (for example when the webserver is down), then the most recent
+ *   version of that remote include will be used, and the ircd will still boot
+ *   and be able to rehash. Even though this is quite a simple feature, it
+ *   can make a key difference when deciding to roll out remote includes on
+ *   your network. Previously, servers would be unable to boot or rehash when
+ *   the webserver was down, which would be a big problem (often unacceptable).
+ *   The latest version of fetched urls are cached in the cache/ directory as
+ *   cache/<md5 hash of url>.
+ *   Obviously, if there's no 'latest version' and an url fails, the ircd will
+ *   still not be able to boot. This would be the case if you added or changed
+ *   the path of a remote include and it's trying to fetch it for the first time.
+ * There usually is no reason to disable this.
+ */
+#define REMOTEINC_SPECIALCACHE
 
 /*
   Stripbadwords patch
@@ -207,8 +235,12 @@
 
 /*
  * Full pathnames and defaults of irc system's support files. Please note that
- * these are only the recommened names and paths. Change as needed.
- * You must define these to something, even if you don't really want them.
+ * these are only the recommened names and paths.  You must define PPATH if you 
+ * want a pidfile written. Also, IRCDTUNE should be defined because it is needed for
+ * operation. All of these options are runtime-configurable (except for CPATH and LPATH)
+ * in the files block of unrealircd.conf. CPATH is runtime-configurable as a command-
+ * line argument. These used as the default values for options absent from the user's
+ * unrealircd.conf.
  */
 #define	CPATH		"unrealircd.conf"	/* server configuration file */
 #define	MPATH		"ircd.motd"	/* server MOTD file */

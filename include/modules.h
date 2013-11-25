@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: modules.h,v 1.1.6.13 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 #ifndef MODULES_H
 #define MODULES_H
@@ -224,6 +224,9 @@ typedef struct {
 	 */
 	int			(*sjoin_check)(aChannel *, CmodeParam *, CmodeParam *);
 
+	/** Local channel mode? Prevents remote servers from setting/unsetting this */
+	char local;
+
 	/** Is this mode being unloaded?
 	 * This is set to 1 if the chanmode module providing this mode is unloaded
 	 * and we are waiting to see if in our new round of loads a "new" chanmode
@@ -246,6 +249,7 @@ typedef struct {
 	void		(*free_param)(CmodeParam *);
 	CmodeParam *	(*dup_struct)(CmodeParam *);
 	int		(*sjoin_check)(aChannel *, CmodeParam *, CmodeParam *);
+	char		local;
 } CmodeInfo;
 #endif
 
@@ -257,10 +261,11 @@ typedef struct {
 
 #define EXBTYPE_BAN			0 /* a ban */
 #define EXBTYPE_EXCEPT		1 /* an except */
+#define EXBTYPE_INVEX		2 /* an invite exception */
 
 #define EXTBANTABLESZ		32
 
-typedef enum ExtbanOptions { EXTBOPT_CHSVSMODE=0x1 } ExtbanOptions;
+typedef enum ExtbanOptions { EXTBOPT_CHSVSMODE=0x1, EXTBOPT_ACTMODIFIER=0x2, EXTBOPT_NOSTACKCHILD=0x4, EXTBOPT_INVEX=0x8 } ExtbanOptions;
 
 typedef struct {
 	/** extbans module */
@@ -653,6 +658,9 @@ int CallCmdoverride(Cmdoverride *ovr, aClient *cptr, aClient *sptr, int parc, ch
 #define HOOKTYPE_POST_SERVER_CONNECT 48
 #define HOOKTYPE_RAWPACKET_IN 49
 #define HOOKTYPE_LOCAL_NICKPASS 50
+#define HOOKTYPE_PACKET 51
+#define HOOKTYPE_HANDSHAKE 52
+#define HOOKTYPE_AWAY 53
 
 /* Hook return values */
 #define HOOK_CONTINUE 0
@@ -699,6 +707,9 @@ int CallCmdoverride(Cmdoverride *ovr, aClient *cptr, aClient *sptr, int parc, ch
 #define EFUNC_STRIPCONTROLCODES				32
 #define EFUNC_SPAMFILTER_BUILD_USER_STRING	33
 #define EFUNC_IS_SILENCED					34
+#define EFUNC_SEND_PROTOCTL_SERVERS	35
+#define EFUNC_VERIFY_LINK		36
+#define EFUNC_SEND_SERVER_MESSAGE	37
 
 /* Module flags */
 #define MODFLAG_NONE	0x0000

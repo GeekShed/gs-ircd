@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: zip.c,v 1.1.6.20 2009/04/13 11:03:59 syzop Exp $
+ *   $Id$
  */
 #include "struct.h"
 #include "common.h"

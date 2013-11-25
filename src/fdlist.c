@@ -17,7 +17,7 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* $Id: fdlist.c,v 1.1.1.1.2.24 2009/04/13 11:03:58 syzop Exp $ */
+/* $Id$ */
 
 #include "struct.h"
 #include "common.h"

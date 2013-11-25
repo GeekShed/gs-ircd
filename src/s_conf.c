@@ -79,6 +79,7 @@ struct _conf_operflag
 
 static int	_conf_admin		(ConfigFile *conf, ConfigEntry *ce);
 static int	_conf_me		(ConfigFile *conf, ConfigEntry *ce);
+static int	_conf_files		(ConfigFile *conf, ConfigEntry *ce);
 static int	_conf_oper		(ConfigFile *conf, ConfigEntry *ce);
 static int	_conf_class		(ConfigFile *conf, ConfigEntry *ce);
 static int	_conf_drpass		(ConfigFile *conf, ConfigEntry *ce);
@@ -116,6 +117,7 @@ static int	_conf_cgiirc	(ConfigFile *conf, ConfigEntry *ce);
 
 static int	_test_admin		(ConfigFile *conf, ConfigEntry *ce);
 static int	_test_me		(ConfigFile *conf, ConfigEntry *ce);
+static int	_test_files		(ConfigFile *conf, ConfigEntry *ce);
 static int	_test_oper		(ConfigFile *conf, ConfigEntry *ce);
 static int	_test_class		(ConfigFile *conf, ConfigEntry *ce);
 static int	_test_drpass		(ConfigFile *conf, ConfigEntry *ce);
@@ -157,6 +159,7 @@ static ConfigCommand _ConfigCommands[] = {
 	{ "deny",		_conf_deny,		_test_deny	},
 	{ "drpass",		_conf_drpass,		_test_drpass	},
 	{ "except",		_conf_except,		_test_except	},
+	{ "files",		_conf_files,		_test_files	},
 	{ "help",		_conf_help,		_test_help	},
 	{ "include",		NULL,	  		_test_include	},
 	{ "link", 		_conf_link,		_test_link	},
@@ -279,6 +282,7 @@ static OperFlag _LogFlags[] = {
 
 /* This MUST be alphabetized */
 static OperFlag ExceptTklFlags[] = {
+	{ 0, "all" },
 	{ TKL_GLOBAL|TKL_KILL,	"gline" },
 	{ TKL_GLOBAL|TKL_NICK,	"gqline" },
 	{ TKL_GLOBAL|TKL_ZAP,	"gzline" },
@@ -291,6 +295,7 @@ static OperFlag ExceptTklFlags[] = {
 static OperFlag _SSLFlags[] = {
 	{ SSLFLAG_FAILIFNOCERT, "fail-if-no-clientcert" },
 	{ SSLFLAG_DONOTACCEPTSELFSIGNED, "no-self-signed" },
+	{ SSLFLAG_NOSTARTTLS, "no-starttls" },
 	{ SSLFLAG_VERIFYCERT, "verify-certificate" },
 };
 #endif
@@ -347,13 +352,14 @@ void delete_cgiircblock(ConfigItem_cgiirc *e);
  * Config parser (IRCd)
 */
 int			init_conf(char *rootconf, int rehash);
-int			load_conf(char *filename);
+int			load_conf(char *filename, const char *original_path);
 void			config_rehash();
 int			config_run();
 /*
  * Configuration linked lists
 */
 ConfigItem_me		*conf_me = NULL;
+ConfigItem_files	*conf_files = NULL;
 ConfigItem_class 	*conf_class = NULL;
 ConfigItem_class	*default_class = NULL;
 ConfigItem_admin 	*conf_admin = NULL;
@@ -393,9 +399,10 @@ MODVAR ConfigFile		*conf = NULL;
 MODVAR int			config_error_flag = 0;
 int			config_verbose = 0;
 
-void add_include(char *);
+void add_include(const char *filename, const char *included_from, int included_from_line);
 #ifdef USE_LIBCURL
-void add_remote_include(char *, char *, int, char *);
+void add_remote_include(const char *, const char *, int, const char *, const char *included_from, int included_from_line);
+void update_remote_include(ConfigItem_include *inc, const char *file, int, const char *errorbuf);
 int remote_include(ConfigEntry *ce);
 #endif
 void unload_notloaded_includes(void);
@@ -943,11 +950,82 @@ void chmode_str(struct ChMode modes, char *mbuf, char *pbuf)
 
 int channellevel_to_int(char *s)
 {
+	/* Requested at http://bugs.unrealircd.org/view.php?id=3852 */
 	if (!strcmp(s, "none"))
 		return CHFL_DEOPPED;
+	if (!strcmp(s, "voice")) 
+		return CHFL_VOICE;
+	if (!strcmp(s, "halfop"))
+		return CHFL_HALFOP;
 	if (!strcmp(s, "op") || !strcmp(s, "chanop"))
 		return CHFL_CHANOP;
+	if (!strcmp(s, "protect") || !strcmp(s, "chanprot"))
+#ifdef PREFIX_AQ
+		return CHFL_CHANPROT;
+#else
+		return CHFL_CHANOP|CHFL_CHANPROT;
+#endif
+	if (!strcmp(s, "owner") || !strcmp(s, "chanowner"))
+#ifdef PREFIX_AQ
+		return CHFL_CHANOWNER;
+#else
+		return CHFL_CHANOP|CHFL_CHANOWNER;
+#endif
+	
 	return 0; /* unknown or unsupported */
+}
+
+/* Channel flag (eg: CHFL_CHANOWNER) to SJOIN symbol (eg: *).
+ * WARNING: Do not confuse SJOIN symbols with prefixes in /NAMES!
+ */
+char *chfl_to_sjoin_symbol(int s)
+{
+	switch(s)
+	{
+		case CHFL_VOICE:
+			return "+";
+		case CHFL_HALFOP:
+			return "%";
+		case CHFL_CHANOP:
+			return "@";
+		case CHFL_CHANPROT:
+#ifdef PREFIX_AQ
+			return "~";
+#else
+			return "~@";
+#endif
+		case CHFL_CHANOWNER:
+#ifdef PREFIX_AQ
+			return "*";
+#else
+			return "*@";
+#endif
+		case CHFL_DEOPPED:
+		default:
+			return "";
+	}
+	/* NOT REACHED */
+}
+
+char chfl_to_chanmode(int s)
+{
+	switch(s)
+	{
+		case CHFL_VOICE:
+			return 'v';
+		case CHFL_HALFOP:
+			return 'h';
+		case CHFL_CHANOP:
+			return 'o';
+		case CHFL_CHANPROT:
+			return 'a';
+		case CHFL_CHANOWNER:
+			return 'q';
+		case CHFL_DEOPPED:
+		default:
+			return '\0';
+	}
+	/* NOT REACHED */
 }
 
 ConfigFile *config_load(char *filename)
@@ -1445,6 +1523,79 @@ static void inline config_warn_duplicate(const char *filename, int line, const c
 	config_warn("%s:%d: Duplicate %s directive", filename, line, entry);
 }
 
+/* returns 1 if the test fails */
+int config_test_openfile(ConfigEntry *cep, int flags, mode_t mode, const char *entry, int fatal, int allow_url)
+{
+	int fd;
+
+	if(!cep->ce_vardata)
+	{
+		if(fatal)
+			config_error("%s:%i: %s: <no file specified>: no file specified",
+				     cep->ce_fileptr->cf_filename,
+				     cep->ce_varlinenum,
+				     entry);
+		else
+			
+			config_warn("%s:%i: %s: <no file specified>: no file specified",
+				    cep->ce_fileptr->cf_filename,
+				    cep->ce_varlinenum,
+				    entry);
+		return 1;
+	}
+
+	/* There's not much checking that can be done for asynchronously downloaded files */
+#ifdef USE_LIBCURL
+	if(url_is_valid(cep->ce_vardata))
+	{
+		if(allow_url)
+			return 0;
+
+		/* but we can check if a URL is used wrongly :-) */
+		config_warn("%s:%i: %s: %s: URL used where not allowed",
+			    cep->ce_fileptr->cf_filename,
+			    cep->ce_varlinenum,
+			    entry, cep->ce_vardata);
+		if(fatal)
+			return 1;
+		else
+			return 0;
+	}
+#endif /* USE_LIBCURL */
+
+	/* 
+	 * Make sure that files are created with the correct mode. This is 
+	 * because we don't feel like unlink()ing them...which would require
+	 * stat()ing them to make sure that we don't delete existing ones
+	 * and that we deal with all of the bugs that come with complexity. 
+	 * The only files we may be creating are the tunefile and pidfile so far.
+	 */
+	if(flags & O_CREAT)
+		fd = open(cep->ce_vardata, flags, mode);
+	else
+		fd = open(cep->ce_vardata, flags);
+	if(fd == -1)
+	{
+		if(fatal)
+			config_error("%s:%i: %s: %s: %s",
+				     cep->ce_fileptr->cf_filename,
+				     cep->ce_varlinenum,
+				     entry,
+				     cep->ce_vardata,
+				     strerror(errno));
+		else
+			config_warn("%s:%i: %s: %s: %s",
+				     cep->ce_fileptr->cf_filename,
+				     cep->ce_varlinenum,
+				     entry,
+				     cep->ce_vardata,
+				     strerror(errno));
+		return 1;
+	}
+	close(fd);
+	return 0;
+}
+
 void config_progress(char *format, ...)
 {
 	va_list		ap;
@@ -1574,6 +1725,12 @@ void config_setdefaultsettings(aConfiguration *i)
 	i->name_server = strdup("127.0.0.1"); /* default, especially needed for w2003+ in some rare cases */
 	i->level_on_join = CHFL_CHANOP;
 	i->watch_away_notification = 1;
+	i->new_linking_protocol = 1;
+	i->uhnames = 1;
+	i->ping_cookie = 1;
+#ifdef INET6
+	i->default_ipv6_clone_mask = 64;
+#endif /* INET6 */
 }
 
 /* 1: needed for set::options::allow-part-if-shunned,
@@ -1644,6 +1801,14 @@ char *encoded;
 			if (hunted)
 				IsupportDel(hunted);
 		}
+		if (UHNAMES_ENABLED)
+		{
+			IsupportAdd(NULL, "UHNAMES", NULL);
+		} else {
+			Isupport *hunted = IsupportFind("UHNAMES");
+			if (hunted)
+				IsupportDel(hunted);
+		}
 	}
 }
 
@@ -1692,6 +1857,8 @@ void applymeblock(void)
 
 int	init_conf(char *rootconf, int rehash)
 {
+	char *old_pid_file = NULL;
+  
 	config_status("Loading IRCd configuration ..");
 	if (conf)
 	{
@@ -1702,7 +1869,16 @@ int	init_conf(char *rootconf, int rehash)
 	bzero(&settings, sizeof(settings));
 	bzero(&requiredstuff, sizeof(requiredstuff));
 	config_setdefaultsettings(&tempiConf);
-	if (load_conf(rootconf) > 0)
+	/*
+	 * the rootconf must be listed in the conf_include for include
+	 * recursion prevention code and sanity checking code to be
+	 * made happy :-). Think of it as us implicitly making an
+	 * in-memory config file that looks like:
+	 *
+	 * include "unrealircd.conf";
+	 */
+	add_include(rootconf, "[thin air]", -1);
+	if (load_conf(rootconf, rootconf) > 0)
 	{
 		charsys_reset_pretest();
 		if ((config_test() < 0) || (callbacks_check() < 0) || (efunctions_check() < 0) ||
@@ -1727,6 +1903,7 @@ int	init_conf(char *rootconf, int rehash)
 		if (rehash)
 		{
 			Hook *h;
+			old_pid_file = conf_files->pid_file;
 			unrealdns_delasyncconnects();
 			config_rehash();
 #ifndef STATIC_LINKING
@@ -1770,7 +1947,17 @@ int	init_conf(char *rootconf, int rehash)
 		}
 		charsys_finish();
 		applymeblock();
-	}
+		if(old_pid_file &&
+		   strcmp(old_pid_file, conf_files->pid_file))
+			{
+				sendto_ops("pidfile is being rewritten to %s, please delete %s",
+					   conf_files->pid_file,
+					   old_pid_file);
+				ircfree(old_pid_file);
+				
+				write_pidfile();
+			}
+		   }
 	else	
 	{
 		config_error("IRCd configuration failed to load");
@@ -1804,14 +1991,95 @@ int	init_conf(char *rootconf, int rehash)
 	return 0;
 }
 
-int	load_conf(char *filename)
+/**
+ * Processes filename as part of the IRCd's configuration.
+ *
+ * One _must_ call add_include() or add_remote_include() before
+ * calling load_conf(). This way, include recursion may be detected
+ * and reported to the user as an error instead of causing the IRCd to
+ * hang in an infinite recursion, eat up memory, and eventually
+ * overflow its stack ;-). (reported by warg).
+ *
+ * This function will set INCLUDE_USED on the config_include list
+ * entry if the config file loaded without error.
+ *
+ * @param filename the file where the conf may be read from
+ * @param original_path the path or URL used to refer to this file.
+ *        (mostly to support remote includes' URIs for recursive include detection).
+ * @return 1 on success, a negative number on error
+ */
+int	load_conf(char *filename, const char *original_path)
 {
 	ConfigFile 	*cfptr, *cfptr2, **cfptr3;
 	ConfigEntry 	*ce;
+	ConfigItem_include *inc, *my_inc;
 	int		ret;
+	int counter;
 
 	if (config_verbose > 0)
 		config_status("Loading config file %s ..", filename);
+
+	/*
+	 * Check if we're accidentally including a file a second
+	 * time. We should expect to find one entry in this list: the
+	 * entry for our current file.
+	 */
+	counter = 0;
+	my_inc = NULL;
+	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
+	{
+		/*
+		 * ignore files which were part of a _previous_
+		 * successful rehash.
+		 */
+		if (!(inc->flag.type & INCLUDE_NOTLOADED))
+			continue;
+
+		if (!counter)
+			my_inc = inc;
+
+		if (!strcmp(filename, inc->file))
+		{
+			counter ++;
+			continue;
+		}
+#ifdef _WIN32
+		if (!stricmp(filename, inc->file))
+		{
+			counter ++;
+			continue;
+		}
+#endif
+#ifdef USE_LIBCURL
+		if (inc->url && !strcmp(original_path, inc->url))
+		{
+			counter ++;
+			continue;
+		}
+#endif
+	}
+	if (counter > 1 || my_inc->flag.type & INCLUDE_USED)
+	{
+		config_error("%s:%d:include: Config file %s has been loaded before %d time."
+			     " You may include each file only once.",
+			     my_inc->included_from, my_inc->included_from_line,
+			     filename, counter - 1);
+		return -1;
+	}
+	if (counter < 1 || !my_inc)
+	{
+		/*
+		 * The following is simply for debugging/[sanity
+		 * checking]. To make sure that functions call
+		 * add_include() or add_remote_include() before
+		 * calling us.
+		 */
+		config_error("I don't have a record for %s being included."
+			     " Perhaps someone forgot to call add_include()?",
+			     filename);
+	}
+	/* end include recursion checking code */
+
 	if ((cfptr = config_load(filename)))
 	{
 		for (cfptr3 = &conf, cfptr2 = conf; cfptr2; cfptr2 = cfptr2->cf_next)
@@ -1835,13 +2103,14 @@ int	load_conf(char *filename)
 				 if (ret < 0) 
 					 	return ret;
 			}
+		my_inc->flag.type |= INCLUDE_USED;
 		return 1;
 	}
 	else
 	{
 		config_error("Could not load config file %s", filename);
 		return -1;
-	}	
+	}
 }
 
 void	config_rehash()
@@ -1981,47 +2250,19 @@ void	config_rehash()
 	}
 	for (tld_ptr = conf_tld; tld_ptr; tld_ptr = (ConfigItem_tld *) next)
 	{
-		aMotd *motd;
 		next = (ListStruct *)tld_ptr->next;
 		ircfree(tld_ptr->motd_file);
 		ircfree(tld_ptr->rules_file);
 		ircfree(tld_ptr->smotd_file);
 		ircfree(tld_ptr->opermotd_file);
 		ircfree(tld_ptr->botmotd_file);
-		if (!tld_ptr->flag.motdptr) {
-			while (tld_ptr->motd) {
-				motd = tld_ptr->motd->next;
-				ircfree(tld_ptr->motd->line);
-				ircfree(tld_ptr->motd);
-				tld_ptr->motd = motd;
-			}
-		}
-		if (!tld_ptr->flag.rulesptr) {
-			while (tld_ptr->rules) {
-				motd = tld_ptr->rules->next;
-				ircfree(tld_ptr->rules->line);
-				ircfree(tld_ptr->rules);
-				tld_ptr->rules = motd;
-			}
-		}
-		while (tld_ptr->smotd) {
-			motd = tld_ptr->smotd->next;
-			ircfree(tld_ptr->smotd->line);
-			ircfree(tld_ptr->smotd);
-			tld_ptr->smotd = motd;
-		}
-		while (tld_ptr->opermotd) {
-			motd = tld_ptr->opermotd->next;
-			ircfree(tld_ptr->opermotd->line);
-			ircfree(tld_ptr->opermotd);
-			tld_ptr->opermotd = motd;
-		}
-		while (tld_ptr->botmotd) {
-			motd = tld_ptr->botmotd->next;
-			ircfree(tld_ptr->botmotd->line);
-			ircfree(tld_ptr->botmotd);
-			tld_ptr->botmotd = motd;
-		}
+
+		free_motd(&tld_ptr->motd);
+		free_motd(&tld_ptr->rules);
+		free_motd(&tld_ptr->smotd);
+		free_motd(&tld_ptr->opermotd);
+		free_motd(&tld_ptr->botmotd);
+
 		DelListItem(tld_ptr, conf_tld);
 		MyFree(tld_ptr);
 	}
@@ -2129,6 +2370,7 @@ void	config_rehash()
 		ircfree(deny_channel_ptr->redirect);
 		ircfree(deny_channel_ptr->channel);
 		ircfree(deny_channel_ptr->reason);
+		ircfree(deny_channel_ptr->class);
 		DelListItem(deny_channel_ptr, conf_deny_channel);
 		MyFree(deny_channel_ptr);
 	}
@@ -2137,6 +2379,7 @@ void	config_rehash()
 	{
 		next = (ListStruct *)allow_channel_ptr->next;
 		ircfree(allow_channel_ptr->channel);
+		ircfree(allow_channel_ptr->class);
 		DelListItem(allow_channel_ptr, conf_allow_channel);
 		MyFree(allow_channel_ptr);
 	}
@@ -2188,7 +2431,7 @@ void	config_rehash()
 		MyFree(alias_ptr);
 	}
 	for (help_ptr = conf_help; help_ptr; help_ptr = (ConfigItem_help *)next) {
-		aMotd *text;
+		aMotdLine *text;
 		next = (ListStruct *)help_ptr->next;
 		ircfree(help_ptr->command);
 		while (help_ptr->text) {
@@ -2234,6 +2477,25 @@ void	config_rehash()
 		next = (ListStruct *)cgiirc_ptr->next;
 		delete_cgiircblock(cgiirc_ptr);
 	}
+
+	/*
+	  reset conf_files -- should this be in its own function? no, because
+	  it's only used here
+	 */
+	ircfree(conf_files->motd_file);
+	ircfree(conf_files->smotd_file);
+	ircfree(conf_files->opermotd_file);
+	ircfree(conf_files->svsmotd_file);
+	ircfree(conf_files->botmotd_file);
+	ircfree(conf_files->rules_file);
+	ircfree(conf_files->tune_file);
+	/* 
+	   Don't free conf_files->pid_file here; the old value is used to determine if 
+	   the pidfile location has changed and write_pidfile() needs to be called 
+	   again.
+	*/
+	ircfree(conf_files);
+	conf_files = NULL;
 }
 
 int	config_post_test()
@@ -2306,6 +2568,9 @@ int	config_run()
 	ConfigCommand	*cc;
 	int		errors = 0;
 	Hook *h;
+#ifdef INET6
+	ConfigItem_allow *allow;
+#endif /* INET6 */
 	for (cfptr = conf; cfptr; cfptr = cfptr->cf_next)
 	{
 		if (config_verbose > 1)
@@ -2328,6 +2593,17 @@ int	config_run()
 			}
 		}
 	}
+#ifdef INET6
+	/*
+	 * transfer default values from set::ipv6_clones_mask into
+	 * each individual allow block. If other similar things like
+	 * this stack up here, perhaps this shoul be moved to another
+	 * function.
+	 */
+	for(allow = conf_allow; allow; allow = (ConfigItem_allow *)allow->next)
+		if(!allow->ipv6_clone_mask)
+			allow->ipv6_clone_mask = tempiConf.default_ipv6_clone_mask;
+#endif /* INET6 */
 
 	close_listeners();
 	listen_cleanup();
@@ -2353,6 +2629,10 @@ int	config_run()
 		EventMod(EventFind("bucketcleaning"), &eInfo);
 	}
 #endif
+
+	/* initialize conf_files with defaults if the block isn't set: */
+	if(!conf_files)
+	  _conf_files(NULL, NULL);
 
 	if (errors > 0)
 	{
@@ -2717,6 +2997,9 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 	int  i, ii = 0;
 	static char uhost[HOSTLEN + USERLEN + 3];
 	static char fullname[HOSTLEN + 1];
+#ifdef INET6
+	short is_ipv4;
+#endif /* INET6 */
 
 	for (aconf = conf_allow; aconf; aconf = (ConfigItem_allow *) aconf->next)
 	{
@@ -2791,16 +3074,27 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 		else
 			strncpyzt(uhost, sockhost, sizeof(uhost));
 		get_sockhost(cptr, uhost);
+#ifdef INET6
+		is_ipv4 = IN6_IS_ADDR_V4MAPPED(&cptr->ip);
+#endif /* INET6 */
+
 		/* FIXME */
 		if (aconf->maxperip)
 		{
 			ii = 1;
 			for (i = LastSlot; i >= 0; i--)
-				if (local[i] && MyClient(local[i]) &&
+				if (local[i] && MyClient(local[i])
 #ifndef INET6
-				    local[i]->ip.S_ADDR == cptr->ip.S_ADDR)
+				    && local[i]->ip.S_ADDR == cptr->ip.S_ADDR)
 #else
-				    !bcmp(local[i]->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR)))
+				    /*
+				     * match IPv4 exactly and the ipv6
+				     * based on ipv6_clone_mask.
+				     */
+				    && (is_ipv4
+					? !bcmp(local[i]->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR))
+					: match_ipv6(&local[i]->ip, &cptr->ip, aconf->ipv6_clone_mask)))
+						
 #endif
 				{
 					ii++;
@@ -2850,21 +3144,21 @@ ConfigItem_vhost *Find_vhost(char *name) {
 
 
 /** returns NULL if allowed and struct if denied */
-ConfigItem_deny_channel *Find_channel_allowed(char *name)
+ConfigItem_deny_channel *Find_channel_allowed(aClient *cptr, char *name)
 {
 	ConfigItem_deny_channel *dchannel;
 	ConfigItem_allow_channel *achannel;
 
 	for (dchannel = conf_deny_channel; dchannel; dchannel = (ConfigItem_deny_channel *)dchannel->next)
 	{
-		if (!match(dchannel->channel, name))
+		if (!match(dchannel->channel, name) && (dchannel->class ? !strcmp(cptr->class->name, dchannel->class) : 1))
 			break;
 	}
 	if (dchannel)
 	{
 		for (achannel = conf_allow_channel; achannel; achannel = (ConfigItem_allow_channel *)achannel->next)
 		{
-			if (!match(achannel->channel, name))
+			if (!match(achannel->channel, name) && (achannel->class ? !strcmp(cptr->class->name, achannel->class) : 1))
 				break;
 		}
 		if (achannel)
@@ -2944,13 +3238,13 @@ int	_conf_include(ConfigFile *conf, ConfigEntry *ce)
 		return -1;
 	}	
 	for (i = 0; i < files.gl_pathc; i++) {
-		ret = load_conf(files.gl_pathv[i]);
+		add_include(files.gl_pathv[i], ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		ret = load_conf(files.gl_pathv[i], files.gl_pathv[i]);
 		if (ret < 0)
 		{
 			globfree(&files);
 			return ret;
 		}
-		add_include(files.gl_pathv[i]);
 	}
 	globfree(&files);
 #elif defined(_WIN32)
@@ -2971,19 +3265,18 @@ int	_conf_include(ConfigFile *conf, ConfigEntry *ce)
 	}
 	if (cPath) {
 		path = MyMalloc(strlen(cPath) + strlen(FindData.cFileName)+1);
-		strcpy(path,cPath);
-		strcat(path,FindData.cFileName);
-		ret = load_conf(path);
-		if (ret >= 0)
-			add_include(path);
+		strcpy(path, cPath);
+		strcat(path, FindData.cFileName);
+
+		add_include(path, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		ret = load_conf(path, path);
 		free(path);
 
 	}
 	else
 	{
-		ret = load_conf(FindData.cFileName);
-		if (ret >= 0)
-			add_include(FindData.cFileName);
+		add_include(FindData.cFileName, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		ret = load_conf(FindData.cFileName, FindData.cFileName);
 	}
 	if (ret < 0)
 	{
@@ -2997,32 +3290,25 @@ int	_conf_include(ConfigFile *conf, ConfigEntry *ce)
 			path = MyMalloc(strlen(cPath) + strlen(FindData.cFileName)+1);
 			strcpy(path,cPath);
 			strcat(path,FindData.cFileName);
-			ret = load_conf(path);
-			if (ret >= 0)
-			{
-				add_include(path);
-				free(path);
-			}
-			else
-			{
-				free(path);
+
+			add_include(path, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+			ret = load_conf(path, path);
+			free(path);
+			if (ret < 0)
 				break;
-			}
 		}
 		else
 		{
-			ret = load_conf(FindData.cFileName);
-			if (ret >= 0)
-				add_include(FindData.cFileName);
+			add_include(FindData.cFileName, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+			ret = load_conf(FindData.cFileName, FindData.cFileName);
 		}
 	}
 	FindClose(hFind);
 	if (ret < 0)
 		return ret;
 #else
-	ret = load_conf(ce->ce_vardata);
-	if (ret >= 0)
-		add_include(ce->ce_vardata);
+	add_include(ce->ce_vardata, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+	ret = load_conf(ce->ce_vardata, ce->ce_vardata);
 	return ret;
 #endif
 	return 1;
@@ -3229,6 +3515,182 @@ int	_test_me(ConfigFile *conf, ConfigEntry *ce)
 }
 
 /*
+ * The files {} block
+ */
+int	_conf_files(ConfigFile *conf, ConfigEntry *ce)
+{
+	ConfigEntry *cep;
+
+	if (!conf_files)
+	{
+		conf_files = MyMallocEx(sizeof(ConfigItem_files));
+
+		/* set defaults */
+		conf_files->motd_file = strdup(MPATH);
+		conf_files->rules_file = strdup(RPATH);
+		conf_files->smotd_file = strdup(SMPATH);
+		conf_files->botmotd_file = strdup(BPATH);
+		conf_files->opermotd_file = strdup(OPATH);
+		conf_files->svsmotd_file = strdup(VPATH);
+		
+		conf_files->pid_file = strdup(IRCD_PIDFILE);
+		conf_files->tune_file = strdup(IRCDTUNE);
+		
+		/* we let actual files get read in later by the motd caching mechanism */
+	}
+	/*
+	 * hack to allow initialization of conf_files (above) when there is no files block in 
+	 * CPATH. The caller calls _conf_files(NULL, NULL); to do this. We return here because 
+	 * the for loop's initialization of cep would segfault otherwise. We return 1 because
+	 * if config_run() calls us with a NULL ce, it's got a bug...but we can't detect that.
+	 */
+	if(!ce)
+	  return 1;
+	
+	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
+	{
+		if (!strcmp(cep->ce_varname, "motd"))
+			ircstrdup(conf_files->motd_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "shortmotd"))
+			ircstrdup(conf_files->smotd_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "opermotd"))
+			ircstrdup(conf_files->opermotd_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "svsmotd"))
+			ircstrdup(conf_files->svsmotd_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "botmotd"))
+			ircstrdup(conf_files->botmotd_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "rules"))
+			ircstrdup(conf_files->rules_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "tunefile"))
+			ircstrdup(conf_files->tune_file, cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "pidfile"))
+			ircstrdup(conf_files->pid_file, cep->ce_vardata);
+	}
+	return 1;
+}
+
+int	_test_files(ConfigFile *conf, ConfigEntry *ce)
+{
+	ConfigEntry *cep;
+	int	    errors = 0;
+	char has_motd = 0, has_smotd = 0, has_rules = 0;
+	char has_botmotd = 0, has_opermotd = 0, has_svsmotd = 0;
+	char has_pidfile = 0, has_tunefile = 0;
+	
+	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
+	{
+		/* files::motd */
+		if (!strcmp(cep->ce_varname, "motd"))
+		{
+			if (has_motd)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename, 
+					cep->ce_varlinenum, "files::motd");
+				continue;
+			}
+			config_test_openfile(cep, O_RDONLY, 0, "files::motd", 0, 1);
+			has_motd = 1;
+		}
+		/* files::smotd */
+		else if (!strcmp(cep->ce_varname, "shortmotd")) 
+		{
+			if (has_smotd)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::shortmotd");
+				continue;
+			}
+			config_test_openfile(cep, O_RDONLY, 0, "files::shortmotd", 0, 1);
+			has_smotd = 1;
+		}
+		/* files::rules */
+		else if (!strcmp(cep->ce_varname, "rules")) 
+		{
+			if (has_rules)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::rules");
+				continue;
+			}
+			config_test_openfile(cep, O_RDONLY, 0, "files::rules", 0, 1);
+			has_rules = 1;
+		}
+		/* files::botmotd */
+		else if (!strcmp(cep->ce_varname, "botmotd")) 
+		{
+			if (has_botmotd)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::botmotd");
+				continue;
+			}
+			config_test_openfile(cep, O_RDONLY, 0, "files::botmotd", 0, 1);
+			has_botmotd = 1;
+		}
+		/* files::opermotd */
+		else if (!strcmp(cep->ce_varname, "opermotd")) 
+		{
+			if (has_opermotd)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::opermotd");
+				continue;
+			}
+			config_test_openfile(cep, O_RDONLY, 0, "files::opermotd", 0, 1);
+			has_opermotd = 1;
+		}
+		/* files::svsmotd 
+		 * This config stuff should somehow be inside of modules/m_svsmotd.c!!!... right?
+		 */
+		else if (!strcmp(cep->ce_varname, "svsmotd")) 
+		{
+			if (has_svsmotd)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::svsmotd");
+				continue;
+			}
+			/* svsmotd can't be a URL because we have to be able to write to it */
+			config_test_openfile(cep, O_RDONLY, 0, "files::svsmotd", 0, 0);
+			has_svsmotd = 1;
+		}
+		/* files::pidfile */
+		else if (!strcmp(cep->ce_varname, "pidfile")) 
+		{
+			if (has_pidfile)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::pidfile");
+				continue;
+			}
+			
+			errors += config_test_openfile(cep, O_WRONLY | O_CREAT, 0600, "files::pidfile", 1, 0);
+			has_pidfile = 1;
+		}
+		/* files::tunefile */
+		else if (!strcmp(cep->ce_varname, "tunefile")) 
+		{
+			if (has_tunefile)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "files::tunefile");
+				continue;
+			}
+			errors += config_test_openfile(cep, O_RDWR | O_CREAT, 0600, "files::tunefile", 1, 0);
+			has_tunefile = 1;
+		}
+		/* <random directive here> */
+		else
+		{
+			config_error("%s:%d: Unknown directive: \"%s\" in files {}", cep->ce_fileptr->cf_filename,
+				     cep->ce_varlinenum, cep->ce_varname);
+			errors ++;
+		}
+	}
+	return errors;
+}
+
+/*
  * The oper {} block parser
 */
 
@@ -3297,6 +3759,10 @@ int	_conf_oper(ConfigFile *conf, ConfigEntry *ce)
 		{
 			oper->modes = set_usermode(cep->ce_vardata);
 		}
+		else if (!strcmp(cep->ce_varname, "require-modes"))
+		{
+			oper->require_modes = set_usermode(cep->ce_vardata);
+		}
 		else if (!strcmp(cep->ce_varname, "maxlogins"))
 		{
 			oper->maxlogins = atoi(cep->ce_vardata);
@@ -3327,7 +3793,7 @@ int	_conf_oper(ConfigFile *conf, ConfigEntry *ce)
 int	_test_oper(ConfigFile *conf, ConfigEntry *ce)
 {
 	char has_class = 0, has_password = 0, has_flags = 0, has_swhois = 0, has_snomask = 0;
-	char has_modes = 0, has_from = 0, has_maxlogins = 0;
+	char has_modes = 0, has_require_modes = 0, has_from = 0, has_maxlogins = 0;
 	int oper_flags = 0;
 	ConfigEntry *cep;
 	ConfigEntry *cepp;
@@ -3403,7 +3869,7 @@ int	_test_oper(ConfigFile *conf, ConfigEntry *ce)
 				has_snomask = 1;
 			}
 			/* oper::modes */
-			else if (!strcmp(cep->ce_varname, "modes")) 
+			else if (!strcmp(cep->ce_varname, "modes"))
 			{
 				char *p;
 				for (p = cep->ce_vardata; *p; p++)
@@ -3420,6 +3886,24 @@ int	_test_oper(ConfigFile *conf, ConfigEntry *ce)
 					continue;
 				}
 				has_modes = 1;
+			}
+			/* oper::require-modes */
+			else if (!strcmp(cep->ce_varname, "require-modes"))
+			{
+				char *p;
+				for (p = cep->ce_vardata; *p; p++)
+					if (strchr("oOaANC", *p))
+					{
+						config_warn("%s:%i: oper::require-modes probably shouldn't include mode '%c'",
+							cep->ce_fileptr->cf_filename, cep->ce_varlinenum, *p);
+					}
+				if (has_require_modes)
+				{
+					config_warn_duplicate(cep->ce_fileptr->cf_filename,
+						cep->ce_varlinenum, "oper::require-modes");
+					continue;
+				}
+				has_require_modes = 1;
 			}
 			/* oper::maxlogins */
 			else if (!strcmp(cep->ce_varname, "maxlogins"))
@@ -3631,6 +4115,12 @@ int	_test_class(ConfigFile *conf, ConfigEntry *ce)
 		config_error_noname(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "class");
 		errors++;
 	}
+	if (!strcasecmp(ce->ce_vardata, "default"))
+	{
+		config_error("%s:%d: Class cannot be named 'default', this class name is reserved for internal use.",
+			ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		errors++;
+	}
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 	{
 		if (!strcmp(cep->ce_varname, "options"))
@@ -3723,7 +4213,7 @@ int	_test_class(ConfigFile *conf, ConfigEntry *ce)
 			}
 			has_sendq = 1;
 			l = atol(cep->ce_vardata);
-			if ((l < 0) || (l > 2000000000))
+			if ((l <= 0) || (l > 2000000000))
 			{
 				config_error("%s:%i: class::sendq with illegal value",
 					cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
@@ -3910,27 +4400,27 @@ int     _conf_tld(ConfigFile *conf, ConfigEntry *ce)
 		else if (!strcmp(cep->ce_varname, "motd"))
 		{
 			ca->motd_file = strdup(cep->ce_vardata);
-			ca->motd = read_file_ex(cep->ce_vardata, NULL, &ca->motd_tm);
+			read_motd(cep->ce_vardata, &ca->motd);
 		}
 		else if (!strcmp(cep->ce_varname, "shortmotd"))
 		{
 			ca->smotd_file = strdup(cep->ce_vardata);
-			ca->smotd = read_file_ex(cep->ce_vardata, NULL, &ca->smotd_tm);
+			read_motd(cep->ce_vardata, &ca->smotd);
 		}
 		else if (!strcmp(cep->ce_varname, "opermotd"))
 		{
 			ca->opermotd_file = strdup(cep->ce_vardata);
-			ca->opermotd = read_file(cep->ce_vardata, NULL);
+			read_motd(cep->ce_vardata, &ca->opermotd);
 		}
 		else if (!strcmp(cep->ce_varname, "botmotd"))
 		{
 			ca->botmotd_file = strdup(cep->ce_vardata);
-			ca->botmotd = read_file(cep->ce_vardata, NULL);
+			read_motd(cep->ce_vardata, &ca->botmotd);
 		}
 		else if (!strcmp(cep->ce_varname, "rules"))
 		{
 			ca->rules_file = strdup(cep->ce_vardata);
-			ca->rules = read_file(cep->ce_vardata, NULL);
+			read_motd(cep->ce_vardata, &ca->rules);
 		}
 		else if (!strcmp(cep->ce_varname, "options"))
 		{
@@ -4431,6 +4921,17 @@ int	_conf_allow(ConfigFile *conf, ConfigEntry *ce)
 			allow->server = strdup(cep->ce_vardata);
 		else if (!strcmp(cep->ce_varname, "redirect-port"))
 			allow->port = atoi(cep->ce_vardata);
+		else if (!strcmp(cep->ce_varname, "ipv6-clone-mask"))
+		{
+#ifdef INET6
+			/*
+			 * If this item isn't set explicitly by the
+			 * user, the value will temporarily be
+			 * zero. Defaults are applied in config_run().
+			 */
+			allow->ipv6_clone_mask = atoi(cep->ce_vardata);
+#endif /* INET6 */
+		}
 		else if (!strcmp(cep->ce_varname, "options"))
 		{
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) 
@@ -4534,6 +5035,30 @@ int	_test_allow(ConfigFile *conf, ConfigEntry *ce)
 				config_error("%s:%i: allow::maxperip with illegal value (must be 1-65535)",
 					cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
 				errors++;
+			}
+		}
+		else if (!strcmp(cep->ce_varname, "ipv6-clone-mask"))
+		{
+			/* keep this in sync with _test_set() */
+			int ipv6mask;
+			ipv6mask = atoi(cep->ce_vardata);
+			if (ipv6mask == 0)
+			{
+				config_error("%s:%d: allow::ipv6-clone-mask given a value of zero. This cannnot be correct, as it would treat all IPv6 hosts as one host.",
+					     cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
+				errors++;
+			}
+			if (ipv6mask > 128)
+			{
+				config_error("%s:%d: set::default-ipv6-clone-mask was set to %d. The maximum value is 128.",
+					     cep->ce_fileptr->cf_filename, cep->ce_varlinenum,
+					     ipv6mask);
+				errors++;
+			}
+			if (ipv6mask <= 32)
+			{
+				config_warn("%s:%d: allow::ipv6-clone-mask was given a very small value.",
+					    cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
 			}
 		}
 		else if (!strcmp(cep->ce_varname, "hostname"))
@@ -4649,13 +5174,24 @@ int	_conf_allow_channel(ConfigFile *conf, ConfigEntry *ce)
 {
 	ConfigItem_allow_channel 	*allow = NULL;
 	ConfigEntry 	    	*cep;
+	char *class = NULL;
+	
+	/* First, search for ::class, if any */
+	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
+	{
+		if (!strcmp(cep->ce_varname, "class"))
+			class = cep->ce_vardata;
+	}
 
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 	{
 		if (!strcmp(cep->ce_varname, "channel"))
 		{
+			/* This way, we permit multiple ::channel items in one allow block */
 			allow = MyMallocEx(sizeof(ConfigItem_allow_channel));
 			ircstrdup(allow->channel, cep->ce_vardata);
+			if (class)
+				ircstrdup(allow->class, class);
 			AddListItem(allow, conf_allow_channel);
 		}
 	}
@@ -4666,7 +5202,7 @@ int	_test_allow_channel(ConfigFile *conf, ConfigEntry *ce)
 {
 	ConfigEntry		*cep;
 	int			errors = 0;
-	char			has_channel = 0;	
+	char			has_channel = 0, has_class = 0;
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 	{
 		if (config_is_blankorempty(cep, "allow channel"))
@@ -4674,8 +5210,22 @@ int	_test_allow_channel(ConfigFile *conf, ConfigEntry *ce)
 			errors++;
 			continue;
 		}
+
 		if (!strcmp(cep->ce_varname, "channel"))
+		{
 			has_channel = 1;
+		}	
+		else if (!strcmp(cep->ce_varname, "class"))
+		{
+
+			if (has_class)
+			{
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "allow channel::class");
+				continue;
+			}
+			has_class = 1;
+		}
 		else
 		{
 			config_error_unknown(cep->ce_fileptr->cf_filename, cep->ce_varlinenum,
@@ -4762,7 +5312,7 @@ int	_test_allow_dcc(ConfigFile *conf, ConfigEntry *ce)
 	return errors;
 }
 
-void create_tkl_except(char *mask, char *type)
+void create_tkl_except_ii(char *mask, char *type)
 {
 	ConfigItem_except *ca;
 	struct irc_netmask tmp;
@@ -4784,6 +5334,20 @@ void create_tkl_except(char *mask, char *type)
 	}
 	ca->flag.type = CONF_EXCEPT_TKL;
 	AddListItem(ca, conf_except);
+}
+
+void create_tkl_except(char *mask, char *type)
+{
+	if (!strcmp(type, "all"))
+	{
+		/* Special treatment */
+		int i;
+		for (i = 0; i < ARRAY_SIZEOF(ExceptTklFlags); i++)
+			if (ExceptTklFlags[i].flag)
+				create_tkl_except_ii(mask, ExceptTklFlags[i].name);
+	}
+	else
+		create_tkl_except_ii(mask, type);
 }
 
 int     _conf_except(ConfigFile *conf, ConfigEntry *ce)
@@ -5807,7 +6371,7 @@ int     _conf_help(ConfigFile *conf, ConfigEntry *ce)
 {
 	ConfigEntry *cep;
 	ConfigItem_help *ca;
-	aMotd *last = NULL, *temp;
+	aMotdLine *last = NULL, *temp;
 	ca = MyMallocEx(sizeof(ConfigItem_help));
 
 	if (!ce->ce_vardata)
@@ -5817,7 +6381,7 @@ int     _conf_help(ConfigFile *conf, ConfigEntry *ce)
 
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 	{
-		temp = MyMalloc(sizeof(aMotd));
+		temp = MyMalloc(sizeof(aMotdLine));
 		temp->line = strdup(cep->ce_varname);
 		temp->next = NULL;
 		if (!ca->text)
@@ -6162,6 +6726,7 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 				{
 					char ipv6buf[48];
 					snprintf(ipv6buf, sizeof(ipv6buf), "::ffff:%s", cep->ce_vardata);
+					MyFree(cep->ce_vardata);
 					cep->ce_vardata = strdup(ipv6buf);
 				} else {
 				/* Insert IPv6 validation here */
@@ -6187,6 +6752,29 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 				continue;
 			}
 			has_bindip = 1;
+#ifdef INET6
+			/* I'm nice... I'll help those poor ipv6 users. -- Syzop */
+			/* [ not null && len>6 && has not a : in it && last character is a digit ] */
+			if (cep->ce_vardata && (strlen(cep->ce_vardata) > 6) && !strchr(cep->ce_vardata, ':') &&
+			    isdigit(cep->ce_vardata[strlen(cep->ce_vardata)-1]))
+			{
+				char crap[32];
+				if (inet_pton(AF_INET, cep->ce_vardata, crap) != 0)
+				{
+					char ipv6buf[48];
+					snprintf(ipv6buf, sizeof(ipv6buf), "::ffff:%s", cep->ce_vardata);
+					MyFree(cep->ce_vardata);
+					cep->ce_vardata = strdup(ipv6buf);
+				} else {
+				/* Insert IPv6 validation here */
+					config_error( "%s:%i: bind-ip: '%s' looks like "
+						"it might be IPv4, but is not a valid address.",
+						ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+						cep->ce_vardata);
+					errors++;
+				}
+			}
+#endif
 		}
 		else if (!strcmp(cep->ce_varname, "port"))
 		{
@@ -6223,6 +6811,12 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 			{
 				config_error("%s:%i: link::password-connect cannot be encrypted",
 					     ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+				errors++;
+			}
+			if (strlen(cep->ce_vardata) > PASSWDLEN) 
+			{
+				config_error("%s:%i: link::password-connect cannot exceed %d characters in length",
+					     ce->ce_fileptr->cf_filename, ce->ce_varlinenum, PASSWDLEN);
 				errors++;
 			}
 		}
@@ -6442,6 +7036,7 @@ int	_test_cgiirc(ConfigFile *conf, ConfigEntry *ce)
 				{
 					char ipv6buf[48];
 					snprintf(ipv6buf, sizeof(ipv6buf), "::ffff:%s", cep->ce_vardata);
+					MyFree(cep->ce_vardata);
 					cep->ce_vardata = strdup(ipv6buf);
 				} else {
 				/* Insert IPv6 validation here */
@@ -6791,8 +7386,14 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 		else if (!strcmp(cep->ce_varname, "pingpong-warning")) {
 			tempiConf.pingpong_warning = config_checkval(cep->ce_vardata, CFG_YESNO);
 		}
+		else if (!strcmp(cep->ce_varname, "ping-cookie")) {
+			tempiConf.ping_cookie = config_checkval(cep->ce_vardata, CFG_YESNO);
+		}
 		else if (!strcmp(cep->ce_varname, "watch-away-notification")) {
 			tempiConf.watch_away_notification = config_checkval(cep->ce_vardata, CFG_YESNO);
+		}
+		else if (!strcmp(cep->ce_varname, "uhnames")) {
+			tempiConf.uhnames = config_checkval(cep->ce_vardata, CFG_YESNO);
 		}
 		else if (!strcmp(cep->ce_varname, "allow-userhost-change")) {
 			if (!stricmp(cep->ce_vardata, "always"))
@@ -6837,6 +7438,9 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 		}
 		else if (!strcmp(cep->ce_varname, "restrict-extendedbans")) {
 			ircstrdup(tempiConf.restrict_extendedbans, cep->ce_vardata);
+		}
+		else if (!strcmp(cep->ce_varname, "new-linking-protocol")) {
+			tempiConf.new_linking_protocol = atoi(cep->ce_vardata);
 		}
 		else if (!strcmp(cep->ce_varname, "anti-spam-quit-message-time")) {
 			tempiConf.anti_spam_quit_message_time = config_checkval(cep->ce_vardata,CFG_TIME);
@@ -6886,6 +7490,9 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 		}
 		else if (!strcmp(cep->ce_varname, "services-server")) {
 			ircstrdup(tempiConf.network.x_services_name, cep->ce_vardata);
+		}
+		else if (!strcmp(cep->ce_varname, "sasl-server")) {
+			ircstrdup(tempiConf.network.x_sasl_server, cep->ce_vardata);
 		}
 		else if (!strcmp(cep->ce_varname, "stats-server")) {
 			ircstrdup(tempiConf.network.x_stats_server, cep->ce_vardata);
@@ -6991,8 +7598,14 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 				else if (!strcmp(cepp->ce_varname, "mkpasswd-for-everyone")) {
 					tempiConf.mkpasswd_for_everyone = 1;
 				}
+				else if (!strcmp(cepp->ce_varname, "allow-insane-bans")) {
+					tempiConf.allow_insane_bans = 1;
+				}
 				else if (!strcmp(cepp->ce_varname, "allow-part-if-shunned")) {
 					tempiConf.allow_part_if_shunned = 1;
+				}
+				else if (!strcmp(cepp->ce_varname, "disable-cap")) {
+					tempiConf.disable_cap = 1;
 				}
 			}
 		}
@@ -7148,14 +7761,9 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 					tempiConf.ssl_options = 0;
 					for (ceppp = cepp->ce_entries; ceppp; ceppp = ceppp->ce_next)
 					{
-						for (ofl = _SSLFlags; ofl->name; ofl++)
-						{
-							if (!strcmp(ceppp->ce_varname, ofl->name))
-							{	
-								tempiConf.ssl_options |= ofl->flag;
-								break;
-							}
-						}
+						ofl = config_binary_flags_search(_SSLFlags, ceppp->ce_varname, ARRAY_SIZEOF(_SSLFlags));
+						if (ofl) /* this should always be true */
+							tempiConf.ssl_options |= ofl->flag;
 					}
 					if (tempiConf.ssl_options & SSLFLAG_DONOTACCEPTSELFSIGNED)
 						if (!tempiConf.ssl_options & SSLFLAG_VERIFYCERT)
@@ -7163,7 +7771,13 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 				}	
 				
 			}
-#endif
+#endif /* USE_SSL */
+		}
+		else if (!strcmp(cep->ce_varname, "default-ipv6-clone-mask"))
+		{
+#ifdef INET6
+			tempiConf.default_ipv6_clone_mask = atoi(cep->ce_vardata);
+#endif /* INET6 */
 		}
 		else 
 		{
@@ -7182,7 +7796,6 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 {
 	ConfigEntry *cep, *cepp, *ceppp;
-	OperFlag 	*ofl = NULL;
 	long		templong;
 	int		tempi;
 	int	    errors = 0;
@@ -7326,7 +7939,7 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 			CheckDuplicate(cep, level_on_join, "level-on-join");
 			if (!channellevel_to_int(cep->ce_vardata))
 			{
-				config_error("%s:%i: set::level-on-join: unknown value '%s', should be one of: none, op",
+				config_error("%s:%i: set::level-on-join: unknown value '%s', should be one of: none, voice, halfop, op, protect, owner",
 					cep->ce_fileptr->cf_filename, cep->ce_varlinenum, cep->ce_vardata);
 				errors++;
 			}
@@ -7371,9 +7984,17 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 			CheckNull(cep);
 			CheckDuplicate(cep, pingpong_warning, "pingpong-warning");
 		}
+		else if (!strcmp(cep->ce_varname, "ping-cookie")) {
+			CheckNull(cep);
+			CheckDuplicate(cep, ping_cookie, "ping-cookie");
+		}
 		else if (!strcmp(cep->ce_varname, "watch-away-notification")) {
 			CheckNull(cep);
 			CheckDuplicate(cep, watch_away_notification, "watch-away-notification");
+		}
+		else if (!strcmp(cep->ce_varname, "uhnames")) {
+			CheckNull(cep);
+			CheckDuplicate(cep, uhnames, "uhnames");
 		}
 		else if (!strcmp(cep->ce_varname, "channel-command-prefix")) {
 			CheckNull(cep);
@@ -7472,6 +8093,10 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 			CheckNull(cep);
 			CheckDuplicate(cep, services_server, "services-server");
 		}
+		else if (!strcmp(cep->ce_varname, "sasl-server")) {
+			CheckNull(cep);
+			CheckDuplicate(cep, sasl_server, "sasl-server");
+		}
 		else if (!strcmp(cep->ce_varname, "stats-server")) {
 			CheckNull(cep);
 			CheckDuplicate(cep, stats_server, "stats-server");
@@ -7530,6 +8155,11 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 		else if (!strcmp(cep->ce_varname, "restrict-extendedbans"))
 		{
 			CheckDuplicate(cep, restrict_extendedbans, "restrict-extendedbans");
+			CheckNull(cep);
+		}
+		else if (!strcmp(cep->ce_varname, "new-linking-protocol"))
+		{
+			CheckDuplicate(cep, new_linking_protocol, "new-linking-protocol");
 			CheckNull(cep);
 		}
 		else if (!strcmp(cep->ce_varname, "dns")) {
@@ -7730,8 +8360,14 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				else if (!strcmp(cepp->ce_varname, "mkpasswd-for-everyone")) {
 					CheckDuplicate(cepp, options_mkpasswd_for_everyone, "options::mkpasswd-for-everyone");
 				}
+				else if (!strcmp(cepp->ce_varname, "allow-insane-bans")) {
+					CheckDuplicate(cepp, options_allow_insane_bans, "options::allow-insane-bans");
+				}
 				else if (!strcmp(cepp->ce_varname, "allow-part-if-shunned")) {
 					CheckDuplicate(cepp, options_allow_part_if_shunned, "options::allow-part-if-shunned");
+				}
+				else if (!strcmp(cepp->ce_varname, "disable-cap")) {
+					CheckDuplicate(cepp, options_disable_cap, "options::disable-cap");
 				}
 				else
 				{
@@ -8079,25 +8715,47 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				{
 					CheckDuplicate(cep, ssl_options, "ssl::options");
 					for (ceppp = cepp->ce_entries; ceppp; ceppp = ceppp->ce_next)
-					{
-						for (ofl = _SSLFlags; ofl->name; ofl++)
+						if (!config_binary_flags_search(_SSLFlags, ceppp->ce_varname, ARRAY_SIZEOF(_SSLFlags)))
 						{
-							if (!strcmp(ceppp->ce_varname, ofl->name))
-							{	
-								break;
-							}
+							config_error("%s:%i: unknown SSL flag '%s'",
+								     ceppp->ce_fileptr->cf_filename, 
+								     ceppp->ce_varlinenum, ceppp->ce_varname);
+							errors ++;
 						}
-					}
-					if (ofl && !ofl->name)
-					{
-						config_error("%s:%i: unknown SSL flag '%s'",
-							ceppp->ce_fileptr->cf_filename, 
-							ceppp->ce_varlinenum, ceppp->ce_varname);
-					}
-				}	
-				
+				}
+				else
+				{
+					config_error("%s:%i: unknown directive set::ssl::%s",
+						cepp->ce_fileptr->cf_filename, cepp->ce_varlinenum,
+						cepp->ce_varname);
+					errors++;
+				}
 			}
-#endif
+#endif /* USE_SSL */
+		}
+		else if (!strcmp(cep->ce_varname, "default-ipv6-clone-mask"))
+		{
+			/* keep this in sync with _test_allow() */
+			int ipv6mask;
+			ipv6mask = atoi(cep->ce_vardata);
+			if (ipv6mask == 0)
+			{
+				config_error("%s:%d: set::default-ipv6-clone-mask given a value of zero. This cannnot be correct, as it would treat all IPv6 hosts as one host.",
+					     cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
+				errors++;
+			}
+			if (ipv6mask > 128)
+			{
+				config_error("%s:%d: set::default-ipv6-clone-mask was set to %d. The maximum value is 128.",
+					     cep->ce_fileptr->cf_filename, cep->ce_varlinenum,
+					     ipv6mask);
+				errors++;
+			}
+			if (ipv6mask <= 32)
+			{
+				config_warn("%s:%d: set::default-ipv6-clone-mask was given a very small value.",
+					    cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
+			}
 		}
 		else
 		{
@@ -8733,6 +9391,10 @@ int	_conf_deny_channel(ConfigFile *conf, ConfigEntry *ce)
 		{
 			deny->warn = config_checkval(cep->ce_vardata,CFG_YESNO);
 		}
+		else if (!strcmp(cep->ce_varname, "class"))
+		{
+			ircstrdup(deny->class, cep->ce_vardata);
+		}
 	}
 	AddListItem(deny, conf_deny_channel);
 	return 0;
@@ -8864,7 +9526,7 @@ int     _test_deny(ConfigFile *conf, ConfigEntry *ce)
 	}
 	else if (!strcmp(ce->ce_vardata, "channel"))
 	{
-		char has_channel = 0, has_warn = 0, has_reason = 0, has_redirect = 0;
+		char has_channel = 0, has_warn = 0, has_reason = 0, has_redirect = 0, has_class = 0;
 		for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 		{
 			if (config_is_blankorempty(cep, "deny channel"))
@@ -8911,6 +9573,16 @@ int     _test_deny(ConfigFile *conf, ConfigEntry *ce)
 					continue;
 				}
 				has_warn = 1;
+			}
+			else if (!strcmp(cep->ce_varname, "class"))
+			{
+				if (has_class)
+				{
+					config_warn_duplicate(cep->ce_fileptr->cf_filename,
+						cep->ce_varlinenum, "deny channel::class");
+					continue;
+				}
+				has_class = 1;
 			}
 			else 
 			{
@@ -9124,41 +9796,65 @@ int     _test_deny(ConfigFile *conf, ConfigEntry *ce)
 }
 
 #ifdef USE_LIBCURL
-static void conf_download_complete(char *url, char *file, char *errorbuf, int cached)
+static void conf_download_complete(const char *url, const char *file, const char *errorbuf, int cached, void *inc_key)
 {
 	ConfigItem_include *inc;
 	if (!loop.ircd_rehashing)
-	{
-		remove(file);
 		return;
-	}
+
+	/*
+	  use inc_key to find the correct include block. This
+	  should be cheaper than using the full URL.
+	 */
 	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
 	{
+		if ( inc_key != (void *)inc )
+			continue;
 		if (!(inc->flag.type & INCLUDE_REMOTE))
 			continue;
 		if (inc->flag.type & INCLUDE_NOTLOADED)
 			continue;
-		if (!stricmp(url, inc->url))
-		{
-			inc->flag.type &= ~INCLUDE_DLQUEUED;
-			break;
-		}
+		if (stricmp(url, inc->url))
+			continue;
+
+		inc->flag.type &= ~INCLUDE_DLQUEUED;
+		break;
 	}
+	if (!inc)
+	{
+		ircd_log(LOG_ERROR, "Downloaded remote include which matches no include statement.");
+		return;
+	}
+
 	if (!file && !cached)
-		add_remote_include(file, url, 0, errorbuf);
+		update_remote_include(inc, file, 0, errorbuf); /* DOWNLOAD FAILED */
 	else
 	{
+		char *urlfile = url_getfilename(url);
+		char *file_basename = unreal_getfilename(urlfile);
+		char *tmp = unreal_mktemp("tmp", file_basename);
+		free(urlfile);
+
 		if (cached)
 		{
-			char *urlfile = url_getfilename(url);
-			char *file = unreal_getfilename(urlfile);
-			char *tmp = unreal_mktemp("tmp", file);
 			unreal_copyfileex(inc->file, tmp, 1);
-			add_remote_include(tmp, url, 0, NULL);
-			free(urlfile);
+#ifdef REMOTEINC_SPECIALCACHE
+			unreal_copyfileex(inc->file, unreal_mkcache(url), 0);
+#endif
+			update_remote_include(inc, tmp, 0, NULL);
 		}
 		else
-			add_remote_include(file, url, 0, NULL);
+		{
+			/*
+			  copy/hardlink file to another file because our caller will
+			  remove(file).
+			*/
+			unreal_copyfileex(file, tmp, 1);
+			update_remote_include(inc, tmp, 0, NULL);
+#ifdef REMOTEINC_SPECIALCACHE
+			unreal_copyfileex(file, unreal_mkcache(url), 0);
+#endif
+		}
 	}
 	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
 	{
@@ -9197,7 +9893,12 @@ int     rehash(aClient *cptr, aClient *sptr, int sig)
 		found_remote = 1;
 		modtime = unreal_getfilemodtime(inc->file);
 		inc->flag.type |= INCLUDE_DLQUEUED;
-		download_file_async(inc->url, modtime, conf_download_complete);
+
+		/*
+		  use (void *)inc as the key for finding which
+		  include block conf_download_complete() should use.
+		*/
+		download_file_async(inc->url, modtime, conf_download_complete, (void *)inc);
 	}
 	if (!found_remote)
 		return rehash_internal(cptr, sptr, sig);
@@ -9342,6 +10043,13 @@ char *find_loaded_remote_include(char *url)
 	return NULL;
 }	
 
+/**
+ * Non-asynchronous remote inclusion to give a user better feedback
+ * when first starting his IRCd.
+ *
+ * The asynchronous friend is rehash() which merely queues remote
+ * includes for download using download_file_async().
+ */
 int remote_include(ConfigEntry *ce)
 {
 	char *errorbuf = NULL;
@@ -9355,88 +10063,141 @@ int remote_include(ConfigEntry *ce)
 		file = download_file(ce->ce_vardata, &error);
 		if (!file)
 		{
-			config_error("%s:%i: include: error downloading '%s': %s",
-				ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-				 ce->ce_vardata, error);
-			return -1;
+#ifdef REMOTEINC_SPECIALCACHE
+			if (has_cached_version(ce->ce_vardata))
+			{
+				config_warn("%s:%i: include: error downloading '%s': %s -- using cached version instead.",
+					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+					ce->ce_vardata, error);
+				file = strdup(unreal_mkcache(ce->ce_vardata));
+				/* Let it pass to load_conf()... */
+			} else {
+#endif
+				config_error("%s:%i: include: error downloading '%s': %s",
+					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+					 ce->ce_vardata, error);
+				return -1;
+#ifdef REMOTEINC_SPECIALCACHE
+			}
+#endif
 		}
-		else
-		{
-			if ((ret = load_conf(file)) >= 0)
-				add_remote_include(file, ce->ce_vardata, INCLUDE_USED, NULL);
-			free(file);
-			return ret;
-		}
+		add_remote_include(file, ce->ce_vardata, 0, NULL, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		ret = load_conf(file, ce->ce_vardata);
+		free(file);
+		return ret;
 	}
 	else
 	{
 		if (errorbuf)
 		{
-			config_error("%s:%i: include: error downloading '%s': %s",
-                                ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-                                ce->ce_vardata, errorbuf);
-			return -1;
+#ifdef REMOTEINC_SPECIALCACHE
+			if (has_cached_version(ce->ce_vardata))
+			{
+				config_warn("%s:%i: include: error downloading '%s': %s -- using cached version instead.",
+					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+					ce->ce_vardata, errorbuf);
+				/* Let it pass to load_conf()... */
+				file = strdup(unreal_mkcache(ce->ce_vardata));
+			} else {
+#endif
+				config_error("%s:%i: include: error downloading '%s': %s",
+					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+					ce->ce_vardata, errorbuf);
+				return -1;
+#ifdef REMOTEINC_SPECIALCACHE
+			}
+#endif
 		}
 		if (config_verbose > 0)
 			config_status("Loading %s from download", ce->ce_vardata);
-		if ((ret = load_conf(file)) >= 0)
-			add_remote_include(file, ce->ce_vardata, INCLUDE_USED, NULL);
+		add_remote_include(file, ce->ce_vardata, 0, NULL, ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
+		ret = load_conf(file, ce->ce_vardata);
 		return ret;
 	}
 	return 0;
 }
 #endif
-		
-void add_include(char *file)
+
+/**
+ * Add an item to the conf_include list for the specified file.
+ *
+ * Checks for whether or not we're performing recursive includes
+ * belong in conf_load() because that function is able to return an
+ * error code. Any checks in here will end up being ignored by callers
+ * and thus will gain us nothing.
+ *
+ * @param file path to the include file.
+ */		
+void add_include(const char *file, const char *included_from, int included_from_line)
 {
 	ConfigItem_include *inc;
-	if (!stricmp(file, CPATH))
-		return;
 
-	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
-	{
-		if (!(inc->flag.type & INCLUDE_NOTLOADED))
-			continue;
-		if (inc->flag.type & INCLUDE_REMOTE)
-			continue;
-		if (!stricmp(file, inc->file))
-			return;
-	}
 	inc = MyMallocEx(sizeof(ConfigItem_include));
 	inc->file = strdup(file);
-	inc->flag.type = INCLUDE_NOTLOADED|INCLUDE_USED;
+	inc->flag.type = INCLUDE_NOTLOADED;
+	inc->included_from = strdup(included_from);
+	inc->included_from_line = included_from_line;
 	AddListItem(inc, conf_include);
 }
 
 #ifdef USE_LIBCURL
-void add_remote_include(char *file, char *url, int flags, char *errorbuf)
+/**
+ * Adds a remote include entry to the config_include list.
+ *
+ * This is to be called whenever the included_from and
+ * included_from_line parameters are known. This means that during a
+ * rehash when downloads are done asynchronously, you call this with
+ * the inclued_from and included_from_line information. After the
+ * download is complete and you know there it is stored in the FS,
+ * call update_remote_include().
+ */
+void add_remote_include(const char *file, const char *url, int flags, const char *errorbuf, const char *included_from, int included_from_line)
 {
 	ConfigItem_include *inc;
 
-	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
-	{
-		if (!(inc->flag.type & INCLUDE_REMOTE))
-			continue;
-		if (!(inc->flag.type & INCLUDE_NOTLOADED))
-			continue;
-		if (!stricmp(url, inc->url))
-		{
-			inc->flag.type |= flags;
-			return;
-		}
-	}
-
+	/* we rely on MyMallocEx() zeroing the ConfigItem_include */
 	inc = MyMallocEx(sizeof(ConfigItem_include));
+	if (included_from)
+	{
+		inc->included_from = strdup(included_from);
+		inc->included_from_line = included_from_line;
+	}
+	inc->url = strdup(url);
+
+	update_remote_include(inc, file, INCLUDE_NOTLOADED|INCLUDE_REMOTE|flags, errorbuf);
+	AddListItem(inc, conf_include);
+}
+
+/**
+ * Update certain information in a remote include's config_include list entry.
+ *
+ * @param file the place on disk where the downloaded remote include
+ *        may be found
+ * @param flags additional flags to set on the config_include entry
+ * @param errorbuf non-NULL if there were errors encountered in
+ *        downloading. The error will be stored into the config_include
+ *        entry.
+ */
+void update_remote_include(ConfigItem_include *inc, const char *file, int flags, const char *errorbuf)
+{
+	/*
+	 * file may be NULL when errorbuf is non-NULL and vice-versa.
+	 */
 	if (file)
 		inc->file = strdup(file);
-	inc->url = strdup(url);
-	inc->flag.type = (INCLUDE_NOTLOADED|INCLUDE_REMOTE|flags);
+	inc->flag.type |= flags;
+
 	if (errorbuf)
 		inc->errorbuf = strdup(errorbuf);
-	AddListItem(inc, conf_include);
 }
 #endif
 
+/**
+ * Clean up conf_include after a rehash fails because of a
+ * configuration file error.
+ *
+ * Duplicates some in unload_loaded_include().
+ */
 void unload_notloaded_includes(void)
 {
 	ConfigItem_include *inc, *next;
@@ -9456,12 +10217,17 @@ void unload_notloaded_includes(void)
 			}
 #endif
 			free(inc->file);
+			free(inc->included_from);
 			DelListItem(inc, conf_include);
 			free(inc);
 		}
 	}
 }
 
+/**
+ * Clean up conf_include after a successful rehash to make way for
+ * load_includes().
+ */
 void unload_loaded_includes(void)
 {
 	ConfigItem_include *inc, *next;
@@ -9481,18 +10247,24 @@ void unload_loaded_includes(void)
 			}
 #endif
 			free(inc->file);
+			free(inc->included_from);
 			DelListItem(inc, conf_include);
 			free(inc);
 		}
 	}
 }
-			
+
+/**
+ * Mark loaded includes as loaded by removing the INCLUDE_NOTLOADED
+ * flag. Meant to be called only after calling
+ * unload_loaded_includes().
+ */			
 void load_includes(void)
 {
 	ConfigItem_include *inc;
 
-	/* Doing this for all the modules should actually be faster
-	 * than only doing it for modules that are not-loaded
+	/* Doing this for all the includes should actually be faster
+	 * than only doing it for includes that are not-loaded
 	 */
 	for (inc = conf_include; inc; inc = (ConfigItem_include *)inc->next)
 		inc->flag.type &= ~INCLUDE_NOTLOADED; 

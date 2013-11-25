@@ -445,7 +445,7 @@ int del_listmode(Ban **list, aChannel *chptr, char *banid)
 /* Those pointers can be used by extended ban modules so they
  * don't have to do 4 make_nick_user_host()'s all the time:
  */
-char *ban_realhost = NULL, *ban_virthost = NULL, *ban_cloakhost, *ban_ip = NULL;
+char *ban_realhost = NULL, *ban_virthost = NULL, *ban_cloakhost = NULL, *ban_ip = NULL;
 
 /** is_banned - Check if a user is banned on a channel.
  * @param sptr   Client to check (can be remote client)
@@ -457,6 +457,39 @@ char *ban_realhost = NULL, *ban_virthost = NULL, *ban_cloakhost, *ban_ip = NULL;
 inline Ban *is_banned(aClient *sptr, aChannel *chptr, int type)
 {
 	return is_banned_with_nick(sptr, chptr, type, sptr->name);
+}
+
+/** ban_check_mask - Checks if the current user in ban checking (ban_ip, etc) matches the specified n!u@h mask -or- run an extended ban.
+ * @param sptr         Client to check (can be remote client)
+ * @param chptr        Channel to check
+ * @param banstr       Mask string to check user
+ * @param type         Type of ban to check for (BANCHK_*)
+ * @param no_extbans   0 to check extbans, nonzero to disable extban checking.
+ * @returns            Nonzero if the mask/extban succeeds. Zero if it doesn't.
+ * @comments           This is basically extracting the mask and extban check from is_banned_with_nick, but with being a bit more strict in what an extban is.
+ *                     Strange things could happen if this is called outside standard ban checking.
+ */
+inline int ban_check_mask(aClient *sptr, aChannel *chptr, char *banstr, int type, int no_extbans)
+{
+	Extban *extban = NULL;
+	if (!no_extbans && banstr[0] == '~' && banstr[1] != '\0' && banstr[2] == ':')
+	{
+		/* Is an extended ban. */
+		extban = findmod_by_bantype(banstr[1]);
+		if (!extban)
+		{
+			return 0;
+		}
+		else
+		{
+			return extban->is_banned(sptr, chptr, banstr, type);
+		}
+	}
+	else
+	{
+		/* Is a n!u@h mask. */
+		return extban_is_banned_helper(banstr);
+	}
 }
 
 /** is_banned_with_nick - Check if a user is banned on a channel.
@@ -474,7 +507,6 @@ Ban *is_banned_with_nick(aClient *sptr, aChannel *chptr, int type, char *nick)
 	static char cloakhost[NICKLEN + USERLEN + HOSTLEN + 24];
 	static char virthost[NICKLEN + USERLEN + HOSTLEN + 24];
 	static char     nuip[NICKLEN + USERLEN + HOSTLEN + 24];
-	int dovirt = 0, mine = 0;
 	Extban *extban;
 
 	if (!IsPerson(sptr) || !chptr->banlist)
@@ -482,19 +514,26 @@ Ban *is_banned_with_nick(aClient *sptr, aChannel *chptr, int type, char *nick)
 
 	ban_realhost = realhost;
 	ban_ip = ban_virthost = ban_cloakhost = NULL;
-	
-	if (MyConnect(sptr))
+
+	/* Might it be possible in the future to include the possiblity for SupportNICKIP(sptr->from), SupportCLK(sptr->from)? -- aquanight */
+	/* Nope, because servers not directly connected to the server in question have no idea about the capabilities at all.
+	 * However, there's no need for a MyConnect() requirement, just check if GetIP() is non-NULL and
+	 * if sptr->user->cloakedhost contains anything... -- Syzop
+	 */
+	if (GetIP(sptr))
 	{
-		mine = 1;
 		make_nick_user_host_r(nuip, nick, sptr->user->username, GetIP(sptr));
 		ban_ip = nuip;
+	}
+	
+	if (*sptr->user->cloakedhost)
+	{
 		make_nick_user_host_r(cloakhost, nick, sptr->user->username, sptr->user->cloakedhost);
 		ban_cloakhost = cloakhost;
 	}
 
 	if (IsSetHost(sptr) && strcmp(sptr->user->realhost, sptr->user->virthost))
 	{
-		dovirt = 1;
 		make_nick_user_host_r(virthost, nick, sptr->user->username, sptr->user->virthost);
 		ban_virthost = virthost;
 	}
@@ -502,46 +541,19 @@ Ban *is_banned_with_nick(aClient *sptr, aChannel *chptr, int type, char *nick)
 
 	make_nick_user_host_r(realhost, nick, sptr->user->username, sptr->user->realhost);
 
-/* We now check +b first, if a +b is found we then see if there is a +e.
- * If a +e was found we return NULL, if not, we return the ban.
- */
+	/* We now check +b first, if a +b is found we then see if there is a +e.
+	 * If a +e was found we return NULL, if not, we return the ban.
+	 */
 	for (tmp = chptr->banlist; tmp; tmp = tmp->next)
 	{
-		if (*tmp->banstr == '~')
-		{
-			extban = findmod_by_bantype(tmp->banstr[1]);
-			if (!extban)
-				continue;
-			if (!extban->is_banned(sptr, chptr, tmp->banstr, type))
-				continue;
-		} else {
-			if ((match(tmp->banstr, realhost) == 0) ||
-			    (dovirt && (match(tmp->banstr, virthost) == 0)) ||
-			    (mine && (match(tmp->banstr, nuip) == 0)) ||
-			    (mine && (match(tmp->banstr, cloakhost) == 0)) )
-			{
-				/* matches.. do nothing */
-			} else
-				continue;
-		}
+		if (!ban_check_mask(sptr, chptr, tmp->banstr, type, 0))
+			continue;
 
 		/* Ban found, now check for +e */
 		for (tmp2 = chptr->exlist; tmp2; tmp2 = tmp2->next)
 		{
-			if (*tmp2->banstr == '~')
-			{
-				extban = findmod_by_bantype(tmp2->banstr[1]);
-				if (!extban)
-					continue;
-				if (extban->is_banned(sptr, chptr, tmp2->banstr, type))
-					return NULL;
-			} else {
-				if ((match(tmp2->banstr, realhost) == 0) ||
-					(dovirt && (match(tmp2->banstr, virthost) == 0)) ||
-					(mine && (match(tmp2->banstr, nuip) == 0)) ||
-					(mine && (match(tmp2->banstr, cloakhost) == 0)) )
-					return NULL;
-			}
+			if (ban_check_mask(sptr, chptr, tmp2->banstr, type, 0))
+				return NULL; /* except matched */
 		}
 		break; /* ban found and not on except */
 	}
@@ -1141,41 +1153,46 @@ char *clean_ban_mask(char *mask, int what, aClient *cptr)
 
 int find_invex(aChannel *chptr, aClient *sptr)
 {
+	/* This routine is basically a copy-paste of is_banned_with_nick, with modifications, for invex */
 	Ban *inv;
 	char *s;
-	static char realhost[NICKLEN + USERLEN + HOSTLEN + 6];
-	static char virthost[NICKLEN + USERLEN + HOSTLEN + 6];
-	static char     nuip[NICKLEN + USERLEN + HOSTLEN + 6];
-	int dovirt = 0, mine = 0;
+	static char realhost[NICKLEN + USERLEN + HOSTLEN + 24];
+	static char cloakhost[NICKLEN + USERLEN + HOSTLEN + 24];
+	static char virthost[NICKLEN + USERLEN + HOSTLEN + 24];
+	static char     nuip[NICKLEN + USERLEN + HOSTLEN + 24];
+	Extban *extban;
 
-	if (MyConnect(sptr)) 
+	if (!IsPerson(sptr) || !chptr->invexlist)
+		return 0;
+
+	ban_realhost = realhost;
+	ban_ip = ban_virthost = ban_cloakhost = NULL;
+
+	if (GetIP(sptr))
 	{
-		mine = 1;
-		s = make_nick_user_host(sptr->name, sptr->user->username, GetIP(sptr));
-		strlcpy(nuip, s, sizeof nuip);
+		make_nick_user_host_r(nuip, sptr->name, sptr->user->username, GetIP(sptr));
+		ban_ip = nuip;
+	}
+	
+	if (*sptr->user->cloakedhost)
+	{
+		make_nick_user_host_r(cloakhost, sptr->name, sptr->user->username, sptr->user->cloakedhost);
+		ban_cloakhost = cloakhost;
 	}
 
-	if (sptr->user->virthost)
-		if (strcmp(sptr->user->realhost, sptr->user->virthost))
-			dovirt = 1;
-
-	s = make_nick_user_host(sptr->name, sptr->user->username,
-	    sptr->user->realhost);
-	strlcpy(realhost, s, sizeof realhost);
-
-	if (dovirt)
+	if (IsSetHost(sptr) && strcmp(sptr->user->realhost, sptr->user->virthost))
 	{
-		s = make_nick_user_host(sptr->name, sptr->user->username,
-		    sptr->user->virthost);
-		strlcpy(virthost, s, sizeof virthost);
+		make_nick_user_host_r(virthost, sptr->name, sptr->user->username, sptr->user->virthost);
+		ban_virthost = virthost;
 	}
+
+
+	make_nick_user_host_r(realhost, sptr->name, sptr->user->username, sptr->user->realhost);
+
 	for (inv = chptr->invexlist; inv; inv = inv->next)
-	{
-		if ((match(inv->banstr, realhost) == 0) ||
-			(dovirt && (match(inv->banstr, virthost) == 0)) ||
-			(mine && (match(inv->banstr, nuip) == 0)))
+		if (ban_check_mask(sptr, chptr, inv->banstr, BANCHK_JOIN, 0))
 			return 1;
-	}
+
 	return 0;
 }
 
@@ -1399,6 +1416,8 @@ void sub1_from_channel(aChannel *chptr)
 #ifdef JOINTHROTTLE
 		cmodej_delchannelentries(chptr);
 #endif
+		if (chptr->mode_lock)
+			MyFree(chptr->mode_lock);
 		if (chptr->topic)
 			MyFree(chptr->topic);
 		if (chptr->topic_nick)
@@ -1846,3 +1865,23 @@ char m;
 	}
 }
 #endif
+
+/* set_channel_mlock()
+ *
+ * inputs	- client, source, channel, params
+ * output	- 
+ * side effects - channel mlock is changed / MLOCK is propagated
+ */
+void set_channel_mlock(aClient *cptr, aClient *sptr, aChannel *chptr, const char *newmlock, int propagate)
+{
+	if (chptr->mode_lock)
+		MyFree(chptr->mode_lock);
+	chptr->mode_lock = (newmlock != NULL) ? strdup(newmlock) : NULL;
+
+	if (propagate)
+	{
+		sendto_serv_butone_token(cptr, cptr->name, MSG_MLOCK, TOK_MLOCK, "%B %s :%s",
+					 chptr->creationtime, chptr->chname,
+					 BadPtr(chptr->mode_lock) ? "" : chptr->mode_lock);
+	}
+}

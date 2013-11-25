@@ -1,95 +1,112 @@
-Unreal3.2.8.1 Release Notes
-============================
-
-==[ ABOUT 3.2.8.1 RELEASE ]==
-This Unreal3.2.8.1 release fixes a (serious) security issue regarding
-allow::options::noident. The original release notes for 3.2.8 are below.
+Unreal3.2.10.2 Release Notes
+=============================
 
 ==[ GENERAL INFORMATION ]==
-- If you are upgrading on *NIX, make sure you run 'make clean' and './Config'
-  first, before doing 'make'
+- If you are upgrading on *NIX, then make sure you run 'make clean' and
+  './Config' first, before running 'make'.
 - The official UnrealIRCd documentation is doc/unreal32docs.html
   online version at: http://www.vulnscan.org/UnrealIRCd/unreal32docs.html
   FAQ: http://www.vulnscan.org/UnrealIRCd/faq/
   Read them before asking for help.
 - Report bugs at http://bugs.unrealircd.org/
-- When upgrading a network, we assume you are upgrading from the previous
-  version (3.2.7). Upgrading from 3.2.6 or 3.2.5 should also be no problem.
-  However, if you have a network running with servers that are several versions behind
-  (eg: 3.2.1) then you might experience small (desynch) problems.
-  Please also minimize the time you have multiple versions running, a few days or
-  one week is generally not a problem, but having mixed versions on a network for several
-  weeks or months is not recommended.
-- The purpose of the sections below (NEW, CHANGED, MINOR, etc) is to be a SUMMARY of
-  the changes in this release. There have been 70+ changes, and trying to mention them
-  all would be useless, see the Changelog for the full list of changes.
+- The purpose of the sections below (NEW, CHANGED, MINOR, etc) is to be a
+  SUMMARY of the changes in this release. See the file 'Changes' for a
+  complete list of all changes.
+
+==[ .2 RELEASE ]==
+The following major issues were present in 3.2.10 & 3.2.10.1 and have
+been fixed in this version:
+- A remote crash issue when compiled with SSL (NULL pointer dereference)
+- A second issue that can potentially lead to a crash (read-after-free)
+
+In addition to these 3.2.10.x fixes there were also some other bugs fixed,
+mostly in the area of server linking and flood hardening.
+
+The external libraries of the Windows version have been updated (openssl,
+c-ares, zlib). The bundled c-ares source (for *NIX) has been updated too.
+
+==[ .1 RELEASE ]==
+The following bugs in version 3.2.10 were fixed in this 3.2.10.1 release:
+- Windows only: outgoing connects from Windows caused severe linking issues,
+  including killing of (ghost) users on the Windows server.
+- An issue where user modes were stripped from remote clients, this caused
+  a problem for Anope BotServ bots.
+- A compile problem on OpenBSD.
+- '/REHASH -global' did not rehash all servers.
+- Some documentation updates.
+
+==[ 3.2.10 RELEASE ]==
+Below is a summary of all changes with respect to 3.2.9:
 
 ==[ NEW ]==
-- set::level-on-join: this defines which privileges a user receives when creating a
-  channel, default is 'chanop', the only other available setting is 'none' (opless).
-- Away notification through WATCH: This allows clients to receive a notification
-  when someone goes away or comes back, along with a reason, a bit like IM's.
-  There's probably no current client supporting this but it would be a nice feature
-  in notify lists. Client developers: see Changes file for full protocol details.
-  This feature can be disabled by setting set::watch-away-notification to 'no'.
-- Spamfilter: Slow spamfilter detection: For each spamfilter, Unreal will check,
-  each time it executes, how long it takes to execute. When a certain threshold is
-  reached the IRCd will warn or even remove the spamfilter. This could prevent a
-  spamfilter from completely stalling the IRCd. Warning is configured through
-  set::spamfilter::slowdetect-warn (default: 250ms) and automatic deletion is
-  configured by set::spamfilter::slowdetect-fatal (default: 500ms).
-  You can set both settings to 0 (zero) to disable slow spamfilter detection.
-  This feature is currently not available on Windows.
-- SSL: set::ssl::server-cipher-list can be used to limit the allowed ciphers
-- SSL: To specify when an SSL session key should be renegotiated you can use
-  set::ssl::renegotiate-bytes <bytes> and set::ssl::renegotiate-timeout <seconds>.
-- UHNAMES support: This sends the full nick!ident@host in NAMES which can be
-  used by clients for their IAL. mIRC, Klient, etc support this.
-- There have also been some behavior changes, which can be considered NEW, see
-  next section (CHANGED).
+- Improved socket engine. This brings some performance improvements and
+  also makes it easier to configure a system to hold more than 1024
+  clients (no more editing of header files on Linux!).
+- ESVID support: services can communicate the account name of the user
+  back to the IRCd. This only works on ESVID-capable services:
+  - Extban ~a:<accountname>: matches users who are logged in to services
+    with that account name.
+  - Show account name in /WHOIS
+- CAP support: this enables clients to enable certain features more easily.
+  Can be disabled through set::options::disable-cap.
+- Now that STARTTLS is advertised in CAP it is likely to be used more often.
+- away-notify: informs clients of AWAY state changes of users on the same
+  channels, for clients that support this.
+- account-notify: similar to away-notify, inform clients of changes in the
+  login status and account name used by other clients on the same channels.
+- SASL support. To use this, and if your services support this, you point
+  set::sasl-server to your services server.
+- Server-side MLOCK support: the IRCd will prevent channel mode changes
+  depending on the MLOCK setting in services. Requires special support
+  from services for this feature.
+- User Mode +I (IRCOp only): hide idle time
+- auth-method 'sslclientcertfp': authenticate users using an SSL client
+  certificate by the SHA256 fingerprint of that certificate.
+  The documentation has a new section (3.19) called 'Authentication Types'
+  which contains an (improved) example of how to use SSL client certificate
+  authentication instead of regular passwords.
+- oper::require-modes: an optional setting, which can be used to require
+  users to have certain user modes (such as 'z') before they can /OPER up.
+- allow/deny channel: you can now optionally specify a class here as an
+  extra filter.
+- doc/example.es.conf: Spanish translation of example configuration file.
+- There have also been some behavior changes, which can be considered NEW,
+  see next section (CHANGED).
 
 ==[ CHANGED ]==
-- IPv6: On IPv6 servers you no longer have to use ::ffff:1.2.3.4 IP's for IPv4 in the
-  config file, you can use the simple 1.2.3.4 form, as they are converted automatically.
-- When someone is banned and /PARTs, the part reason (comment) is no longer shown
-- ChanMode +S/+c: now strips/blocks 'reverse' as well
-- Smart banning is now disabled by default because it was too annoying, this means that
-  f.e. if there's a ban on *!*@*.com then you can still add a ban on *!*@*.aol.com
-- except ban { } now also protects against ZLINEs and ban ip { }
-- Modules: user modes and channel modes without parameters (eg: +X) no longer have
-  to be PERManent, this means they can be upgraded/reloaded/unloaded on-the-fly.
+- Anti-spoof protection (ping cookies) can now be enabled/disabled at
+  run-time through set::ping-cookie [yes|no]. The default is 'yes' (enabled).
+- A quit with 'Ping timeout' now shows the number of seconds since the ping.
+- Print out a warning if we can't write to a log file.
+- Refuse to boot if we can't write to ANY log file.
+- Windows: if an SSL certificate exists, then uncheck the 'generate SSL
+  certificate' checkbox by default.
+- *NIX with SSL: We now ask in ./Config if you want to generate an SSL
+  certificate. The certificate is then copied when you run 'make install'.
 
 ==[ MAJOR BUGS FIXED ]==
-- Zip links issue (Overflowed unzipbuf)
-- Crash issue with 3rd party modules that introduce new channel modes w/parameters
-- Mac OS X: Various issues which prevented the IRCd from booting up
-- Remote includes (constant) crash with new curl/c-ares versions
-- A few rare crash issues, including a crash when linking to another server
-- In case of clock adjustments, the IRCd will no longer freeze when the time is
-  adjusted backwards, nor will it incorrectly throttle clients when adjusted forward.
-  However, because clock adjustments (time shifts) of more than xx seconds are 
-  so dangerous (and will still cause a number of issues), big warnings are now
-  printed when they happen.
-  Morale: synchronize your system clock, or use the built-in timesync feature.
+- Windows SSL crash (this issue was already fixed in 3.2.9-SSL-fix)
+- Other than that, none?
 
 ==[ MINOR BUGS FIXED ]==
-- CGI:IRC: Several IPv6 issues, both on IPv6 IRCd's and CGI:IRC gateways
-- IP masks in oper::from::userhost sometimes didn't match when they should
-- (G)ZLINE's on IPv6 users were sometimes rejected
-- CHROOTDIR works again
-- OperOverride fixes
-- Throttling is now more accurate
+- Various compile problems, in particular with remote includes enabled.
+- Windows: the installer sometimes insisted that the Visual C++ 2008
+  redistributable package was not installed, when it actually was there.
+- Windows: MOTD file date/time was always showing up as 1/1/1970.
 - And more... see Changelog
 
+==[ REMOVED / DROPPED ]==
+- Windows 9X is no longer supported
+- The networks/ directory has been removed
+
 ==[ KNOWN ISSUES ]==
-- Regexes: Be careful with backreferences (\1, etc), certain regexes can slow the IRCd
-  down considerably and even bring it to a near-halt. In the spamfilter user target it's
-  usually safe though. Slow spamfilter detection can help prevent the slowdown/freeze,
-  but might not work in worst-case scenario's.
-- Regexes: Possessive quantifiers such as, for example, "++" (not to be confused with "+")
-  are not safe to use, they can easily freeze the IRCd.
-- Suse 10.3 in 64 bit mode (amd64, x64) is known to crash UnrealIRCd on-boot, this is
-  likely to be a Suse 10.3 bug as over 3 people reported it with that exact OS / arch.
+- Regexes: Be careful with backreferences (\1, etc), certain regexes can
+  slow the IRCd down considerably and even bring it to a near-halt.
+  In the spamfilter user target it's usually safe though.
+  Slow spamfilter detection can help prevent the slowdown/freeze, but
+  might not work in worst-case scenario's.
+- Regexes: Possessive quantifiers such as, for example, "++" (not to be
+  confused with "+") are not safe to use, they can easily freeze the IRCd.
 
 ==[ ADDITIONAL INFO ]==
-* See Changelog for more details
+- See Changelog for more details

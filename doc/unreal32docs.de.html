@@ -18,24 +18,22 @@
 
 <body>
 <a href="unreal32docs.html">English</a> | German | 
-<a href="unreal32docs.es.html">Spanish</a> | 
 <a href="unreal32docs.hu.html">Hungarian</a> | 
 <a href="unreal32docs.fr.html">French</a> |
-<a href="unreal32docs.gr.html">Greek</a> |
-<a href="unreal32docs.nl.html">Dutch</a> |
 <a href="unreal32docs.ru.html">Russian</a> |
-<a href="unreal32docs.tr.html">Turkish</a>
+<a href="unreal32docs.tr.html">Turkish</a> |
+<a href="unreal32docs.es.html">Spanish</a>
 <br><br>
 
 <div align="center"><b><font size="7">UnrealIRCd</font></b><br>
   <font size="4"><a href="http://www.unrealircd.com">http://www.unrealircd.com</a></font><br>
-  <font size="4">Version: 3.2.8</font><br>
-  <b>Letztes Update dieses Handbuchs:</b>                  2009-01-03</div>
+  <font size="4">Version: 3.2.10.2</font><br>
+  <b>Letztes Update dieses Handbuchs:</b>                    2009-12-24</div>
   <b>Head Coders:</b> Stskeeps / codemastr / Syzop / Luke<font face="Helvetica,Arial" size="-1">/
 aquanight / WolfSage</font><br>
   <b>Contributors:</b>  McSkaf / Zogg / NiQuiL / assyrian / chasm / DrBin / llthangel / Griever / nighthawk<br>
 <b>Dokumentation</b><b>:</b> CKnight^ / Syzop<br>
-<b>Deutsche Übersetzung:</b> Stylus740 (irc.insiderZ.de)<br>
+<b>Deutsche Übersetzung:</b> LowDigit / Orginalübersetzung: stylus740<br>
 <p>Um diese Dokumentation zu lesen, ist einer der unten aufgeführten
 kompatiblen Browser erforderlich. Aktuelle Dokumentationen sind erhältlich&nbsp; @
 <a href="http://www.vulnscan.org/UnrealIRCd/unreal32docs.html">http://www.vulnscan.org/UnrealIRCd/unreal32docs.html</a>
@@ -116,6 +114,7 @@ Konfigurationsdatei</a><br>
 ---4.35. <a href="#spamfilter"> Spamfilter Block<br>
 </a>---4.36. <a href="#cgiirc">Cgiirc Block</a><br>
 ---4.37. <a href="#setblock">Set Block -=- (networks/unrealircd.conf)</a><br>
+---4.38. <a href="#filesblock">Files Block</a><br>
   5. <a href="#addtlfiles">Additional Files</a><br>
   6. <a href="#userchannelmodes">User & Channel Modi</a><br>
   7. <a href="#useropercommands">User & Oper Befehlsliste<br>
@@ -157,11 +156,13 @@ werden. &#8211; Copyright UnrealIRCd Development Team 2002-2006</p>
 <p>Bitte lesen Sie diese Anleitung, bevor Sie um Hilfe bitten und schauen Sie
 WIRKLICH erst einmal in die <a href="#faq">FAQ</a>, da rund 80% der Fragen dort
 beantwortet sind. Hilft
-dies alles nicht, kann bzgl. Support bei irc.ircsystems.net
-(Port 6667) Channel #unreal-support 
+dies alles nicht, kann bzgl. Support bei irc.unrealircd.org
+(Port 6667) im Channel #unreal-support 
 nach Unterstützung gefragt werden (Wir erwarten UNBEDINGT, dass zuvor Dokumentation
 und <a href="#faq">
-FAQ</a> gelesen wurden und wir helfen nur zu UnrealIRCd, nicht zu Services!). Im Falle eines echten Bugs (z.B. einem Crash) bitte Nachricht an 
+FAQ</a> gelesen wurden und wir helfen nur zu UnrealIRCd, nicht zu Services!).
+Ebenso können Sie das Forum nutzen, welches über <a href="http://forums.unrealircd.com/" target="_blank">http://forums.unrealircd.com</a>
+erreichbar ist. Im Falle eines echten Bugs (z.B. einem Crash) bitte Nachricht an 
    <a href="http://bugs.unrealircd.org" TARGET="_blank">http://bugs.unrealircd.org</a>.</p></div>
 
 <p><font size="+2"><b><a name="notesonolder">1.1 &#8211; Anmerkungen zu Upgrade/Mixing 3.1.x -&gt; 3.2</a>&nbsp; </b></font><br>
@@ -216,9 +217,9 @@ Bug gemeldet wird!</p></div>
 </ul>
 <li><b>Windows Versionen:</b>
 <ul> 
-<li>Windows 2000 (Pro, Server, Advanced Server)
-<li>WindowsXP (Home, Pro)
+<li>Windows XP (Home, Pro)
 <li>Windows 2003
+<li>Windows 7
 </ul>
 <li><b>Getestete Architektueren (Prozessoren):</b>
 <ul> 
@@ -1952,7 +1953,7 @@ in verschiedenen Dateien zu loggen.</p>
   tkl</p>
     </td>
     <td width="484">
-<p>zeichnet Infos auf über *lines, shuns und Spamfilter (setzen, löschen,
+<p>zeichnet Infos auf über *lines (kline, zline etc), shuns und Spamfilter (setzen, löschen,
 Ablauf)</p>
     </td>
   </tr>
@@ -1971,14 +1972,6 @@ Ablauf)</p>
     </td>
     <td width="484">
 <p>Zeichnet connects/squits der Server auf</p>
-    </td>
-  </tr>
-  <tr>
-    <td width="113">
-<p>
-  kline</p>
-    </td>
-    <td width="484"><p>Zeichnet Infos /kline auf</p>
     </td>
   </tr>
   <tr>
@@ -2027,7 +2020,6 @@ spamfilter
 		errors;
 		kills;
 		oper;
-		kline;
 		tkl;
 	};
 };
@@ -2720,7 +2712,7 @@ weggelassen werden. <b> alias::type</b> gibt den Typ des Alias an, gültige
 Typen sind hier &quot;services&quot; (der User ist auf dem Services Server),
 &quot;stats&quot; (der User ist auf dem Stats Server) &quot;normal&quot; (der
 User ist normaler User auf irgendeinem Server) und &quot;channel&quot; (das Ziel
-ist ein Channel Name). Wenn <b>alias::spampfilter</b> (optional) auf 'yes'
+ist ein Channel Name). Wenn <b>alias::spamfilter</b> (optional) auf 'yes'
 eingestellt ist, werden auch Spamfilter geprüft (Default ist 'no'). Der &quot;alias block&quot; hat
 auch einen weiteren nachfolgend erklärten Zweck.</p>
 <p>Syntax [Befehl alias]:
@@ -2994,7 +2986,7 @@ anwenden können.</p>
 <p><font class="set">set::level-on-join &lt;op|none&gt;</font><br>
 Die Modus, der einem User beim ersten joinen eines Channels gegeben wird. Das
 ist entweder 'op' (Channel Operator, Default) oder 'none', wenn kein Level
-gegeben werden soll.</p>
+gegeben werden soll. Default ist Op.</p>
 <p><font class="set">set::restrict-channelmodes &lt;modes&gt;</font><br>
 Die Channel-Modi, die User wählen können werden auf die hier angegebenen Modi
 eingeschränkt. (kein + oder - angeben!).<br>
@@ -3209,6 +3201,9 @@ Verbietet Verbindungen von Usern mit selbst erstellten Zertifikaten.</p>
 <p><font class="set">set::ssl::options::verify-certificate;</font><br>
 Stellt ein, dass Unreal&nbsp; SSL Zertifikate auf Gültigkeit überprüft, bevor
 eine Verbindung akzeptiert wird.</p>
+<p><font class="set">set::ssl::options::no-starttls;</font><br>
+Deaktiviert STARTTLS. STARTTLS ermöglicht es Clients, über reguläere (nicht
+SSL) Ports zu verbinden.</p>
 <p><font class="set">set::throttle::period &lt;timevalue&gt;</font><br>
 Wie lange muss ein User zum erneuten Connecten warten, wenn er häufiger, als
 unter 'set::throttle::connections' eingestellt, verbunden war.</p>
@@ -3304,14 +3299,53 @@ benutzen, wenn es beim Verbinden Probleme gibt.&nbsp; Voreingestellt ist 'no'.</
 <p><font class="set">set::watch-away-notification &lt;yes|no&gt;</font><br>
 Ermöglicht eine AWAY Meldung in WATCH. Der Default is yes.</p>
  </div>
+<p><font class="block_section"><a name="filesblock">4.38 - Files Block</a> </font><font class="block_optional" size="3">OPTIONAL</font>
+</p>
+<p>Es ist nicht nötig, für die Default Speicherorte der MOTD und Rules Dateien
+einen <a href="#tldblock">TLD block</a> zu definieren. Der Files Block steuert
+die Default Einstellungen für diese Dateien und zusätzlich für die pidfile und
+irc.tune file. Für alles, was hier nicht angegeben ist, wird der Defaultwert
+genommen, wie er in <a href="#addtlfiles">Additional Files</a> steht.</p>
+<p>Relative Pfadnamen werden als relativ zum unrealIRCD Startverzeichnis
+interpretiert, in dem normalerweise auch die <tt>unrealircd.conf</tt> steht.
+Dieser Block kan dazu benutzt werden, mehr als einen IRCd im gleichen
+Verzeichnis laufen zu lassen. In diesem Fall sollten mindestens verschiedene
+pidfiles und tunefiles definiert werden - eines für jeden Server.</p>
+<p>Syntax:<br>
+</p>
+<pre>files {
+	motd &lt;motd file&gt;;
+	shortmotd &lt;short motd file&gt;;
+	opermotd &lt;oper motd file&gt;;
+	svsmotd &lt;services motd file&gt;;
+	botmotd &lt;bot motd file&gt;;
+
+	rules &lt;rules file&gt;;
+
+	tunefile &lt;tune file&gt;;
+	pidfile &lt;pid file&gt;;
+};
+</pre>
+<p>&nbsp;</p>
+<p>Beispiel:<br>
+</p>
+<pre>files {
+	motd /etc/motd;
+
+	pidfile /var/lib/run/unrealircd.pid;
+};
+</pre>
+<p>&nbsp;
+</p>
 <p><b><font size="+2"><a name="addtlfiles">5 &#8211; Additional Files</a></font></b></p><div class="desc">
   Zusätzlich zu den Konfigurationsdateien hat Unreal einige weitere Dateien,
   wie MOTD, OperMOTD, BotMOTD, und Rules. In der nachfolgenden Liste stehen die
   Namen dieser dateien und ihr Verwendungszweck.<br>
   Zu beachten ist, dass die motd Dateien (alle Typen) und die rules Dateien auch
-  in einem speziellen tld Block angegeben sein können. Dies sind nur die
+  in einem speziellen <a href="#tldblock"> tld Block </a>oder einem <a href="#filesblock">files
+  Block</a> angegeben sein können. Dies sind nur die
   Dateien, die per Default benutzt werden (und für Anforderungen von
-  MOTD/RULES).
+  MOTD/RULES).<br>
 <table width="83%" border="1">
   <tr>
     <td>ircd.motd</td><td>Wird angezeigt, wenn der /motd Befehl ausgeführt wird
@@ -4412,7 +4446,7 @@ Datei</a></b></font></p>
   <p>
   <br>
   Eines allerdings sollte man tun: IMMER DIE NEUESTE VERSION BENUTZEN. Wenn man
-  sich in die <a href="http://mail1.sourceforge.net/mailman/listinfo/unreal-notify"> Unreal-notify mailinglist</a> einträgt, erhält man die Ankündigung
+  sich in die <a href="http://lists.sourceforge.net/mailman/listinfo/unreal-notify" target="_blank"> Unreal-notify mailinglist</a> einträgt, erhält man die Ankündigung
   über neue Versionen (unreal-notify ist nur für Ankündigungen und man
   erhält nur alle X Monate 1 Mail). Üblicherweise gibt es neue Releases, wenn
   es (bedeutende) Sicherheits Fixes gibt, aber eigentlich ist es gut, in jedem

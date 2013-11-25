@@ -16,11 +16,12 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: setup.h,v 1.1.1.1.2.13 2009/04/13 11:03:58 syzop Exp $
+ *   $Id$
  */
 
 #ifndef __setup_include__
 #define __setup_include__
+
 #undef  PARAMH
 #undef  UNISTDH
 #define STRINGH
@@ -43,17 +44,40 @@
 #undef  TIMES_2
 #undef  GETRUSAGE_2
 #define HAVE_ALLOCA
-/* vc 2005 */
-#if defined(_MSC_VER) && _MSC_VER >= 1400
-#	define HAVE_VSNPRINTF
-#	define HAVE_SNPRINTF
-#	define snprintf _snprintf
-#endif
 #define SPATH "."
 #define DPATH "."
-#define DOMAINNAME "irc.net"
 #define NO_U_TYPES
 #define NEED_U_INT32_T
 #define PREFIX_AQ
 #define LIST_SHOW_MODES
+
+#ifndef mode_t
+/*
+  Needed in s_conf.c for the third argument of open(3p).
+
+  Should be an int because of http://msdn.microsoft.com/en-us/library/z0kc8e3z(VS.71).aspx
+ */
+#define mode_t int
+#endif
+
+/*
+  make up for win32 (and win64?) users not being able to run ./configure.
+ */
+#ifndef intptr_t
+#define intptr_t long
+#endif
+
+/* Generation version number (e.g.: 3 for Unreal3*) */
+#define UNREAL_VERSION_GENERATION 3
+
+/* Major version number (e.g.: 2 for Unreal3.2*) */
+#define UNREAL_VERSION_MAJOR 2
+
+/* Minor version number (e.g.: 1 for Unreal3.2.1) */
+#define UNREAL_VERSION_MINOR 10
+
+/* Version suffix such as a beta marker or release candidate marker. (e.g.:
+   -rc2 for unrealircd-3.2.9-rc2) */
+#define UNREAL_VERSION_SUFFIX ".2"
+
 #endif

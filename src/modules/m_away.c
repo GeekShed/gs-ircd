@@ -54,7 +54,7 @@ DLLFUNC int m_away(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 DLLFUNC ModuleHeader MOD_HEADER(m_away)
   = {
 	"m_away",
-	"$Id: m_away.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /away", 
 	"3.2-b8-1",
 	NULL 
@@ -116,10 +116,13 @@ int n, wasaway = 0;
 			/* Only send this if they were actually away -- codemastr */
 	                sendto_serv_butone_token(cptr, parv[0], MSG_AWAY, TOK_AWAY, "");
 	                hash_check_watch(cptr, RPL_NOTAWAY);
+
+			sendto_common_channels_local_butone(sptr, PROTO_AWAY_NOTIFY, ":%s AWAY", sptr->name);
                 }
                 /* hope this works XX */
                 if (MyConnect(sptr))
                         sendto_one(sptr, rpl_str(RPL_UNAWAY), me.name, parv[0]);
+				RunHook2(HOOKTYPE_AWAY, sptr, NULL);
                 return 0;
         }
 
@@ -168,6 +171,8 @@ int n, wasaway = 0;
                 sendto_one(sptr, rpl_str(RPL_NOWAWAY), me.name, parv[0]);
 
 	hash_check_watch(cptr, wasaway ? RPL_REAWAY : RPL_GONEAWAY);
-	
+	sendto_common_channels_local_butone(sptr, PROTO_AWAY_NOTIFY, ":%s AWAY :%s", sptr->name, away);
+
+	RunHook2(HOOKTYPE_AWAY, sptr, away);
         return 0;
 }

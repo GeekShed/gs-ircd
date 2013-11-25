@@ -18,19 +18,15 @@
  */
 
 #define WIN32_VERSION BASE_VERSION PATCH1 PATCH2 PATCH3 PATCH4 PATCH5
+#include "sys.h"
 #include "resource.h"
 #include "version.h"
 #include "setup.h"
-#ifdef INET6
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#endif
 #include <windows.h>
 #include <windowsx.h>
 #include <commctrl.h>
 #include "struct.h"
 #include "common.h"
-#include "sys.h"
 #include "numeric.h"
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -66,6 +62,7 @@ __inline void ShowDialog(HWND *handle, HINSTANCE inst, char *template, HWND pare
 
 LRESULT CALLBACK MainDLG(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK LicenseDLG(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK InfoDLG(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK CreditsDLG(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK DalDLG(HWND, UINT, WPARAM, LPARAM);
 LRESULT CALLBACK HelpDLG(HWND, UINT, WPARAM, LPARAM);
@@ -84,7 +81,6 @@ void win_map(aClient *, HWND, short);
 extern Link *Servers;
 extern ircstats IRCstats;
 unsigned char *errors = NULL;
-extern aMotd *botmotd, *opermotd, *motd, *rules;
 extern VOID WINAPI ServiceMain(DWORD dwArgc, LPTSTR *lpszArgv);
 extern BOOL IsService;
 void CleanUp(void)
@@ -104,7 +100,7 @@ UINT WM_TASKBARCREATED, WM_FINDMSGSTRING;
 FARPROC lpfnOldWndProc;
 HMENU hContext;
 OSVERSIONINFO VerInfo;
-char OSName[256];
+char OSName[OSVER_SIZE];
 #ifdef USE_LIBCURL
 extern char *find_loaded_remote_include(char *url);
 #endif 
@@ -215,7 +211,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	
 	VerInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx(&VerInfo);
-	GetOSName(VerInfo, OSName);
+	GetOSName(OSName);
 	if (VerInfo.dwPlatformId == VER_PLATFORM_WIN32_NT) 
 	{
 		SC_HANDLE hService, hSCManager = OpenSCManager(NULL, NULL, GENERIC_EXECUTE);
@@ -389,11 +385,11 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 						}
 						AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
 					}
-					AppendMenu(hConfig, MF_STRING, IDM_MOTD, MPATH);
-					AppendMenu(hConfig, MF_STRING, IDM_SMOTD, SMPATH);
-					AppendMenu(hConfig, MF_STRING, IDM_OPERMOTD, OPATH);
-					AppendMenu(hConfig, MF_STRING, IDM_BOTMOTD, BPATH);
-					AppendMenu(hConfig, MF_STRING, IDM_RULES, RPATH);
+					AppendMenu(hConfig, MF_STRING, IDM_MOTD, conf_files->motd_file);
+					AppendMenu(hConfig, MF_STRING, IDM_SMOTD, conf_files->smotd_file);
+					AppendMenu(hConfig, MF_STRING, IDM_OPERMOTD, conf_files->opermotd_file);
+					AppendMenu(hConfig, MF_STRING, IDM_BOTMOTD, conf_files->botmotd_file);
+					AppendMenu(hConfig, MF_STRING, IDM_RULES, conf_files->rules_file);
 						
 					if (conf_tld) 
 					{
@@ -494,11 +490,11 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 					AppendMenu(hConfig, MF_SEPARATOR, 0, NULL);
 				}
 
-				AppendMenu(hConfig, MF_STRING, IDM_MOTD, MPATH);
-				AppendMenu(hConfig, MF_STRING, IDM_SMOTD, SMPATH);
-				AppendMenu(hConfig, MF_STRING, IDM_OPERMOTD, OPATH);
-				AppendMenu(hConfig, MF_STRING, IDM_BOTMOTD, BPATH);
-				AppendMenu(hConfig, MF_STRING, IDM_RULES, RPATH);
+				AppendMenu(hConfig, MF_STRING, IDM_MOTD, conf_files->motd_file);
+				AppendMenu(hConfig, MF_STRING, IDM_SMOTD, conf_files->smotd_file);
+				AppendMenu(hConfig, MF_STRING, IDM_OPERMOTD, conf_files->opermotd_file);
+				AppendMenu(hConfig, MF_STRING, IDM_BOTMOTD, conf_files->botmotd_file);
+				AppendMenu(hConfig, MF_STRING, IDM_RULES, conf_files->rules_file);
 				
 				if (conf_tld) 
 				{
@@ -573,8 +569,6 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 					break;
 				case IDM_RHMOTD: 
 				{
-					ConfigItem_tld *tlds;
-					aMotd *amotd;
 					MessageBox(NULL, "Rehashing all MOTD and Rules files", "Rehashing", MB_OK);
 					rehash_motdrules();
 					sendto_realops("Rehashing all MOTD and Rules files via the console");
@@ -582,16 +576,19 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 				case IDM_RHOMOTD:
 					MessageBox(NULL, "Rehashing the OperMOTD", "Rehashing", MB_OK);
-					opermotd = (aMotd *) read_file(OPATH, &opermotd);
+					read_motd(conf_files->opermotd_file, &opermotd);
 					sendto_realops("Rehashing the OperMOTD via the console");
 					break;
 				case IDM_RHBMOTD:
 					MessageBox(NULL, "Rehashing the BotMOTD", "Rehashing", MB_OK);
-					botmotd = (aMotd *) read_file(BPATH, &botmotd);
+					read_motd(conf_files->botmotd_file, &botmotd);
 					sendto_realops("Rehashing the BotMOTD via the console");
 					break;
 				case IDM_LICENSE: 
 					DialogBox(hInst, "FromVar", hDlg, (DLGPROC)LicenseDLG);
+					break;
+				case IDM_INFO:
+					DialogBox(hInst, "FromVar", hDlg, (DLGPROC)InfoDLG);
 					break;
 				case IDM_CREDITS:
 					DialogBox(hInst, "FromVar", hDlg, (DLGPROC)CreditsDLG);
@@ -608,23 +605,23 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 					break;
 				case IDM_MOTD:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG, 
-						(LPARAM)MPATH);
+						(LPARAM)conf_files->motd_file);
 					break;
 				case IDM_SMOTD:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG, 
-						(LPARAM)SMPATH);
+						(LPARAM)conf_files->smotd_file);
 					break;
 				case IDM_OPERMOTD:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG,
-						(LPARAM)OPATH);
+						(LPARAM)conf_files->opermotd_file);
 					break;
 				case IDM_BOTMOTD:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG,
-						(LPARAM)BPATH);
+						(LPARAM)conf_files->botmotd_file);
 					break;
 				case IDM_RULES:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG,
-						(LPARAM)RPATH);
+						(LPARAM)conf_files->rules_file);
 					break;
 				case IDM_NEW:
 					DialogBoxParam(hInst, "FromFile", hDlg, (DLGPROC)FromFileDLG, (LPARAM)NULL);
@@ -638,6 +635,11 @@ LRESULT CALLBACK MainDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 LRESULT CALLBACK LicenseDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) 
 {
 	return FromVarDLG(hDlg, message, wParam, lParam, "UnrealIRCd License", gnulicense);
+}
+
+LRESULT CALLBACK InfoDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) 
+{
+	return FromVarDLG(hDlg, message, wParam, lParam, "UnrealIRCd Team", unrealinfo);
 }
 
 LRESULT CALLBACK CreditsDLG(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) 

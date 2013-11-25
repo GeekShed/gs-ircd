@@ -15,7 +15,7 @@
  *  You should have received a copy of the GNU General Public License
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- * $Id: cidr.c,v 1.1.6.13 2009/04/13 11:03:58 syzop Exp $ 
+ * $Id$ 
  */
 
 #include "struct.h"
@@ -295,6 +295,8 @@ int parse_netmask(const char *text, struct irc_netmask *netmask)
 /* The address matching stuff... */
 /* int match_ipv6(struct IN_ADDR *, struct IN_ADDR *, int)
  * Input: An IP address, an IP mask, the number of bits in the mask.
+ *        Only the first bits of the IP mask will be compared, so
+ *        it doesn't need to be zeroed out after bits bits.
  * Output: if match, 1 else 0
  * Side effects: None
  */
@@ -308,7 +310,8 @@ int match_ipv6(struct IN_ADDR *addr, struct IN_ADDR *mask, int bits)
 			return 0;
 	if ((m = bits % 8) == 0)
 		return 1;
-	if ((addr->s6_addr[n] & ~((1 << (8 - m)) - 1)) == mask->s6_addr[n])
+	if ((addr->s6_addr[n] & ~((1 << (8 - m)) - 1))
+	    == (mask->s6_addr[n] & ~((1 << (8 - m)) - 1)))
 		return 1;
 	return 0;
 }

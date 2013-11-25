@@ -53,7 +53,7 @@ ModuleHeader Mod_Header
 #endif
   = {
 	"channeldumper",
-	"$Id: channeldumper.c,v 1.1.6.13 2009/04/13 11:03:57 syzop Exp $",
+	"$Id$",
 	"Channel dump to text timed", 
 	"3.2-b8-1",
 	NULL 
