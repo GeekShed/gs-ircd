@@ -490,13 +490,13 @@ static TS try_connections(TS currenttime)
 				if (!match(deny->mask, aconf->servername)
 				    && crule_eval(deny->rule))
 					break;
-			
-			sendto_realops("Server connect flags3: (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
+
 			if (!deny && connect_server(aconf, (aClient *)NULL,
 			    (struct hostent *)NULL) == 0)
+				sendto_realops
 				    ("Connection to %s[%s] activated.",
 				    aconf->servername, aconf->hostname);
- 
+
 		}
 		if ((next > aconf->hold) || (next == 0))
 			next = aconf->hold;
@@ -1062,24 +1062,11 @@ static void generate_cloakkeys()
  */
 #define mytdiff(a, b)   ((long)a - (long)b)
 
-int OldUnreal_main(int argc, char *argv[]);
-
-
-long GSREV = _GSREV;
-char * GSVERSION_STRING = _GSVERSION_STRING;
-char * GSCODENAME = _GSCODENAME;
-
 #ifndef _WIN32
-int main(int argc, char *argv[]) {
-	return OldUnreal_main(argc, argv);
-}
+int main(int argc, char *argv[])
 #else
-int InitwIRCD(int argc, char *argv[]) {
-	return OldUnreal_main(argc, argv);
-}
+int InitwIRCD(int argc, char *argv[])
 #endif
-
-int OldUnreal_main(int argc, char *argv[])
 {
 #ifdef _WIN32
 	WORD wVersionRequested = MAKEWORD(1, 1);
@@ -1576,14 +1563,7 @@ int OldUnreal_main(int argc, char *argv[])
 	/*
 	 * We accept the first listen record 
 	 */
-	
 	portnum = conf_listen->port;
-
-	if (conf_listen->options & LISTENER_SCTP) {
-		me.transport_protocol = IPPROTO_SCTP;
-	} else {
-		me.transport_protocol = IPPROTO_TCP;
-	}
 /*
  *      This is completely unneeded-Sts
    	me.ip.S_ADDR =

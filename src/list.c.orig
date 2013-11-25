@@ -38,11 +38,6 @@
 
 #include "struct.h"
 #include "common.h"
-#ifndef _WIN32
-#include <sys/socket.h>
-#else
-#include <io.h>
-#endif
 #include "sys.h"
 #include "h.h"
 #include "proto.h"
@@ -51,7 +46,6 @@
 #include "malloc.h"
 #endif
 #include <string.h>
-
 void free_link(Link *);
 Link *make_link();
 extern ircstats IRCstats;

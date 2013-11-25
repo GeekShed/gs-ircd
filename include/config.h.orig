@@ -314,7 +314,7 @@
  * Common usage for this are: a trusted bot ran by an IRCOp, that you only
  * want to give "flood access" and nothing else, and other such things.
  */
-#define FAKELAG_CONFIGURABLE
+#undef FAKELAG_CONFIGURABLE
 
 /*
  * Size of the LISTEN request.  Some machines handle this large
