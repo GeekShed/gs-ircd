@@ -1474,6 +1474,11 @@ void	start_of_normal_client_handshake(aClient *acptr)
 struct hostent *he;
 
 	acptr->status = STAT_UNKNOWN;
+	Hook *h;
+	for (h = Hooks[HOOKTYPE_LOCAL_PRE_DNS]; h; h = h->next)
+	{
+		int v = (*(h->func.intfunc))(acptr);
+	}
 
 	RunHook(HOOKTYPE_HANDSHAKE, acptr);
 

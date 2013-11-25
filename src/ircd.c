@@ -1843,7 +1843,7 @@ void SocketLoop(void *dummy)
 		if (nextconnect)
 			delay = MIN(nextping, nextconnect);
 		else
-			delay = nextping;
+		delay = nextping;
 		delay = MIN(nextdnscheck, delay);
 		delay = MIN(nextexpire, delay);
 		delay -= timeofday;
