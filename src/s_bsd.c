@@ -2444,22 +2444,24 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	if (aconf->bindip && strcmp("*", aconf->bindip))
 	{
 		bzero((char *)&server, sizeof(server));
-		server.SIN_FAMILY = AFINET;
+		server.SIN_FAMILY = cptr->network_protocol;
 		server.SIN_PORT = 0;
 #ifndef INET6
 		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
-		if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
-		{
-			report_baderror("error binding to local port for %s:%s", cptr);
-			return NULL;
+		if (cptr->transport_protocol != IPPROTO_SCTP) {		
+			if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
+			{
+				report_baderror("error binding to local port for %s:%s", cptr);
+				return NULL;
+			}
 		}
 	}
 
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = AFINET;
+	server.SIN_FAMILY = cptr->network_protocol;
 	/*
 	 * By this point we should know the IP# of the host listed in the
 	 * conf line, whether as a result of the hostname lookup or the ip#
