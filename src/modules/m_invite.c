@@ -47,7 +47,6 @@
 DLLFUNC int m_invite(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_INVITE 	"INVITE"	
-#define TOK_INVITE 	"*"	
 
 ModuleHeader MOD_HEADER(m_invite)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_invite)
 
 DLLFUNC int MOD_INIT(m_invite)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_INVITE, TOK_INVITE, m_invite, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_INVITE, m_invite, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,15 +71,10 @@ DLLFUNC int MOD_LOAD(m_invite)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_invite)(int module_unload)
 {
-	if (del_Command(MSG_INVITE, TOK_INVITE, m_invite) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_invite).name);
-	}
 	return MOD_SUCCESS;
 }
 
-/* Send the user his/her list of active invites */
+/* Send the user their list of active invites */
 int send_invite_list(aClient *sptr)
 {
 	Link *inv;
@@ -124,9 +118,6 @@ DLLFUNC CMD_FUNC(m_invite)
 
         if (MyConnect(sptr))
                 clean_channelname(parv[2]);
-
-        if (check_channelmask(sptr, cptr, parv[2]))
-                return -1;
 
         if (!(chptr = find_channel(parv[2], NullChn)))
         {
@@ -329,7 +320,7 @@ DLLFUNC CMD_FUNC(m_invite)
                 		  ":%s NOTICE @%s :%s invited %s into the channel.",
 		                  me.name, chptr->chname, sptr->name, acptr->name);
 
-		        add_invite(acptr, chptr);
+		        add_invite(sptr, acptr, chptr);
 			}
 	}
 	if (!is_silenced(sptr, acptr))

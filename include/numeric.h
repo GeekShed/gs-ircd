@@ -36,6 +36,7 @@
 #define RPL_ISUPPORT	     005
 
 #define RPL_REDIR	     10
+#define RPL_YOURID           42
 
 #define RPL_REMOTEISUPPORT 105
 
@@ -86,6 +87,7 @@
 #define	ERR_SUMMONDISABLED   445
 #define ERR_USERSDISABLED    446
 #define ERR_NONICKCHANGE     447
+#define ERR_FORBIDDENCHANNEL 448
 
 
 #define ERR_NOTREGISTERED    451

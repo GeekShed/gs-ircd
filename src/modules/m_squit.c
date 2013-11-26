@@ -47,7 +47,6 @@
 DLLFUNC int m_squit(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SQUIT 	"SQUIT"	
-#define TOK_SQUIT 	"-"	
 
 ModuleHeader MOD_HEADER(m_squit)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_squit)
 
 DLLFUNC int MOD_INIT(m_squit)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SQUIT, TOK_SQUIT, m_squit, 2);
+	CommandAdd(modinfo->handle, MSG_SQUIT, m_squit, 2, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_squit)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_squit)(int module_unload)
 {
-	if (del_Command(MSG_SQUIT, TOK_SQUIT, m_squit) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_squit).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -102,34 +96,13 @@ CMD_FUNC(m_squit)
 
 	if (parc > 1)
 	{
-		if (!(*parv[1] == '@'))
-		{
-			server = parv[1];
+		server = parv[1];
 
-			/*
-			   ** The following allows wild cards in SQUIT. Only usefull
-			   ** when the command is issued by an oper.
-			 */
-			for (acptr = client;
-			    (acptr = next_client(acptr, server));
-			    acptr = acptr->next)
-				if (IsServer(acptr) || IsMe(acptr))
-					break;
-			if (acptr && IsMe(acptr))
-			{
-				acptr = cptr;
-				server = cptr->sockhost;
-			}
-		}
-		else
+		acptr = find_server_quickx(server, NULL);
+		if (acptr && IsMe(acptr))
 		{
-			server = parv[1];
-			acptr = (aClient *)find_server_by_base64(server + 1);
-			if (acptr && IsMe(acptr))
-			{
-				acptr = cptr;
-				server = cptr->sockhost;
-			}
+			acptr = cptr;
+			server = cptr->sockhost;
 		}
 	}
 	else
@@ -190,7 +163,7 @@ CMD_FUNC(m_squit)
 
 		sendto_locfailops("Received SQUIT %s from %s (%s)",
 		    acptr->name, get_client_name(sptr, FALSE), comment);
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s GLOBOPS :Received SQUIT %s from %s (%s)", me.name,
 		    server, get_client_name(sptr, FALSE), comment);
 	}
@@ -198,20 +171,19 @@ CMD_FUNC(m_squit)
 	{
 		if (acptr->user)
 		{
-			sendto_one(sptr,
-			    ":%s %s %s :*** Cannot do fake kill by SQUIT !!!",
-			    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name);
+			sendnotice(sptr,
+			    "*** Cannot do fake kill by SQUIT !!!");
 			sendto_ops
 			    ("%s tried to do a fake kill using SQUIT (%s (%s))",
 			    sptr->name, acptr->name, comment);
-			sendto_serv_butone(&me,
+			sendto_server(&me, 0, 0,
 			    ":%s GLOBOPS :%s tried to fake kill using SQUIT (%s (%s))",
 			    me.name, sptr->name, acptr->name, comment);
 			return 0;
 		}
 		sendto_locfailops("Received SQUIT %s from %s (%s)",
 		    acptr->name, get_client_name(sptr, FALSE), comment);
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s GLOBOPS :Received SQUIT %s from %s (%s)", me.name,
 		    acptr->name, get_client_name(sptr, FALSE), comment);
 	}

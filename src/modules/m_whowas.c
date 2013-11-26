@@ -48,7 +48,6 @@
 DLLFUNC int m_whowas(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_WHOWAS 	"WHOWAS"	
-#define TOK_WHOWAS 	"$"	
 
 ModuleHeader MOD_HEADER(m_whowas)
   = {
@@ -61,7 +60,7 @@ ModuleHeader MOD_HEADER(m_whowas)
 
 DLLFUNC int MOD_INIT(m_whowas)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_WHOWAS, TOK_WHOWAS, m_whowas, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_WHOWAS, m_whowas, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -73,11 +72,6 @@ DLLFUNC int MOD_LOAD(m_whowas)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_whowas)(int module_unload)
 {
-	if (del_Command(MSG_WHOWAS, TOK_WHOWAS, m_whowas) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_whowas).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -107,8 +101,7 @@ DLLFUNC CMD_FUNC(m_whowas)
 	if (parc > 2)
 		max = atoi(parv[2]);
 	if (parc > 3)
-		if (hunt_server_token(cptr, sptr, MSG_WHOWAS, TOK_WHOWAS, "%s %s :%s", 3, parc,
-		    parv))
+		if (hunt_server(cptr, sptr, ":%s WHOWAS %s %s :%s", 3, parc, parv))
 			return 0;
 
 	if (!MyConnect(sptr) && (max > 20))

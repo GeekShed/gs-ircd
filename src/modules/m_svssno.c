@@ -48,9 +48,7 @@ DLLFUNC int m_svssno(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 DLLFUNC int m_svs2sno(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSSNO 	"SVSSNO"	
-#define TOK_SVSSNO	"BV"	
 #define MSG_SVS2SNO 	"SVS2SNO"	
-#define TOK_SVS2SNO	"BW"	
 
 ModuleHeader MOD_HEADER(m_svssno)
   = {
@@ -63,8 +61,8 @@ ModuleHeader MOD_HEADER(m_svssno)
 
 DLLFUNC int MOD_INIT(m_svssno)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSSNO, TOK_SVSSNO, m_svssno, MAXPARA);
-	add_Command(MSG_SVS2SNO, TOK_SVS2SNO, m_svs2sno, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSSNO, m_svssno, MAXPARA, 0);
+	CommandAdd(modinfo->handle, MSG_SVS2SNO, m_svs2sno, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -76,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_svssno)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svssno)(int module_unload)
 {
-	if (del_Command(MSG_SVSSNO, TOK_SVSSNO, m_svssno) < 0 || del_Command(MSG_SVS2SNO, TOK_SVS2SNO, m_svs2sno) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svssno).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -109,10 +102,9 @@ int  do_svssno(aClient *cptr, aClient *sptr, int parc, char *parv[], int show_ch
 	if (!(acptr = find_person(parv[1], NULL)))
 		return 0;
 
-	if (hunt_server_token(cptr, sptr,
-	                      show_change ? MSG_SVS2SNO : MSG_SVSSNO,
-	                      show_change ? TOK_SVS2SNO : TOK_SVSSNO,
-	                      "%s %s", 1, parc, parv) != HUNTED_ISME)
+	if (hunt_server(cptr, sptr,
+	                      show_change ? ":%s SVS2SNO %s %s" : ":%s SVSSNO %s %s",
+	                      1, parc, parv) != HUNTED_ISME)
 	{
 		return 0;
 	}

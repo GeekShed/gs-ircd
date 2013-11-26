@@ -48,7 +48,6 @@ static char buf[BUFSIZE], buf2[BUFSIZE];
 
 /* Place includes here */
 #define MSG_KILL        "KILL"  /* KILL */
-#define TOK_KILL        "."     /* 46 */
 
 ModuleHeader MOD_HEADER(m_kill)
   = {
@@ -62,10 +61,7 @@ ModuleHeader MOD_HEADER(m_kill)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_kill)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_KILL, TOK_KILL, m_kill, 2);
+	CommandAdd(modinfo->handle, MSG_KILL, m_kill, 2, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -80,13 +76,7 @@ DLLFUNC int MOD_LOAD(m_kill)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_kill)(int module_unload)
 {
-	if (del_Command(MSG_KILL, TOK_KILL, m_kill) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_kill).name);
-	}
-	return MOD_SUCCESS;
-	
+	return MOD_SUCCESS;	
 }
 
 
@@ -164,9 +154,9 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				    me.name, parv[0], nick);
 				continue;
 			}
-			sendto_one(sptr,
-			    ":%s %s %s :*** KILL changed from %s to %s",
-			    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", parv[0], nick, acptr->name);
+			sendnotice(sptr,
+			    "*** KILL changed from %s to %s",
+			    nick, acptr->name);
 			chasing = 1;
 		}
 		if ((!MyConnect(acptr) && MyClient(cptr) && !OPCanGKill(cptr))
@@ -203,9 +193,9 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 		if (!IsServer(sptr) && (kcount > MAXKILLS))
 		{
-			sendto_one(sptr,
-			    ":%s %s %s :*** Too many targets, kill list was truncated. Maximum is %d.",
-			    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", parv[0], MAXKILLS);
+			sendnotice(sptr,
+			    "*** Too many targets, kill list was truncated. Maximum is %d.",
+			    MAXKILLS);
 			break;
 		}
 		if (!IsServer(cptr))
@@ -223,7 +213,7 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 					   around, or it gets appended to itself. */
 				if (!BadPtr(path))
 				{
-					(void)ircsprintf(buf, "%s%s (%s)",
+					(void)ircsnprintf(buf, sizeof(buf), "%s%s (%s)",
 					    cptr->name,
 					    IsOper(sptr) ? "" : "(L)", path);
 					path = buf;
@@ -273,7 +263,7 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		 */
 		if (!MyConnect(acptr) || !MyConnect(sptr) || !IsAnOper(sptr))
 		{
-			sendto_serv_butone(cptr, ":%s KILL %s :%s!%s",
+			sendto_server(cptr, 0, 0, ":%s KILL %s :%s!%s",
 			    parv[0], acptr->name, inpath, path);
 			if (chasing && IsServer(cptr))
 				sendto_one(cptr, ":%s KILL %s :%s!%s",
@@ -297,7 +287,7 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		 */
 		if (MyConnect(acptr) && MyConnect(sptr) && IsAnOper(sptr))
 
-			(void)ircsprintf(buf2, "[%s] Local kill by %s (%s)",
+			ircsnprintf(buf2, sizeof(buf2), "[%s] Local kill by %s (%s)",
 			    me.name, sptr->name,
 			    BadPtr(parv[2]) ? sptr->name : parv[2]);
 		else
@@ -313,7 +303,7 @@ DLLFUNC int  m_kill(aClient *cptr, aClient *sptr, int parc, char *parv[])
 			}
 			else
 				killer = path;
-			(void)ircsprintf(buf2, "Killed (%s)", killer);
+			ircsnprintf(buf2, sizeof(buf2), "Killed (%s)", killer);
 		}
 
 		if (MyClient(sptr))

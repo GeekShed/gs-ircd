@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_part);
 
 #define MSG_PART 	"PART"	
-#define TOK_PART 	"D"	
 
 ModuleHeader MOD_HEADER(m_part)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_part)
 
 DLLFUNC int MOD_INIT(m_part)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_PART, TOK_PART, m_part, 2, M_USER);
+	CommandAdd(modinfo->handle, MSG_PART, m_part, 2, M_USER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -129,8 +128,6 @@ DLLFUNC CMD_FUNC(m_part)
 			    me.name, parv[0], name);
 			continue;
 		}
-		if (check_channelmask(sptr, cptr, name))
-			continue;
 
 		/* 'commentx' is the general part msg, but it can be changed
 		 * per-channel (eg some chans block badwords, strip colors, etc)
@@ -201,13 +198,10 @@ DLLFUNC CMD_FUNC(m_part)
 		}
 
 		/* Send to other servers... */
-		if (!comment)
-			sendto_serv_butone_token(cptr, parv[0],
-			    MSG_PART, TOK_PART, "%s", chptr->chname);
-		else
-			sendto_serv_butone_token(cptr, parv[0],
-			    MSG_PART, TOK_PART, "%s :%s", chptr->chname,
-			    comment);
+		sendto_server(cptr, PROTO_SID, 0, ":%s PART %s :%s",
+			ID(sptr), chptr->chname, comment ? comment : "");
+		sendto_server(cptr, 0, PROTO_SID, ":%s PART %s :%s",
+			sptr->name, chptr->chname, comment ? comment : "");
 
 		if (1)
 		{

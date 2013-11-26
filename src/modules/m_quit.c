@@ -47,7 +47,6 @@ DLLFUNC int m_quit(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_QUIT        "QUIT"  /* QUIT */
-#define TOK_QUIT        ","     /* 44 */
 
 ModuleHeader MOD_HEADER(m_quit)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_quit)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_quit)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_CommandX(MSG_QUIT, TOK_QUIT, m_quit, 1, M_UNREGISTERED|M_USER|M_VIRUS);
+	CommandAdd(modinfo->handle, MSG_QUIT, m_quit, 1, M_UNREGISTERED|M_USER|M_VIRUS);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_quit)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_quit)(int module_unload)
 {
-	if (del_Command(MSG_QUIT, TOK_QUIT, m_quit) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_quit).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -111,7 +102,7 @@ DLLFUNC int  m_quit(aClient *cptr, aClient *sptr, int parc, char *parv[])
 			return exit_client(cptr, sptr, sptr, "Client exited");
 
 		if (!prefix_quit || strcmp(prefix_quit, "no"))
-			s = ircsprintf(comment, "%s ",
+			s = ircsnprintf(comment, sizeof(comment), "%s ",
 		    		BadPtr(prefix_quit) ? "Quit:" : prefix_quit);
 #ifdef STRIPBADWORDS
 		ocomment = (char *)stripbadwords_quit(ocomment, &blocked);

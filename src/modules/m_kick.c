@@ -47,7 +47,6 @@
 DLLFUNC int m_kick(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_KICK 	"KICK"	
-#define TOK_KICK 	"H"	
 
 ModuleHeader MOD_HEADER(m_kick)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_kick)
 
 DLLFUNC int MOD_INIT(m_kick)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_KICK, TOK_KICK, m_kick, 3);
+	CommandAdd(modinfo->handle, MSG_KICK, m_kick, 3, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_kick)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_kick)(int module_unload)
 {
-	if (del_Command(MSG_KICK, TOK_KICK, m_kick) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_kick).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -124,8 +118,6 @@ CMD_FUNC(m_kick)
 			    me.name, parv[0], name);
 			continue;
 		}
-		if (check_channelmask(sptr, cptr, name))
-			continue;
 		/* Store "sptr" access flags */
 		if (IsPerson(sptr))
 			sptr_flags = get_access(sptr, chptr);
@@ -162,13 +154,12 @@ CMD_FUNC(m_kick)
 					if (!IsNetAdmin(sptr))
 					{
 						char errbuf[NICKLEN+10];
-						ircsprintf(errbuf, "%s is +q", who->name);
+						ircsnprintf(errbuf, sizeof(errbuf), "%s is +q", who->name);
 						sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND), 
 							   me.name, sptr->name, "KICK", 
 							   errbuf);
-						sendto_one(who,
-						    ":%s %s %s :*** q: %s tried to kick you from channel %s (%s)",
-						    me.name, IsWebTV(who) ? "PRIVMSG" : "NOTICE", who->name,
+						sendnotice(who,
+						    "*** q: %s tried to kick you from channel %s (%s)",
 						    parv[0],
 						    chptr->chname, comment);
 						goto deny;
@@ -244,10 +235,10 @@ CMD_FUNC(m_kick)
 					{
 						char errbuf[NICKLEN+25];
 						if (who_flags & CHFL_CHANOWNER)
-							ircsprintf(errbuf, "%s is a channel owner", 
+							ircsnprintf(errbuf, sizeof(errbuf), "%s is a channel owner", 
 								   who->name);
 						else
-							ircsprintf(errbuf, "%s is a channel admin", 
+							ircsnprintf(errbuf, sizeof(errbuf), "%s is a channel admin", 
 								   who->name);
 						sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND),
 							   me.name, sptr->name, "KICK",
@@ -262,7 +253,7 @@ CMD_FUNC(m_kick)
 				    && !(sptr_flags & CHFL_ISOP) && !IsULine(sptr) && MyClient(sptr))
 				{
 					char errbuf[NICKLEN+30];
-					ircsprintf(errbuf, "%s is a channel operator", who->name);
+					ircsnprintf(errbuf, sizeof(errbuf), "%s is a channel operator", who->name);
 					sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND),
 						   me.name, sptr->name, "KICK",
 						   errbuf);
@@ -274,7 +265,7 @@ CMD_FUNC(m_kick)
 				    && !(sptr_flags & CHFL_ISOP) && MyClient(sptr))
 				{
 					char errbuf[NICKLEN+15];
-					ircsprintf(errbuf, "%s is a halfop", who->name);
+					ircsnprintf(errbuf, sizeof(errbuf), "%s is a halfop", who->name);
 					sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND),
 						   me.name, sptr->name, "KICK",
 						   errbuf);
@@ -327,9 +318,10 @@ CMD_FUNC(m_kick)
 						    parv[0], chptr->chname, who->name, comment);
 					}
 				}
-				sendto_serv_butone_token(cptr, parv[0],
-				    MSG_KICK, TOK_KICK, "%s %s :%s",
-				    chptr->chname, who->name, comment);
+				sendto_server(cptr, PROTO_SID, 0, ":%s KICK %s %s :%s",
+				    ID(sptr), chptr->chname, ID(who), comment);
+				sendto_server(cptr, 0, PROTO_SID, ":%s KICK %s %s :%s",
+				    sptr->name, chptr->chname, who->name, comment);
 				if (lp)
 				{
 					remove_user_from_channel(who, chptr);

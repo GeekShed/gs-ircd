@@ -45,7 +45,6 @@
 DLLFUNC int m_protoctl(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_PROTOCTL 	"PROTOCTL"	
-#define TOK_PROTOCTL 	"_"	
 
 ModuleHeader MOD_HEADER(m_protoctl)
   = {
@@ -58,7 +57,7 @@ ModuleHeader MOD_HEADER(m_protoctl)
 
 DLLFUNC int MOD_INIT(m_protoctl)(ModuleInfo *modinfo)
 {
-	add_CommandX(MSG_PROTOCTL, TOK_PROTOCTL, m_protoctl, MAXPARA, M_UNREGISTERED|M_SERVER|M_USER);
+	CommandAdd(modinfo->handle, MSG_PROTOCTL, m_protoctl, MAXPARA, M_UNREGISTERED|M_SERVER|M_USER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -70,11 +69,6 @@ DLLFUNC int MOD_LOAD(m_protoctl)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_protoctl)(int module_unload)
 {
-	if (del_Command(MSG_PROTOCTL, TOK_PROTOCTL, m_protoctl) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_protoctl).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -112,7 +106,7 @@ CMD_FUNC(m_protoctl)
 	/* parv[parc - 1] */
 	for (i = 1; i < parc; i++)
 	{
-		strncpyzt(proto, parv[i], sizeof proto);
+		strlcpy(proto, parv[i], sizeof proto);
 		s = proto;
 #ifndef PROTOCTL_MADNESS
 		if (*s == '-')
@@ -155,19 +149,6 @@ CMD_FUNC(m_protoctl)
 			    proto, cptr->name));
 			SetNoQuit(cptr);
 
-		}
-		else if (strcmp(s, "TOKEN") == 0)
-		{
-#ifndef PROTOCTL_MADNESS
-			if (remove)
-			{
-				ClearToken(cptr);
-				continue;
-			}
-#endif
-			Debug((DEBUG_ERROR, "Chose protocol %s for link %s",
-			    proto, cptr->name));
-			SetToken(cptr);
 		}
 		else if (strcmp(s, "HCN") == 0)
 		{
@@ -235,20 +216,6 @@ CMD_FUNC(m_protoctl)
 			    proto, cptr->name));
 			SetUMODE2(cptr);
 		}
-		else if (strcmp(s, "NS") == 0)
-		{
-#ifdef PROTOCTL_MADNESS
-			if (remove)
-			{
-				ClearNS(cptr);
-				continue;
-			}
-#endif
-			Debug((DEBUG_ERROR,
-			    "Chose protocol %s for link %s",
-			    proto, cptr->name));
-			SetNS(cptr);
-		}
 		else if (strcmp(s, "VL") == 0)
 		{
 #ifndef PROTOCTL_MADNESS
@@ -298,32 +265,6 @@ CMD_FUNC(m_protoctl)
 			    proto, cptr->name));
 			SetSJ3(cptr);
 		}
-		else if (strcmp(s, "SJB64") == 0)
-		{
-#ifndef PROTOCTL_MADNESS
-			if (remove)
-			{
-				cptr->proto &= ~PROTO_SJB64;
-				continue;
-			}
-#endif
-			Debug((DEBUG_ERROR,
-			    "Chose protocol %s for link %s",
-			    proto, cptr->name));
-			cptr->proto |= PROTO_SJB64;
-		}
-		else if (strcmp(s, "ZIP") == 0)
-		{
-			if (remove)
-			{
-				cptr->proto &= ~PROTO_ZIP;
-				continue;
-			}
-			Debug((DEBUG_ERROR,
-				"Chose protocol %s for link %s",
-				proto, cptr->name));
-			cptr->proto |= PROTO_ZIP;
-		}
 		else if (strcmp(s, "TKLEXT") == 0)
 		{
 			Debug((DEBUG_ERROR, "Chose protocol %s for link %s", proto, cptr->name));
@@ -348,6 +289,23 @@ CMD_FUNC(m_protoctl)
 					get_client_name(cptr, FALSE), langsinuse, s+10);
 				/* return exit_client(cptr, cptr, &me, "Nick charset mismatch"); */
 			}
+		}
+		else if (strncmp(s, "SID=", 4) == 0)
+		{
+			aClient *acptr;
+			char *sid = s + 4;
+
+			if ((acptr = hash_find_id(sid, NULL)) != NULL)
+			{
+				sendto_one(sptr, "ERROR :SID %s already exists from %s", acptr->id, acptr->name);
+				sendto_snomask(SNO_SNOTICE, "Link %s rejected - SID %s already exists from %s",
+						get_client_name(cptr, FALSE), acptr->id, acptr->name);
+				return exit_client(cptr, cptr, &me, "SID collision");
+			}
+
+			strlcpy(cptr->id, sid, IDLEN);
+			add_to_id_hash_table(cptr->id, cptr);
+			cptr->proto |= PROTO_SID;
 		}
 		else if ((strncmp(s, "EAUTH=", 6) == 0) && NEW_LINKING_PROTOCOL)
 		{
@@ -389,46 +347,6 @@ CMD_FUNC(m_protoctl)
 			SetEAuth(cptr);
 			if (!IsHandshake(cptr) && aconf && !BadPtr(aconf->connpwd)) /* Send PASS early... */
 				sendto_one(sptr, "PASS :%s", aconf->connpwd);
-		}
-		else if ((strncmp(s, "SERVERS=", 8) == 0) && NEW_LINKING_PROTOCOL)
-		{
-			aClient *acptr, *srv;
-			int numeric;
-			
-			if (!IsEAuth(cptr))
-				continue;
-			
-			/* Other side lets us know which servers are behind it.
-			 * SERVERS=<numeric-of-server-1>[,<numeric-of-server-2[,..etc..]]
-			 * Eg: SERVER=1,2,3,4,5
-			 */
-
-			add_pending_net(sptr, s+8);
-
-			acptr = find_non_pending_net_duplicates(sptr);
-			if (acptr)
-			{
-				sendto_one(sptr, "ERROR :Server with numeric %d (%s) already exists",
-					acptr->serv->numeric, acptr->name);
-				sendto_realops("Link %s cancelled, server with numeric %d (%s) already exists",
-					get_client_name(acptr, TRUE), acptr->serv->numeric, acptr->name);
-				return exit_client(sptr, sptr, sptr, "Server Exists (or identical numeric)");
-			}
-			
-			acptr = find_pending_net_duplicates(sptr, &srv, &numeric);
-			if (acptr)
-			{
-				sendto_one(sptr, "ERROR :Server with numeric %d is being introduced by another server as well. "
-				                 "Just wait a moment for it to synchronize...", numeric);
-				sendto_realops("Link %s cancelled, server would introduce server with numeric %d, which "
-				               "server %s is also about to introduce. Just wait a moment for it to synchronize...",
-				               get_client_name(acptr, TRUE), numeric, get_client_name(srv, TRUE));
-				return exit_client(sptr, sptr, sptr, "Server Exists (just wait a moment)");
-			}
-
-			/* Send our PROTOCTL SERVERS= back if this was NOT a response */
-			if (s[8] != '*')
-				send_protoctl_servers(sptr, 1);
 		}
 		else if ((strcmp(s, "MLOCK")) == 0)
 		{

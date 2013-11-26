@@ -42,8 +42,6 @@
 #include <fcntl.h>
 #include "h.h"
 
-#ifdef EXTCMODE
-
 extern char cmodestring[512];
 
 extern void make_cmodestr(void);
@@ -211,7 +209,7 @@ Cmode *CmodeAdd(Module *module, CmodeInfo req, Cmode_t *mode)
 	{
 		make_cmodestr();
 		make_extcmodestr();
-		ircsprintf(tmpbuf, CHPAR1 "%s," CHPAR2 "%s," CHPAR3 "%s," CHPAR4 "%s",
+		ircsnprintf(tmpbuf, sizeof(tmpbuf), CHPAR1 "%s," CHPAR2 "%s," CHPAR3 "%s," CHPAR4 "%s",
 			EXPAR1, EXPAR2, EXPAR3, EXPAR4);
 		IsupportSetValue(IsupportFind("CHANMODES"), tmpbuf);
 	}
@@ -239,7 +237,7 @@ aChannel *chptr;
 			/* Unset channel mode and send MODE -<char> to other servers */
 			sendto_channel_butserv(chptr, &me, ":%s MODE %s -%c",
 				me.name, chptr->chname, cmode->flag);
-			sendto_serv_butone(NULL, ":%s MODE %s -%c 0",
+			sendto_server(NULL, 0, 0, ":%s MODE %s -%c 0",
 				me.name, chptr->chname, cmode->flag);
 			chptr->mode.extmode &= ~cmode->mode;
 		}	
@@ -247,7 +245,7 @@ aChannel *chptr;
 	cmode->flag = '\0';
 	make_cmodestr();
 	make_extcmodestr();
-	ircsprintf(tmpbuf, CHPAR1 "%s," CHPAR2 "%s," CHPAR3 "%s," CHPAR4 "%s",
+	ircsnprintf(tmpbuf, sizeof(tmpbuf), CHPAR1 "%s," CHPAR2 "%s," CHPAR3 "%s," CHPAR4 "%s",
 			EXPAR1, EXPAR2, EXPAR3, EXPAR4);
 	IsupportSetValue(IsupportFind("CHANMODES"), tmpbuf);
 }
@@ -551,5 +549,3 @@ aModejEntry *their = (aModejEntry *)theirx;
 		return EXSJ_SAME;
 }
 #endif /* JOINTHROTTLE */
-
-#endif /* EXTCMODE */

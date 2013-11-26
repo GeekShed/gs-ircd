@@ -53,7 +53,6 @@ DLLFUNC int m_webirc(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 extern MODVAR char zlinebuf[BUFSIZE];
 
 #define MSG_PASS 	"PASS"	
-#define TOK_PASS 	"<"	
 
 #define MSG_WEBIRC	"WEBIRC"
 
@@ -68,8 +67,8 @@ ModuleHeader MOD_HEADER(m_pass)
 
 DLLFUNC int MOD_INIT(m_pass)(ModuleInfo *modinfo)
 {
-	add_CommandX(MSG_PASS, TOK_PASS, m_pass, 1, M_UNREGISTERED|M_USER|M_SERVER);
-	CommandAdd(modinfo->handle, MSG_WEBIRC, NULL, m_webirc, MAXPARA, M_UNREGISTERED);
+	CommandAdd(modinfo->handle, MSG_PASS, m_pass, 1, M_UNREGISTERED|M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_WEBIRC, m_webirc, MAXPARA, M_UNREGISTERED);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -81,11 +80,6 @@ DLLFUNC int MOD_LOAD(m_pass)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_pass)(int module_unload)
 {
-	if (del_Command(MSG_PASS, TOK_PASS, m_pass) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_pass).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -94,16 +88,18 @@ static int my_check_banned(aClient *cptr)
 {
 int i, j;
 aTKline *tk;
+aClient *acptr, *acptr2;
 ConfigItem_ban *bconf;
 
 	j = 1;
-	for (i = LastSlot; i >= 0; i--)
+
+	list_for_each_entry(acptr, &unknown_list, lclient_node)
 	{
-		if (local[i] && IsUnknown(local[i]) &&
+		if (IsUnknown(acptr) &&
 #ifndef INET6
-			local[i]->ip.S_ADDR == cptr->ip.S_ADDR)
+			acptr->ip.S_ADDR == cptr->ip.S_ADDR)
 #else
-			!bcmp(local[i]->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR)))
+			!bcmp(acptr->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR)))
 #endif
 		{
 			j++;
@@ -114,30 +110,29 @@ ConfigItem_ban *bconf;
 
 	if ((bconf = Find_ban(cptr, Inet_ia2p(&cptr->ip), CONF_BAN_IP)))
 	{
-		ircsprintf(zlinebuf,
+		ircsnprintf(zlinebuf, BUFSIZE,
 			"You are not welcome on this server: %s. Email %s for more information.",
 			bconf->reason ? bconf->reason : "no reason", KLINE_ADDRESS);
 		return exit_client(cptr, cptr, &me, zlinebuf);
 	}
 	else if (find_tkline_match_zap_ex(cptr, &tk) != -1)
 	{
-		ircsprintf(zlinebuf, "Z:Lined (%s)", tk->reason);
+		ircsnprintf(zlinebuf, BUFSIZE, "Z:Lined (%s)", tk->reason);
 		return exit_client(cptr, cptr, &me, zlinebuf);
 	}
-#ifdef THROTTLING
 	else
 	{
 		int val;
 		if (!(val = throttle_can_connect(cptr, &cptr->ip)))
 		{
-			ircsprintf(zlinebuf, "Throttled: Reconnecting too fast - Email %s for more information.",
+			ircsnprintf(zlinebuf, BUFSIZE, "Throttled: Reconnecting too fast - Email %s for more information.",
 					KLINE_ADDRESS);
 			return exit_client(cptr, cptr, &me, zlinebuf);
 		}
 		else if (val == 1)
 			add_throttling_bucket(&cptr->ip);
 	}
-#endif
+
 	return 0;
 }
 
@@ -298,7 +293,7 @@ DLLFUNC CMD_FUNC(m_pass)
 	if (PassLen > (PASSWDLEN))
 		PassLen = PASSWDLEN;
 	cptr->passwd = MyMalloc(PassLen + 1);
-	strncpyzt(cptr->passwd, password, PassLen + 1);
+	strlcpy(cptr->passwd, password, PassLen + 1);
 
 	/* note: the original non-truncated password is supplied as 2nd parameter. */
 	RunHookReturnInt2(HOOKTYPE_LOCAL_PASS, sptr, password, !=0);

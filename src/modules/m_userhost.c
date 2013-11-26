@@ -47,7 +47,6 @@
 DLLFUNC int m_userhost(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_USERHOST 	"USERHOST"	
-#define TOK_USERHOST 	"J"	
 
 ModuleHeader MOD_HEADER(m_userhost)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_userhost)
 
 DLLFUNC int MOD_INIT(m_userhost)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_USERHOST, TOK_USERHOST, m_userhost, 1);
+	CommandAdd(modinfo->handle, MSG_USERHOST, m_userhost, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_userhost)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_userhost)(int module_unload)
 {
-	if (del_Command(MSG_USERHOST, TOK_USERHOST, m_userhost) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_userhost).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -105,7 +99,7 @@ DLLFUNC CMD_FUNC(m_userhost)
 	/* The idea is to build up the response string out of pieces
 	 * none of this strlen() nonsense.
 	 * 5 * (NICKLEN*2+CHANNELLEN+USERLEN+HOSTLEN+30) is still << sizeof(buf)
-	 * and our ircsprintf() truncates it to fit anyway. There is
+	 * and our ircsnprintf() truncates it to fit anyway. There is
 	 * no danger of an overflow here. -Dianora
 	 */
 	response[0][0] = response[1][0] = response[2][0] =
@@ -120,7 +114,8 @@ DLLFUNC CMD_FUNC(m_userhost)
 
 		if ((acptr = find_person(cn, NULL)))
 		{
-			ircsprintf(response[i], "%s%s=%c%s@%s",
+			ircsnprintf(response[i], NICKLEN * 2 + CHANNELLEN + USERLEN + HOSTLEN + 30,
+                            "%s%s=%c%s@%s",
 			    acptr->name,
 			    (IsAnOper(acptr) && (!IsHideOper(acptr) || sptr == acptr || IsAnOper(sptr)))
 				? "*" : "",

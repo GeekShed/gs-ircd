@@ -52,7 +52,6 @@ DLLFUNC int m_chgname(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_CHGNAME     "CHGNAME"
-#define TOK_CHGNAME     "BK"
 
 
 ModuleHeader MOD_HEADER(m_chgname)
@@ -68,11 +67,8 @@ ModuleHeader MOD_HEADER(m_chgname)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_chgname)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_CHGNAME, TOK_CHGNAME, m_chgname, 2);
-	add_Command(MSG_SVSNAME, NULL, m_chgname, 2);
+	CommandAdd(modinfo->handle, MSG_CHGNAME, m_chgname, 2, 0);
+	CommandAdd(modinfo->handle, MSG_SVSNAME, m_chgname, 2, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -81,25 +77,13 @@ DLLFUNC int MOD_INIT(m_chgname)(ModuleInfo *modinfo)
 DLLFUNC int MOD_LOAD(m_chgname)(int module_load)
 {
 	return MOD_SUCCESS;
-	
 }
 
 
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_chgname)(int module_unload)
 {
-	if (del_Command(MSG_CHGNAME, TOK_CHGNAME, m_chgname) < 0)
-	{
-		sendto_realops("Failed to delete command chgname when unloading %s",
-				MOD_HEADER(m_chgname).name);
-	}
-	if (del_Command(MSG_SVSNAME, NULL, m_chgname) < 0)
-	{
-		sendto_realops("Failed to delete command svsname when unloading %s",
-				MOD_HEADER(m_chgname).name);
-	}
-	return MOD_SUCCESS;
-	
+	return MOD_SUCCESS;	
 }
 
 
@@ -154,7 +138,7 @@ DLLFUNC int m_chgname(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		}
 
 		/* set the realname first to make n:line checking work */
-		ircsprintf(acptr->info, "%s", parv[2]);
+		ircsnprintf(acptr->info, sizeof(acptr->info), "%s", parv[2]);
 		/* only check for n:lines if the person who's name is being changed is not an oper */
 		if (!IsAnOper(acptr) && Find_ban(NULL, acptr->info, CONF_BAN_REALNAME)) {
 			int xx;
@@ -177,8 +161,8 @@ DLLFUNC int m_chgname(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		}
 
 
-		sendto_serv_butone_token(cptr, sptr->name,
-		    MSG_CHGNAME, TOK_CHGNAME, "%s :%s", acptr->name, parv[2]);
+		sendto_server(cptr, 0, 0, ":%s CHGNAME %s :%s",
+		    sptr->name, acptr->name, parv[2]);
 		return 0;
 	}
 	else

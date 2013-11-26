@@ -47,7 +47,6 @@
 DLLFUNC int m_trace(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_TRACE 	"TRACE"	
-#define TOK_TRACE 	"b"	
 
 ModuleHeader MOD_HEADER(m_trace)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_trace)
 
 DLLFUNC int MOD_INIT(m_trace)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_TRACE, TOK_TRACE, m_trace, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_TRACE, m_trace, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_trace)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_trace)(int module_unload)
 {
-	if (del_Command(MSG_TRACE, TOK_TRACE, m_trace) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_trace).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -97,7 +91,7 @@ DLLFUNC CMD_FUNC(m_trace)
 
 
 	if (parc > 2)
-		if (hunt_server_token(cptr, sptr, MSG_TRACE, TOK_TRACE, "%s :%s", 2, parc, parv))
+		if (hunt_server(cptr, sptr, ":%s TRACE %s :%s", 2, parc, parv))
 			return 0;
 
 	if (parc > 1)
@@ -122,13 +116,13 @@ DLLFUNC CMD_FUNC(m_trace)
 		}
 	}
 
-	switch (hunt_server_token(cptr, sptr, MSG_TRACE, TOK_TRACE, ":%s", 1, parc, parv))
+	switch (hunt_server(cptr, sptr, ":%s TRACE :%s", 1, parc, parv))
 	{
 	  case HUNTED_PASS:	/* note: gets here only if parv[1] exists */
 	  {
 		  aClient *ac2ptr;
 
-		  ac2ptr = next_client(client, tname);
+		  ac2ptr = find_client(tname, NULL);
 		  sendto_one(sptr, rpl_str(RPL_TRACELINK), me.name, parv[0],
 		      version, debugmode, tname, ac2ptr->from->name);
 		  return 0;
@@ -148,29 +142,27 @@ DLLFUNC CMD_FUNC(m_trace)
 
 
 	if (doall) {
-		for (acptr = client; acptr; acptr = acptr->next)
+		list_for_each_entry(acptr, &client_list, client_node)
 #ifdef	SHOW_INVISIBLE_LUSERS
 			if (IsPerson(acptr))
-				link_u[acptr->from->slot]++;
+				link_u[acptr->from->fd]++;
 #else
 			if (IsPerson(acptr) &&
 			    (!IsInvisible(acptr) || IsOper(sptr)))
-				link_u[acptr->from->slot]++;
+				link_u[acptr->from->fd]++;
 #endif
 			else if (IsServer(acptr))
-				link_s[acptr->from->slot]++;
+				link_s[acptr->from->fd]++;
 	}
 
 	/* report all direct connections */
 
 	now = TStime();
-	for (i = 0; i <= LastSlot; i++)
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
 		char *name;
 		char *class;
 
-		if (!(acptr = local[i]))	/* Local Connection? */
-			continue;
 /* More bits of code to allow oers to see all users on remote traces
  *		if (IsInvisible(acptr) && dow &&
  *		if (dow &&
@@ -282,8 +274,8 @@ DLLFUNC CMD_FUNC(m_trace)
 		 * trace
 		 */
 		sendto_one(sptr, rpl_str(RPL_TRACESERVER),
-		    me.name, parv[0], "0", link_s[me.slot],
-		    link_u[me.slot], me.name, "*", "*", me.name, 0L);
+		    me.name, parv[0], "0", link_s[me.fd],
+		    link_u[me.fd], me.name, "*", "*", me.name, 0L);
 		return 0;
 	}
 	for (cltmp = conf_class; doall && cltmp; cltmp = (ConfigItem_class *) cltmp->next)

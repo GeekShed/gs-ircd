@@ -47,7 +47,6 @@ DLLFUNC int m_svssilence(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SVSSILENCE       "SVSSILENCE"
-#define TOK_SVSSILENCE       "Bs"
 
 ModuleHeader MOD_HEADER(m_svssilence)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_svssilence)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_svssilence)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SVSSILENCE, TOK_SVSSILENCE, m_svssilence, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSSILENCE, m_svssilence, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_svssilence)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_svssilence)(int module_unload)
 {
-	if (del_Command(MSG_SVSSILENCE, TOK_SVSSILENCE, m_svssilence) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svssilence).name);
-	}
 	return MOD_SUCCESS;	
 }
 
@@ -108,7 +99,7 @@ CMD_FUNC(m_svssilence)
 	if (parc < 3 || BadPtr(parv[2]) || !(acptr = find_person(parv[1], NULL)))
 		return 0;
 	
-	sendto_serv_butone_token(sptr, parv[0], MSG_SVSSILENCE, TOK_SVSSILENCE, "%s :%s", parv[1], parv[2]);
+	sendto_server(sptr, 0, 0, ":%s SVSSILENCE %s :%s", parv[0], parv[1], parv[2]);
 
 	mine = MyClient(acptr) ? 1 : 0;
 

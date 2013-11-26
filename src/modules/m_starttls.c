@@ -43,6 +43,7 @@
 #ifdef _WIN32
 #include "version.h"
 #endif
+#include "m_cap.h"
 
 DLLFUNC CMD_FUNC(m_starttls);
 
@@ -57,9 +58,14 @@ ModuleHeader MOD_HEADER(m_starttls)
 	NULL 
     };
 
+static void m_starttls_caplist(struct list_head *head);
+
 DLLFUNC int MOD_INIT(m_starttls)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_STARTTLS, NULL, m_starttls, MAXPARA, M_UNREGISTERED|M_ANNOUNCE);
+	CommandAdd(modinfo->handle, MSG_STARTTLS, m_starttls, MAXPARA, M_UNREGISTERED|M_ANNOUNCE);
+
+	HookAddVoidEx(modinfo->handle, HOOKTYPE_CAPLIST, m_starttls_caplist);
+
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,6 +78,20 @@ DLLFUNC int MOD_LOAD(m_starttls)(int module_load)
 DLLFUNC int MOD_UNLOAD(m_starttls)(int module_unload)
 {
 	return MOD_SUCCESS;
+}
+
+#ifdef USE_SSL
+static ClientCapability cap_tls = {
+	.name = "tls",
+	.cap = PROTO_STARTTLS,
+};
+#endif
+
+static void m_starttls_caplist(struct list_head *head)
+{
+#ifdef USE_SSL
+	clicap_append(head, &cap_tls);
+#endif
 }
 
 DLLFUNC CMD_FUNC(m_starttls)
@@ -92,11 +112,11 @@ DLLFUNC CMD_FUNC(m_starttls)
 	}
 	if (IsSecure(sptr))
 	{
-		sendto_one(sptr, err_str(ERR_STARTTLS), me.name, sptr->name, "STARTTLS failed. Already using TLS.");
+		sendto_one(sptr, err_str(ERR_STARTTLS), me.name, !BadPtr(sptr->name) ? sptr->name : "*", "STARTTLS failed. Already using TLS.");
 		return 0;
 	}
 	dbuf_delete(&sptr->recvQ, 1000000); /* Clear up any remaining plaintext commands */
-	sendto_one(sptr, rpl_str(RPL_STARTTLS), me.name, sptr->name);
+	sendto_one(sptr, rpl_str(RPL_STARTTLS), me.name, !BadPtr(sptr->name) ? sptr->name : "*");
 	send_queued(sptr);
 
 	SetSSLStartTLSHandshake(sptr);
@@ -118,7 +138,7 @@ DLLFUNC CMD_FUNC(m_starttls)
 	return 0;
 fail:
 	/* Failure */
-	sendto_one(sptr, err_str(ERR_STARTTLS), me.name, sptr->name, "STARTTLS failed");
+	sendto_one(sptr, err_str(ERR_STARTTLS), me.name, !BadPtr(sptr->name) ? sptr->name : "*", "STARTTLS failed");
 	sptr->ssl = NULL;
 	sptr->flags &= ~FLAGS_SSL;
 	SetUnknown(sptr);

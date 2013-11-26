@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_motd);
 
 #define MSG_MOTD 	"MOTD"	
-#define TOK_MOTD 	"F"	
 
 ModuleHeader MOD_HEADER(m_motd)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_motd)
 
 DLLFUNC int MOD_INIT(m_motd)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_MOTD, TOK_MOTD, m_motd, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_MOTD, m_motd, MAXPARA, M_USER|M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -90,8 +89,7 @@ DLLFUNC CMD_FUNC(m_motd)
 
 	if (IsServer(sptr))
 		return 0;
-	if (hunt_server_token(cptr, sptr, MSG_MOTD, TOK_MOTD, ":%s", 1, parc, parv) !=
-HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s MOTD :%s", 1, parc, parv) != HUNTED_ISME)
 		return 0;
 #ifndef TLINE_Remote
 	if (!MyConnect(sptr))

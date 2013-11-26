@@ -49,17 +49,9 @@ enum UHAllowed { UHALLOW_ALWAYS, UHALLOW_NOCHANS, UHALLOW_REJOIN, UHALLOW_NEVER 
 
 struct ChMode {
         long mode;
-#ifdef EXTCMODE
 	long extmodes;
 	char *extparams[EXTCMODETABLESZ];
-#endif
-#ifdef NEWCHFLOODPROT
 	ChanFloodProt	floodprot;
-#else
-        unsigned short  msgs;
-        unsigned short  per; 
-        unsigned char   kmode;
-#endif
 };
 
 typedef struct _OperStat {
@@ -74,7 +66,6 @@ struct zConfiguration {
 	unsigned flat_map:1;
 	unsigned allow_chatops:1;
 	unsigned webtv_support:1;
-	unsigned no_oper_hiding:1;
 	unsigned ident_check:1;
 	unsigned fail_oper_warn:1;
 	unsigned show_connect_info:1;
@@ -90,10 +81,8 @@ struct zConfiguration {
 	int  host_retries;
 	char *name_server;
 	char *dns_bindip;
-#ifdef THROTTLING
 	long throttle_period;
 	char throttle_count;
-#endif
 	char *kline_address;
 	char *gline_address;
 	long conn_modes;
@@ -114,13 +103,14 @@ struct zConfiguration {
 	char *x_server_cert_pem;
 	char *x_server_key_pem;
 	char *x_server_cipher_list;
+	char *x_dh_pem;
 	char *trusted_ca_file;
 	long ssl_options;
 	int ssl_renegotiate_bytes;
 	int ssl_renegotiate_timeout;
 	
 #elif defined(_WIN32)
-	void *bogus1, *bogus2, *bogus3, *bogus5;
+	void *bogus1, *bogus2, *bogus3, *bogus5, *bogus8;
 	long bogus4;
 	int bogus6, bogus7;
 #endif
@@ -145,10 +135,8 @@ struct zConfiguration {
 	long default_bantime;
 	int who_limit;
 	int silence_limit;
-#ifdef NEWCHFLOODPROT
 	unsigned char modef_default_unsettime;
 	unsigned char modef_max_unsettime;
-#endif
 	long ban_version_tkl_time;
 	long spamfilter_ban_time;
 	char *spamfilter_ban_reason;
@@ -171,6 +159,7 @@ struct zConfiguration {
 	unsigned short default_ipv6_clone_mask;
 #endif /* INET6 */
 	int ping_cookie;
+	int nicklen;
 };
 
 #ifndef DYNCONF_C
@@ -190,7 +179,6 @@ extern MODVAR aConfiguration iConf;
 #define MAXCHANNELSPERUSER		iConf.maxchannelsperuser
 #define MAXDCCALLOW			iConf.maxdccallow
 #define WEBTV_SUPPORT			iConf.webtv_support
-#define NO_OPER_HIDING			iConf.no_oper_hiding
 #define DONT_RESOLVE			iConf.dont_resolve
 #define AUTO_JOIN_CHANS			iConf.auto_join_chans
 #define OPER_AUTO_JOIN_CHANS		iConf.oper_auto_join_chans
@@ -216,7 +204,6 @@ extern MODVAR aConfiguration iConf;
 #define sadmin_host			iConf.network.x_sadmin_host
 #define netadmin_host		iConf.network.x_netadmin_host
 #define coadmin_host		iConf.network.x_coadmin_host
-#define techadmin_host		iConf.network.x_techadmin_host
 #define hidden_host			iConf.network.x_hidden_host
 #define helpchan			iConf.network.x_helpchan
 #define STATS_SERVER			iConf.network.x_stats_server
@@ -233,10 +220,8 @@ extern MODVAR aConfiguration iConf;
 #define RESTRICT_CHANNELMODES		iConf.restrict_channelmodes
 #define RESTRICT_EXTENDEDBANS		iConf.restrict_extendedbans
 #define NEW_LINKING_PROTOCOL		iConf.new_linking_protocol
-#ifdef THROTTLING
 #define THROTTLING_PERIOD		iConf.throttle_period
 #define THROTTLING_COUNT		iConf.throttle_count
-#endif
 #define USE_BAN_VERSION			iConf.use_ban_version
 #define UNKNOWN_FLOOD_BANTIME		iConf.unknown_flood_bantime
 #define UNKNOWN_FLOOD_AMOUNT		iConf.unknown_flood_amount
@@ -260,10 +245,8 @@ extern MODVAR aConfiguration iConf;
 #define DEFAULT_BANTIME			iConf.default_bantime
 #define WHOLIMIT			iConf.who_limit
 
-#ifdef NEWCHFLOODPROT
 #define MODEF_DEFAULT_UNSETTIME	iConf.modef_default_unsettime
 #define MODEF_MAX_UNSETTIME		iConf.modef_max_unsettime
-#endif
 
 #define ALLOW_PART_IF_SHUNNED	iConf.allow_part_if_shunned
 
@@ -302,7 +285,6 @@ struct SetCheck {
 	unsigned has_flat_map:1;
 	unsigned has_allow_chatops:1;
 	unsigned has_webtv_support:1;
-	unsigned has_no_oper_hiding:1;
 	unsigned has_ident_check:1;
 	unsigned has_fail_oper_warn:1;
 	unsigned has_show_connect_info:1;
@@ -316,10 +298,8 @@ struct SetCheck {
 	unsigned has_dns_retries:1;
 	unsigned has_dns_nameserver:1;
 	unsigned has_dns_bind_ip:1;
-#ifdef THROTTLING
 	unsigned has_throttle_period:1;
 	unsigned has_throttle_connections:1;
-#endif
 	unsigned has_kline_address:1;
 	unsigned has_gline_address:1;
 	unsigned has_modes_on_connect:1;
@@ -344,6 +324,7 @@ struct SetCheck {
 	unsigned has_ssl_key:1;
 	unsigned has_ssl_trusted_ca_file:1;
 	unsigned has_ssl_options:1;
+	unsigned has_ssl_dh:1;
 	unsigned has_renegotiate_timeout : 1;
 	unsigned has_renegotiate_bytes : 1;
 #endif
@@ -369,10 +350,8 @@ struct SetCheck {
 	unsigned has_maxbans:1;
 	unsigned has_maxbanlength:1;
 	unsigned has_silence_limit:1;
-#ifdef NEWCHFLOODPROT
 	unsigned has_modef_default_unsettime:1;
 	unsigned has_modef_max_unsettime:1;
-#endif
 	unsigned has_ban_version_tkl_time:1;
 	unsigned has_spamfilter_ban_time:1;
 	unsigned has_spamfilter_ban_reason:1;
@@ -411,6 +390,7 @@ struct SetCheck {
 	unsigned has_cgiirc_hosts:1;
 	unsigned has_cgiirc_webpass:1;
 	unsigned has_ping_cookie:1;
+	unsigned has_nicklen:1;
 };
 
 

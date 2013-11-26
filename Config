@@ -52,13 +52,6 @@ else
 ARG="$ARG--enable-ssl=$SSLDIR "
 fi
 fi
-if [ "$ZIPLINKS" = "1" ] ; then
-if test x"$ZIPLINKSDIR" = "x" ; then
-ARG="$ARG--enable-ziplinks "
-else
-ARG="$ARG--enable-ziplinks=$ZIPLINKSDIR "
-fi
-fi
 if [ "$REMOTEINC" = "1" ] ; then
 ARG="$ARG--enable-libcurl=$CURLDIR "
 fi
@@ -68,12 +61,10 @@ fi
 if [ "$PREFIXAQ" != "1" ]; then
 ARG="$ARG--disable-prefixaq "
 fi
-ARG="$ARG--with-listen=$LISTEN_SIZE "
 ARG="$ARG--with-dpath=$DPATH "
 ARG="$ARG--with-spath=$SPATH "
 ARG="$ARG--with-nick-history=$NICKNAMEHISTORYLENGTH "
 ARG="$ARG--with-sendq=$MAXSENDQLENGTH "
-ARG="$ARG--with-bufferpool=$BUFFERPOOL "
 ARG="$ARG--with-permissions=$DEFPERM "
 ARG="$ARG--with-fd-setsize=$MAXCONNECTIONS "
 ARG="$ARG--enable-dynamic-linking "
@@ -346,12 +337,8 @@ SPATH="`pwd`/src/ircd"
 DEFPERM="0600"
 CRYPTOIRCD=""
 SSLDIR=""
-ZIPLINKS=""
-ZIPLINKSDIR=""
-LISTEN_SIZE="5"
 NICKNAMEHISTORYLENGTH="2000"
 MAXSENDQLENGTH="3000000"
-BUFFERPOOL="18"
 MAXCONNECTIONS="1024"
 INET6=""
 REMOTEINC=""
@@ -570,49 +557,6 @@ done
 
 TEST=""
 while [ -z "$TEST" ] ; do
-    if [ "$ZIPLINKS" = "1" ] ; then
-	TEST="Yes"
-    else
-	TEST="No"
-    fi
-    echo ""
-    echo "Do you want to enable ziplinks support?"
-    echo $n "[$TEST] -> $c"
-	read cc
-    if [ -z "$cc" ] ; then
-	cc=$TEST
-    fi
-    case "$cc" in
-	[Yy]*)
-	    ZIPLINKS="1"
-	    ;;
-	[Nn]*)
-	    ZIPLINKS=""
-	    ;;
-	*)
-	    echo ""
-	    echo "You must enter either Yes or No"
-	    TEST=""
-	    ;;
-    esac
-done
-
-if [ "$ZIPLINKS" = "1" ] ; then
-TEST="$ZIPLINKSDIR"
-echo ""
-echo "If you know the path to zlib on your system, enter it here. If not"
-echo "leave this blank"
-echo $n "[$TEST] -> $c"
-    read cc
-if [ -z "$cc" ] ; then
-    ZIPLINKSDIR="$TEST"
-else 
-    ZIPLINKSDIR=`eval echo $cc` # modified
-fi
-fi
-
-TEST=""
-while [ -z "$TEST" ] ; do
     if [ "$REMOTEINC" = "1" ] ; then
 	TEST="Yes"
     else
@@ -818,31 +762,6 @@ while [ -z "$TEST" ] ; do
     esac
 done
 
-
-TEST=""
-while [ -z "$TEST" ] ; do
-    TEST="$LISTEN_SIZE"
-    echo ""
-    echo "What listen() backlog value do you wish to use?  Some older servers"
-    echo "have problems with more than 5, others work fine with many more."
-    echo $n "[$TEST] -> $c"
-	read cc
-    if [ -z "$cc" ] ; then
-	LISTEN_SIZE=$TEST
-	break
-    fi
-    case "$cc" in
-	[1-9]*)
-	    LISTEN_SIZE="$cc"
-	    ;;
-	*)
-	    echo ""
-	    echo "You must enter a number"
-	    TEST=""
-	    ;;
-    esac
-done
-
 TEST=""
 while [ -z "$TEST" ] ; do
     TEST="$NICKNAMEHISTORYLENGTH"
@@ -889,31 +808,6 @@ while [ -z "$TEST" ] ; do
     esac
 done
 
-TEST=""
-while [ -z "$TEST" ] ; do
-    TEST="$BUFFERPOOL"
-    echo ""
-    echo "How many buffer pools would you like?"
-    echo "This number will be multiplied by MAXSENDQLENGTH."
-    echo $n "[$TEST] -> $c"
-	read cc
-    if [ -z "$cc" ] ; then
-	BUFFERPOOL=$TEST
-	break
-    fi
-    case "$cc" in
-	[1-9]*)
-	    BUFFERPOOL="$cc"
-	    ;;
-	*)
-	    echo ""
-	    echo "You must enter a number"
-	    TEST=""
-	    ;;
-    esac
-
-done
-
 echo ""
 TEST=""
 while [ -z "$TEST" ] ; do
@@ -958,16 +852,12 @@ DPATH="$DPATH"
 SPATH="$SPATH"
 INET6="$INET6"
 PREFIXAQ="$PREFIXAQ"
-LISTEN_SIZE="$LISTEN_SIZE"
 MAXSENDQLENGTH="$MAXSENDQLENGTH"
-BUFFERPOOL="$BUFFERPOOL"
 MAXCONNECTIONS="$MAXCONNECTIONS"
 NICKNAMEHISTORYLENGTH="$NICKNAMEHISTORYLENGTH"
 DEFPERM="$DEFPERM"
 CRYPTOIRCD="$CRYPTOIRCD"
 SSLDIR="$SSLDIR"
-ZIPLINKS="$ZIPLINKS"
-ZIPLINKSDIR="$ZIPLINKSDIR"
 REMOTEINC="$REMOTEINC"
 CURLDIR="$CURLDIR"
 SHOWLISTMODES="$SHOWLISTMODES"

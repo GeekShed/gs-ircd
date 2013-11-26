@@ -47,7 +47,6 @@
 DLLFUNC int m_stats(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_STATS 	"STATS"	
-#define TOK_STATS 	"2"	
 
 ModuleHeader MOD_HEADER(m_stats)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_stats)
 
 DLLFUNC int MOD_INIT(m_stats)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_STATS, TOK_STATS, m_stats, 3);
+	CommandAdd(modinfo->handle, MSG_STATS, m_stats, 3, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_stats)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_stats)(int module_unload)
 {
-	if (del_Command(MSG_STATS, TOK_STATS, m_stats) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_stats).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -116,9 +110,9 @@ int stats_uptime(aClient *, char *);
 int stats_denyver(aClient *, char *);
 int stats_notlink(aClient *, char *);
 int stats_class(aClient *, char *);
-int stats_zip(aClient *, char *);
 int stats_officialchannels(aClient *, char *);
 int stats_spamfilter(aClient *, char *);
+int stats_fdtable(aClient *, char *);
 
 #define SERVER_AS_PARA 0x1
 #define FLAGS_AS_PARA 0x2
@@ -152,6 +146,7 @@ struct statstab StatsTable[] = {
 	{ 'T', "traffic",	stats_traffic,		0 		},
 	{ 'U', "uline",		stats_uline,		0 		},
 	{ 'V', "vhost", 	stats_vhost,		0 		},
+	{ 'W', "fdtable",       stats_fdtable,          0               },
 	{ 'X', "notlink",	stats_notlink,		0 		},	
 	{ 'Y', "class",		stats_class,		0 		},	
 	{ 'Z', "mem",		stats_mem,		0 		},
@@ -176,7 +171,6 @@ struct statstab StatsTable[] = {
 	{ 'v', "denyver",	stats_denyver,		0 		},
 	{ 'x', "notlink",	stats_notlink,		0 		},	
 	{ 'y', "class",		stats_class,		0 		},
-	{ 'z', "zip",		stats_zip,		0 		},
 	{ 0, 	NULL, 		NULL, 			0		}
 };
 
@@ -220,9 +214,7 @@ inline struct statstab *stats_search(char *s) {
 inline char *stats_combine_parv(char *p1, char *p2)
 {
 	static char buf[BUFSIZE+1];
-	strcpy(buf, p1);
-	strcat(buf, " ");
-	strcat(buf, p2);
+        ircsnprintf(buf, sizeof(buf), "%s %s", p1, p2);
 	return buf;
 }
 
@@ -310,13 +302,11 @@ inline void stats_help(aClient *sptr)
 	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
 		"V - vhost - Send the vhost block list");
 	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
+		"W - fdtable - Send the FD table listing");
+	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
 		"X - notlink - Send the list of servers that are not current linked");
 	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
 		"Y - class - Send the class block list");
-#ifdef ZIP_LINKS
-	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
-		"z - zip - Send compression information about ziplinked servers");
-#endif
 	sendto_one(sptr, rpl_str(RPL_STATSHELP), me.name, sptr->name,
 		"Z - mem - Send memory usage information");
 }
@@ -386,15 +376,13 @@ DLLFUNC CMD_FUNC(m_stats)
 
 	if (parc == 3 && parv[2][0] != '+' && parv[2][0] != '-')
 	{
-		if (hunt_server_token(cptr, sptr, MSG_STATS, TOK_STATS, "%s :%s", 2, parc,
-		    parv) != HUNTED_ISME)
+		if (hunt_server(cptr, sptr, ":%s STATS %s :%s", 2, parc, parv) != HUNTED_ISME)
 			return 0;
 	}
 	else if (parc == 4 && parv[2][0] != '+' && parv[2][0] != '-')
 	{
-		if (hunt_server_token(cptr, sptr, MSG_STATS, TOK_STATS, "%s %s %s", 2, parc,
-			parv) != HUNTED_ISME)
-				return 0;
+		if (hunt_server(cptr, sptr, ":%s STATS %s %s %s", 2, parc, parv) != HUNTED_ISME)
+			return 0;
 	}
 	if (parc < 2 || !*parv[1])
 	{
@@ -505,14 +493,13 @@ int stats_links(aClient *sptr, char *para)
 #endif
 	for (link_p = conf_link; link_p; link_p = (ConfigItem_link *) link_p->next)
 	{
-		sendto_one(sptr, ":%s 213 %s C %s@%s * %s %i %s %s%s%s%s%s%s",
+		sendto_one(sptr, ":%s 213 %s C %s@%s * %s %i %s %s%s%s%s%s",
 			me.name, sptr->name, IsOper(sptr) ? link_p->username : "*",
 			IsOper(sptr) ? link_p->hostname : "*", link_p->servername,
 			link_p->port,
 			link_p->class->name,
 			(link_p->options & CONNECT_AUTO) ? "a" : "",
 			(link_p->options & CONNECT_SSL) ? "S" : "",
-			(link_p->options & CONNECT_ZIP) ? "z" : "",
 			(link_p->options & CONNECT_NODNSCACHE) ? "d" : "",
 			(link_p->options & CONNECT_NOHOSTCHECK) ? "h" : "",
 			(link_p->flag.temporary == 1) ? "T" : "");
@@ -530,7 +517,7 @@ int stats_links(aClient *sptr, char *para)
 				link_p->leafmask, link_p->servername, link_p->leafdepth);
 	}
 #ifdef DEBUGMODE
-	for (acptr = client; acptr; acptr = acptr->next)
+	list_for_each_entry(acptr, &client_list, client_node)
 		if (MyConnect(acptr) && acptr->serv && !IsMe(acptr))
 		{
 			if (!acptr->serv->conf)
@@ -618,20 +605,6 @@ int stats_command(aClient *sptr, char *para)
 				mptr->lticks, mptr->lticks / CLOCKS_PER_SEC,
 				mptr->rticks, mptr->rticks / CLOCKS_PER_SEC);
 #endif
-	for (i = 0; i < 256; i++)
-		for (mptr = TokenHash[i]; mptr; mptr = mptr->next)
-			if (mptr->count)
-#ifndef DEBUGMODE
-			sendto_one(sptr, rpl_str(RPL_STATSCOMMANDS),
-				me.name, sptr->name, mptr->cmd,
-				mptr->count, mptr->bytes);
-#else
-			sendto_one(sptr, rpl_str(RPL_STATSCOMMANDS),
-				me.name, sptr->name, mptr->cmd,
-				mptr->count, mptr->bytes,
-				mptr->lticks, mptr->lticks / CLOCKS_PER_SEC,
-				mptr->rticks, mptr->rticks / CLOCKS_PER_SEC);
-#endif
 
 	return 0;
 }	
@@ -659,38 +632,36 @@ int stats_oper(aClient *sptr, char *para)
 	return 0;
 }
 
-static char *stats_port_helper(aClient *listener)
+static char *stats_port_helper(ConfigItem_listen *listener)
 {
-static char buf[256];
-	buf[0] = '\0';
-	if (listener->umodes & LISTENER_CLIENTSONLY)
-		strcat(buf, "clientsonly ");
-	if (listener->umodes & LISTENER_SERVERSONLY)
-		strcat(buf, "serversonly ");
-	if (listener->umodes & LISTENER_JAVACLIENT)
-		strcat(buf, "java ");
-	if (listener->umodes & LISTENER_SSL)
-		strcat(buf, "SSL ");
+	static char buf[256];
+
+	ircsnprintf(buf, sizeof(buf), "%s%s%s%s",
+	    (listener->options & LISTENER_CLIENTSONLY)? "clientsonly ": "",
+	    (listener->options & LISTENER_SERVERSONLY)? "serversonly ": "",
+	    (listener->options & LISTENER_JAVACLIENT)?  "java ": "",
+	    (listener->options & LISTENER_SSL)?         "ssl ": "");
 	return buf;
 }
 
 int stats_port(aClient *sptr, char *para)
 {
 	int i;
-	aClient *acptr;
-	for (i = 0; i <= LastSlot; i++)
+	ConfigItem_listen *listener;
+
+	for (listener = conf_listen; listener != NULL; listener = (ConfigItem_listen *) listener->next)
 	{
-		if (!(acptr = local[i]))
-			continue;
-	  	if (!IsListening(acptr))
+		if (!(listener->options & LISTENER_BOUND))
 	  		continue;
-	  	sendto_one(sptr, ":%s %s %s :*** Listener on %s:%i, clients %i. is %s %s",
-	  		me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name,
-	  		((ConfigItem_listen *)acptr->class)->ip,
-			((ConfigItem_listen *)acptr->class)->port,
-			((ConfigItem_listen *)acptr->class)->clients,
-			((ConfigItem_listen *)acptr->class)->flag.temporary ? "TEMPORARY" : "PERM",
-			stats_port_helper(acptr));
+		if ((listener->options & LISTENER_SERVERSONLY) && !IsAnOper(sptr))
+			continue;
+	  	sendto_one(sptr, ":%s NOTICE %s :*** Listener on %s:%i, clients %i. is %s %s",
+	  		me.name, sptr->name,
+	  		listener->ip,
+			listener->port,
+			listener->clients,
+			listener->flag.temporary ? "TEMPORARY" : "PERM",
+			stats_port_helper(listener));
 	}
 	return 0;
 }
@@ -719,10 +690,9 @@ int stats_traffic(aClient *sptr, char *para)
 
 	sp = &tmp;
 	bcopy((char *)ircstp, (char *)sp, sizeof(*sp));
-	for (i = 0; i <= LastSlot; i++)
+
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
 		if (IsServer(acptr))
 		{
 			sp->is_sbs += acptr->sendB;
@@ -791,14 +761,29 @@ int stats_traffic(aClient *sptr, char *para)
 	    sp->is_ckr, sp->is_cbr, sp->is_skr, sp->is_sbr);
 	sendto_one(sptr, ":%s %d %s :time connected %ld %ld",
 	    me.name, RPL_STATSDEBUG, sptr->name, sp->is_cti, sp->is_sti);
-#ifndef NO_FDLIST
-	sendto_one(sptr,
-	    ":%s %d %s :incoming rate %0.2f kb/s - outgoing rate %0.2f kb/s",
-	    me.name, RPL_STATSDEBUG, sptr->name, currentrate, currentrate2);
-#endif
+
 	return 0;
 }
 
+int stats_fdtable(aClient *sptr, char *para)
+{
+	int i;
+
+	for (i = 0; i < MAXCONNECTIONS; i++)
+	{
+		FDEntry *fde = &fd_table[i];
+
+		if (!fde->is_open)
+			continue;
+
+		sendto_one(sptr,
+			":%s %d %s :fd %3d, desc '%s', read-hdl %p, write-hdl %p, cbdata %p",
+			me.name, RPL_STATSDEBUG, sptr->name,
+			fde->fd, fde->desc, fde->read_callback, fde->write_callback, fde->data);
+	}
+
+	return 0;
+}
 
 int stats_uline(aClient *sptr, char *para)
 {
@@ -876,7 +861,7 @@ int stats_mem(aClient *sptr, char *para)
 	count_watch_memory(&wlh, &wlhm);
 	wwm = sizeof(aName) * NICKNAMEHISTORYLENGTH;
 
-	for (acptr = client; acptr; acptr = acptr->next)
+	list_for_each_entry(acptr, &client_list, client_node)
 	{
 		if (MyConnect(acptr))
 		{
@@ -983,9 +968,6 @@ int stats_mem(aClient *sptr, char *para)
 	    (long)(sizeof(aHashEntry) * U_MAX), CH_MAX,
 	    (long)(sizeof(aHashEntry) * CH_MAX), WATCHHASHSIZE,
 	    (long)(sizeof(aWatch *) * WATCHHASHSIZE));
-	db = dbufblocks * sizeof(dbufbuf);
-	sendto_one(sptr, ":%s %d %s :Dbuf blocks %d(%ld)",
-	    me.name, RPL_STATSDEBUG, sptr->name, dbufblocks, db);
 
 	for (link = freelink; link; link = link->next)
 		fl++;
@@ -1029,48 +1011,28 @@ int stats_badwords(aClient *sptr, char *para)
 	  ConfigItem_badword *words;
 
 	  for (words = conf_badword_channel; words; words = (ConfigItem_badword *) words->next) {
- #ifdef FAST_BADWORD_REPLACE
 		  sendto_one(sptr, ":%s %i %s :c %c %s%s%s %s",
 		      me.name, RPL_TEXT, sptr->name, words->type & BADW_TYPE_REGEX ? 'R' : 'F',
 		      (words->type & BADW_TYPE_FAST_L) ? "*" : "", words->word,
 		      (words->type & BADW_TYPE_FAST_R) ? "*" : "",
 		      words->action == BADWORD_REPLACE ? 
 		      (words->replace ? words->replace : "<censored>") : "");
- #else
-		  sendto_one(sptr, ":%s %i %s :c %s %s", me.name, RPL_TEXT,
-			sptr->name,  words->word, words->action == BADWORD_REPLACE ? 
-			(words->replace ? words->replace : "<censored>") : "");
- #endif
 	  }
 	  for (words = conf_badword_message; words; words = (ConfigItem_badword *) words->next) {
- #ifdef FAST_BADWORD_REPLACE
 		  sendto_one(sptr, ":%s %i %s :m %c %s%s%s %s",
 		      me.name, RPL_TEXT, sptr->name, words->type & BADW_TYPE_REGEX ? 'R' : 'F',
 		      (words->type & BADW_TYPE_FAST_L) ? "*" : "", words->word,
 		      (words->type & BADW_TYPE_FAST_R) ? "*" : "",
 		      words->action == BADWORD_REPLACE ? 
 		      (words->replace ? words->replace : "<censored>") : "");
- #else
-		  sendto_one(sptr, ":%s %i %s :m %s %s", me.name, RPL_TEXT, sptr->name,
-			words->word, words->action == BADWORD_REPLACE ? 
-			(words->replace ? words->replace : "<censored>") : "");
-
- #endif
 	  }
 	  for (words = conf_badword_quit; words; words = (ConfigItem_badword *) words->next) {
- #ifdef FAST_BADWORD_REPLACE
 		  sendto_one(sptr, ":%s %i %s :q %c %s%s%s %s",
 		      me.name, RPL_TEXT, sptr->name, words->type & BADW_TYPE_REGEX ? 'R' : 'F',
 		      (words->type & BADW_TYPE_FAST_L) ? "*" : "", words->word,
 		      (words->type & BADW_TYPE_FAST_R) ? "*" : "",
 		      words->action == BADWORD_REPLACE ? 
 		      (words->replace ? words->replace : "<censored>") : "");
- #else
-		  sendto_one(sptr, ":%s %i %s :q %s %s", me.name, RPL_TEXT, sptr->name,
-			words->word, words->action == BADWORD_REPLACE ? 
-			(words->replace ? words->replace : "<censored>") : "");
-
- #endif
 	  }
 #endif
 	return 0;
@@ -1258,9 +1220,11 @@ int stats_set(aClient *sptr, char *para)
 	sendto_one(sptr, ":%s %i %s :modes-on-oper: %s", me.name, RPL_TEXT,
 	    sptr->name, get_modestr(OPER_MODES));
 	*modebuf = *parabuf = 0;
-	chmode_str(iConf.modes_on_join, modebuf, parabuf);
+	chmode_str(iConf.modes_on_join, modebuf, parabuf, sizeof(modebuf), sizeof(parabuf));
 	sendto_one(sptr, ":%s %i %s :modes-on-join: %s %s", me.name, RPL_TEXT,
 		sptr->name, modebuf, parabuf);
+	sendto_one(sptr, ":%s %i %s :nick-length: %i", me.name, RPL_TEXT,
+		sptr->name, iConf.nicklen);
 	sendto_one(sptr, ":%s %i %s :snomask-on-oper: %s", me.name, RPL_TEXT,
 	    sptr->name, OPER_SNOMASK);
 	sendto_one(sptr, ":%s %i %s :snomask-on-connect: %s", me.name, RPL_TEXT,
@@ -1282,9 +1246,6 @@ int stats_set(aClient *sptr, char *para)
 			sptr->name, RESTRICT_EXTENDEDBANS);
 	switch (UHOST_ALLOWED)
 	{
-		case UHALLOW_ALWAYS:
-			uhallow = "always";
-			break;
 		case UHALLOW_NEVER:
 			uhallow = "never";
 			break;
@@ -1294,7 +1255,14 @@ int stats_set(aClient *sptr, char *para)
 		case UHALLOW_REJOIN:
 			uhallow = "force-rejoin";
 			break;
+		case UHALLOW_ALWAYS:
+		default:
+			uhallow = "always";
+			break;
 	}
+	if (uhallow)
+		sendto_one(sptr, ":%s %i %s :allow-userhost-change: %s", me.name, RPL_TEXT,
+			sptr->name, uhallow);
 	sendto_one(sptr, ":%s %i %s :anti-spam-quit-message-time: %s", me.name, RPL_TEXT, 
 		sptr->name, pretty_time_val(ANTI_SPAM_QUIT_MSG_TIME));
 	sendto_one(sptr, ":%s %i %s :channel-command-prefix: %s", me.name, RPL_TEXT, sptr->name, CHANCMDPFX ? CHANCMDPFX : "`");
@@ -1317,8 +1285,6 @@ int stats_set(aClient *sptr, char *para)
 	    sptr->name, SHOWOPERMOTD);
 	sendto_one(sptr, ":%s %i %s :options::hide-ulines: %d", me.name, RPL_TEXT,
 	    sptr->name, HIDE_ULINES);
-	sendto_one(sptr, ":%s %i %s :options::webtv-support: %d", me.name, RPL_TEXT,
-	    sptr->name, WEBTV_SUPPORT);
 	sendto_one(sptr, ":%s %i %s :options::identd-check: %d", me.name, RPL_TEXT,
 	    sptr->name, IDENT_CHECK);
 	sendto_one(sptr, ":%s %i %s :options::fail-oper-warn: %d", me.name, RPL_TEXT,
@@ -1358,12 +1324,10 @@ int stats_set(aClient *sptr, char *para)
 		    sptr->name, DNS_BINDIP);
 	sendto_one(sptr, ":%s %i %s :ban-version-tkl-time: %s", me.name, RPL_TEXT,
 	    sptr->name, pretty_time_val(BAN_VERSION_TKL_TIME));
-#ifdef THROTTLING
 	sendto_one(sptr, ":%s %i %s :throttle::period: %s", me.name, RPL_TEXT,
 			sptr->name, THROTTLING_PERIOD ? pretty_time_val(THROTTLING_PERIOD) : "disabled");
 	sendto_one(sptr, ":%s %i %s :throttle::connections: %d", me.name, RPL_TEXT,
 			sptr->name, THROTTLING_COUNT ? THROTTLING_COUNT : -1);
-#endif
 	sendto_one(sptr, ":%s %i %s :anti-flood::unknown-flood-bantime: %s", me.name, RPL_TEXT,
 			sptr->name, pretty_time_val(UNKNOWN_FLOOD_BANTIME));
 	sendto_one(sptr, ":%s %i %s :anti-flood::unknown-flood-amount: %ldKB", me.name, RPL_TEXT,
@@ -1381,12 +1345,10 @@ int stats_set(aClient *sptr, char *para)
 			sptr->name, pretty_time_val(IDENT_CONNECT_TIMEOUT));
 	sendto_one(sptr, ":%s %i %s :ident::read-timeout: %s", me.name, RPL_TEXT,
 			sptr->name, pretty_time_val(IDENT_READ_TIMEOUT));
-#ifdef NEWCHFLOODPROT
 	sendto_one(sptr, ":%s %i %s :modef-default-unsettime: %hd", me.name, RPL_TEXT,
 			sptr->name, (unsigned short)MODEF_DEFAULT_UNSETTIME);
 	sendto_one(sptr, ":%s %i %s :modef-max-unsettime: %hd", me.name, RPL_TEXT,
 			sptr->name, (unsigned short)MODEF_MAX_UNSETTIME);
-#endif
 	sendto_one(sptr, ":%s %i %s :spamfilter::ban-time: %s", me.name, RPL_TEXT,
 		sptr->name, pretty_time_val(SPAMFILTER_BAN_TIME));
 	sendto_one(sptr, ":%s %i %s :spamfilter::ban-reason: %s", me.name, RPL_TEXT,
@@ -1478,38 +1440,6 @@ int stats_class(aClient *sptr, char *para)
 	return 0;
 }
 
-int stats_zip(aClient *sptr, char *para)
-{
-#ifdef ZIP_LINKS
-	int i;
-	aClient *acptr;
-	for (i=0; i <= LastSlot; i++)
-	{
-		if (!(acptr = local[i]))
-			continue;
-		if (!IsServer(acptr) || !IsZipped(acptr))
-			continue;
-		if (acptr->zip->in->total_out && acptr->zip->out->total_in)
-		{
-			sendto_one(sptr,
-				":%s %i %s :Zipstats for link to %s (compresslevel %d): decompressed (in): %01lu=>%01lu (%3.1f%%), compressed (out): %01lu=>%01lu (%3.1f%%)",
-				me.name, RPL_TEXT, sptr->name,
-				IsAnOper(sptr) ? get_client_name(acptr, TRUE) : acptr->name,
-				acptr->serv->conf->compression_level ? 
-				acptr->serv->conf->compression_level : ZIP_DEFAULT_LEVEL,
-				acptr->zip->in->total_in, acptr->zip->in->total_out,
-				(100.0*(float)acptr->zip->in->total_in) /(float)acptr->zip->in->total_out,
-				acptr->zip->out->total_in, acptr->zip->out->total_out,
-				(100.0*(float)acptr->zip->out->total_out) /(float)acptr->zip->out->total_in);
-		} 
-		else 
-			sendto_one(sptr, ":%s %i %s :Zipstats for link to %s: unavailable", 
-				me.name, RPL_TEXT, sptr->name, acptr->name);
-	}
-#endif
-	return 0;
-}
-
 int stats_linkinfo(aClient *sptr, char *para)
 {
 	return stats_linkinfoint(sptr, para, 0);
@@ -1561,10 +1491,9 @@ int stats_linkinfoint(aClient *sptr, char *para, int all)
 		remote = 1;
 		wilds = 0;
 	}
-	for (i = 0; i <= LastSlot; i++)
+
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
 		if (IsInvisible(acptr) && (doall || wilds) &&
 			!(MyConnect(sptr) && IsOper(sptr)) &&
 			!IsAnOper(acptr) && (acptr != sptr))
@@ -1581,7 +1510,7 @@ int stats_linkinfoint(aClient *sptr, char *para, int all)
 			continue;
 
 #ifdef DEBUGMODE
-		ircsprintf(pbuf, "%ld :%ld", (long)acptr->cputime,
+		ircsnprintf(pbuf, sizeof(pbuf), "%ld :%ld", (long)acptr->cputime,
 		      (long)(acptr->user && MyConnect(acptr)) ? TStime() - acptr->last : 0);
 #endif
 		if (IsOper(sptr))
@@ -1605,9 +1534,8 @@ int stats_linkinfoint(aClient *sptr, char *para, int all)
 #endif
 			if (!IsServer(acptr) && !IsMe(acptr) && IsAnOper(acptr) && sptr != acptr)
 				sendto_one(acptr,
-					":%s %s %s :*** %s did a /stats L on you! IP may have been shown",
-					me.name, IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", 
-					acptr->name, sptr->name);
+					":%s NOTICE %s :*** %s did a /stats L on you! IP may have been shown",
+					me.name, acptr->name, sptr->name);
 		}
 		else if (!strchr(acptr->name, '.'))
 			sendto_one(sptr, Lformat, me.name,
@@ -1630,7 +1558,7 @@ int stats_linkinfoint(aClient *sptr, char *para, int all)
 #endif
 	}
 #ifdef DEBUGMODE
-	for (acptr = client; acptr; acptr = acptr->next)
+	list_for_each_entry(acptr, &client_list, client_node)
 	{
 		if (IsServer(acptr))
 			sendto_one(sptr, ":%s NOTICE %s :Server %s is %s",

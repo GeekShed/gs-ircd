@@ -50,7 +50,6 @@ DLLFUNC int m_svsnline(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SVSNLINE 	"SVSNLINE"	/* svsnline */
-#define TOK_SVSNLINE 	"BR"	/* 127 4ever !;) */
 
 ModuleHeader MOD_HEADER(m_svsnline)
   = {
@@ -64,10 +63,7 @@ ModuleHeader MOD_HEADER(m_svsnline)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_svsnline)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SVSNLINE, TOK_SVSNLINE, m_svsnline, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSNLINE, m_svsnline, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -81,11 +77,6 @@ DLLFUNC int MOD_LOAD(m_svsnline)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_svsnline)(int module_unload)
 {
-	if (del_Command(MSG_SVSNLINE, TOK_SVSNLINE, m_svsnline) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svsnline).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -151,12 +142,8 @@ DLLFUNC int m_svsnline(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		  } 
 		 
 		  if (IsULine(sptr))
-		 	sendto_serv_butone_token(cptr,
-		 		sptr->name,
-		 		MSG_SVSNLINE,
-		 		TOK_SVSNLINE,
-		 		"+ %s :%s",
-			      parv[2], parv[3]);
+			sendto_server(cptr, 0, 0, ":%s SVSNLINE + %s :%s",
+			    sptr->name, parv[2], parv[3]);
 		  break;
 	  }
 	  case '-':
@@ -186,9 +173,7 @@ DLLFUNC int m_svsnline(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		  	MyFree(bconf);
 		  	
 		  }
-		  sendto_serv_butone_token(cptr,
-		      sptr->name, MSG_SVSNLINE, TOK_SVSNLINE, "- %s",
-		      parv[2]);
+		  sendto_server(cptr, 0, 0, ":%s SVSNLINE - %s", sptr->name, parv[2]);
 		  break;
 	  }
 	  case '*':
@@ -196,8 +181,7 @@ DLLFUNC int m_svsnline(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		  if (!IsULine(sptr))
 			  return 0;
 	          wipe_svsnlines();
-		  sendto_serv_butone_token(cptr, sptr->name,
-		      MSG_SVSNLINE, TOK_SVSNLINE, "*");
+		  sendto_server(cptr, 0, 0, ":%s SVSNLINE *", sptr->name);
 		  break;
 	  }
 

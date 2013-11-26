@@ -48,7 +48,6 @@
 DLLFUNC int m_svslusers(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSLUSERS 	"SVSLUSERS"	
-#define TOK_SVSLUSERS 	"BU"	
 
 ModuleHeader MOD_HEADER(m_svslusers)
   = {
@@ -61,7 +60,7 @@ ModuleHeader MOD_HEADER(m_svslusers)
 
 DLLFUNC int MOD_INIT(m_svslusers)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSLUSERS, TOK_SVSLUSERS, m_svslusers, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSLUSERS, m_svslusers, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -73,11 +72,6 @@ DLLFUNC int MOD_LOAD(m_svslusers)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svslusers)(int module_unload)
 {
-	if (del_Command(MSG_SVSLUSERS, TOK_SVSLUSERS, m_svslusers) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svslusers).name);
-	}
 	return MOD_SUCCESS;
 }
 /*
@@ -93,8 +87,7 @@ int  m_svslusers(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
         if (!IsULine(sptr) || parc < 4)
 		return -1;  
-        if (hunt_server_token(cptr, sptr, MSG_SVSLUSERS, TOK_SVSLUSERS, "%s %s :%s", 1, parc,
-		parv) == HUNTED_ISME)
+        if (hunt_server(cptr, sptr, ":%s SVSLUSERS %s %s :%s", 1, parc, parv) == HUNTED_ISME)
         {
 		int temp;
 		temp = atoi(parv[2]);

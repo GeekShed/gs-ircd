@@ -47,7 +47,6 @@
 DLLFUNC int m_svsfline(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSFLINE 	"SVSFLINE"	
-#define TOK_SVSFLINE 	"BC"	
 
 ModuleHeader MOD_HEADER(m_svsfline)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_svsfline)
 
 DLLFUNC int MOD_INIT(m_svsfline)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSFLINE, TOK_SVSFLINE, m_svsfline, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSFLINE, m_svsfline, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_svsfline)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svsfline)(int module_unload)
 {
-	if (del_Command(MSG_SVSFLINE, TOK_SVSFLINE, m_svsfline) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_svsfline).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -99,11 +93,8 @@ DLLFUNC CMD_FUNC(m_svsfline)
 		  if (!Find_deny_dcc(parv[2]))
 			  DCCdeny_add(parv[2], parv[3], DCCDENY_HARD, CONF_BAN_TYPE_AKILL);
 		  if (IsULine(sptr))
-			  sendto_serv_butone_token(cptr,
-			      sptr->name,
-			      MSG_SVSFLINE, TOK_SVSFLINE,
-			      "+ %s :%s",
-			      parv[2], parv[3]);
+			  sendto_server(cptr, 0, 0, ":%s SVSFLINE + %s :%s",
+			      sptr->name, parv[2], parv[3]);
 		  break;
 	  }
 	  case '-':
@@ -116,9 +107,7 @@ DLLFUNC CMD_FUNC(m_svsfline)
 		  if (!(deny = Find_deny_dcc(parv[2])))
 			break;
 		  DCCdeny_del(deny);
-		  sendto_serv_butone_token(cptr, sptr->name,
-		 	MSG_SVSFLINE, TOK_SVSFLINE, "%s",
-			      parv[2]);
+		  sendto_server(cptr, 0, 0, ":%s SVSFLINE %s", sptr->name, parv[2]);
 		  break;
 	  }
 	  case '*':
@@ -126,9 +115,7 @@ DLLFUNC CMD_FUNC(m_svsfline)
 		  if (!IsULine(sptr))
 			  return 0;
 		  dcc_wipe_services();
-		  sendto_serv_butone_token(cptr, sptr->name,
-		      MSG_SVSFLINE, TOK_SVSFLINE,
-		      	"*");
+		  sendto_server(cptr, 0, 0, ":%s SVSFLINE *", sptr->name);
 		  break;
 	  }
 

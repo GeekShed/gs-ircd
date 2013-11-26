@@ -48,7 +48,6 @@ DLLFUNC int m_sdesc(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SDESC 	"SDESC"	/* sdesc */
-#define TOK_SDESC 	"AG"	/* 127 4ever !;) */
 
 ModuleHeader MOD_HEADER(m_sdesc)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_sdesc)
 
 DLLFUNC int MOD_INIT(m_sdesc)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SDESC, TOK_SDESC, m_sdesc, 1);
+	CommandAdd(modinfo->handle, MSG_SDESC, m_sdesc, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -76,11 +72,6 @@ DLLFUNC int MOD_LOAD(m_sdesc)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_sdesc)(int module_unload)
 {
-	if (del_Command(MSG_SDESC, TOK_SDESC, m_sdesc) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_sdesc).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -124,10 +115,9 @@ int m_sdesc(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		return 0;
 	}
 
-	ircsprintf(sptr->srvptr->info, "%s", parv[1]);
+	ircsnprintf(sptr->srvptr->info, sizeof(sptr->srvptr->info), "%s", parv[1]);
 
-	sendto_serv_butone_token(cptr, sptr->name, MSG_SDESC, TOK_SDESC, ":%s",
-	    parv[1]);
+	sendto_server(cptr, 0, 0, ":%s SDESC :%s", sptr->name, parv[1]);
 
 	if (MyConnect(sptr))
 		sendto_one(sptr,

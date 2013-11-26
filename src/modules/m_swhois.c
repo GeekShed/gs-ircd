@@ -49,7 +49,6 @@
 DLLFUNC int m_swhois(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SWHOIS 	"SWHOIS"	
-#define TOK_SWHOIS 	"BA"	
 
 ModuleHeader MOD_HEADER(m_swhois)
   = {
@@ -62,7 +61,7 @@ ModuleHeader MOD_HEADER(m_swhois)
 
 DLLFUNC int MOD_INIT(m_swhois)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SWHOIS, TOK_SWHOIS, m_swhois, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SWHOIS, m_swhois, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -74,11 +73,6 @@ DLLFUNC int MOD_LOAD(m_swhois)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_swhois)(int module_unload)
 {
-	if (del_Command(MSG_SWHOIS, TOK_SWHOIS, m_swhois) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_swhois).name);
-	}
 	return MOD_SUCCESS;
 }
 /*
@@ -104,7 +98,6 @@ int m_swhois(aClient *cptr, aClient *sptr, int parc, char *parv[])
                 MyFree(acptr->user->swhois);
         acptr->user->swhois = MyMalloc(strlen(parv[2]) + 1);
         strcpy(acptr->user->swhois, parv[2]);
-        sendto_serv_butone_token(cptr, sptr->name,
-           MSG_SWHOIS, TOK_SWHOIS, "%s :%s", parv[1], parv[2]);
+        sendto_server(cptr, 0, 0, ":%s SWHOIS %s :%s", sptr->name, parv[1], parv[2]);
         return 0;
 }

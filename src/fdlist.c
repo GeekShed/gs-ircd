@@ -1,6 +1,6 @@
-/************************************************************************
- *   Unreal Internet Relay Chat Daemon, src/fdlist.c
- *   Copyright (C) Mika Nystrom
+/*
+ * UnrealIRCd, src/fdlist.c
+ * Copyright (c) 2012 William Pitcock <nenolod@dereferenced.org>
  *
  *   This program is free software; you can redistribute it and/or modify
  *   it under the terms of the GNU General Public License as published by
@@ -17,8 +17,6 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-/* $Id$ */
-
 #include "struct.h"
 #include "common.h"
 #include "sys.h"
@@ -26,131 +24,149 @@
 #include "config.h"
 #include "fdlist.h"
 #include "proto.h"
+#include <sys/stat.h>
+#include <unistd.h>
 #include <string.h>
-
-extern fdlist default_fdlist;
-extern fdlist busycli_fdlist;
-extern fdlist serv_fdlist;
-extern fdlist oper_fdlist;
-
-#define FDLIST_DEBUG
-
-void addto_fdlist(int fd, fdlist * listp)
-{
-	int  index;
-#ifdef FDLIST_DEBUG
-	int i;
+#include <stdlib.h>
+#include <stdarg.h>
+#ifdef _WIN32
+#include <io.h>
 #endif
+#include <fcntl.h>
 
-	/* I prefer this little 5-cpu-cycles-check over memory corruption. -- Syzop */
+/* new FD management code, based on mowgli.eventloop from atheme, hammered into Unreal by
+ * me, nenolod.
+ */
+FDEntry fd_table[MAXCONNECTIONS + 1];
+
+int fd_open(int fd, const char *desc)
+{
+	FDEntry *fde;
+
 	if ((fd < 0) || (fd >= MAXCONNECTIONS))
 	{
-		sendto_realops("[BUG] trying to add fd #%d to %p (%p/%p/%p/%p), range is 0..%d",
-			fd, listp, &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist,
-			MAXCONNECTIONS);
-		ircd_log(LOG_ERROR, "[BUG] trying to add fd #%d to %p (%p/%p/%p/%p), range is 0..%d",
-			fd, listp, &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist,
-			MAXCONNECTIONS);
-		return;
+		sendto_realops("[BUG] trying to add fd #%d to fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
+		ircd_log(LOG_ERROR, "[BUG] trying to add fd #%d to fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
+		return -1;
 	}
 
-#ifdef FDLIST_DEBUG
-	for (i = listp->last_entry; i; i--)
-	{
-		if (listp->entry[i] == fd)
-		{
-			char buf[2048];
-			ircsprintf(buf, "[BUG] addto_fdlist() called for duplicate entry! fd=%d, fdlist=%p, client=%s (%p/%p/%p/%p)",
-				fd, listp, local[fd] ? local[fd]->name : "<null>", &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist);
-			sendto_realops("%s", buf);
-			ircd_log(LOG_ERROR, "%s", buf);
-			return;
-		}
-	}
-#endif
+	fde = &fd_table[fd];
+	memset(fde, 0, sizeof(FDEntry));
 
-	if ((index = ++listp->last_entry) >= MAXCONNECTIONS)
-	{
-		/*
-		 * list too big.. must exit 
-		 */
-		--listp->last_entry;
-		ircd_log(LOG_ERROR, "fdlist.c list too big, must exit...");
-		abort();
-	}
-	else
-		listp->entry[index] = fd;
-	return;
+	fde->fd = fd;
+	fde->is_open = 1;
+	fde->backend_flags = 0;
+	strlcpy(fde->desc, desc, FD_DESC_SZ);
+
+	return fde->fd;
 }
 
-void delfrom_fdlist(int fd, fdlist * listp)
-{
-	int  i;
-#ifdef FDLIST_DEBUG
-	int cnt = 0;
+#ifndef _WIN32
+# define OPEN_MODES	S_IRUSR|S_IWUSR
+#else
+# define OPEN_MODES	S_IREAD|S_IWRITE
 #endif
 
-	/* I prefer this little 5-cpu-cycles-check over memory corruption. -- Syzop */
+int fd_fileopen(const char *path, unsigned int flags)
+{
+	FDEntry *fde;
+	int fd;
+	char comment[FD_DESC_SZ];
+	char pathbuf[BUFSIZE];
+
+	fd = open(path, flags, OPEN_MODES);
+	if (fd < 0)
+		return -1;
+
+	strlcpy(pathbuf, path, sizeof pathbuf);
+
+	snprintf(comment, sizeof comment, "File: %s", unreal_getfilename(pathbuf));
+
+	return fd_open(fd, comment);
+}
+
+void fd_close(int fd)
+{
+	FDEntry *fde;
+
 	if ((fd < 0) || (fd >= MAXCONNECTIONS))
 	{
-		sendto_realops("[BUG] trying to remove fd #%d to %p (%p/%p/%p/%p), range is 0..%d",
-			fd, listp, &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist,
-			MAXCONNECTIONS);
-		ircd_log(LOG_ERROR, "[BUG] trying to remove fd #%d to %p (%p/%p/%p/%p), range is 0..%d",
-			fd, listp, &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist,
-			MAXCONNECTIONS);
+		sendto_realops("[BUG] trying to close fd #%d in fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
+		ircd_log(LOG_ERROR, "[BUG] trying to close fd #%d in fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
 		return;
 	}
 
-#ifdef FDLIST_DEBUG
-	for (i = listp->last_entry; i; i--)
+	fde = &fd_table[fd];
+	if (!fde->is_open)
 	{
-		if (listp->entry[i] == fd)
-			cnt++;
-	}
-	if (cnt > 1)
-	{
-		char buf[2048];
-		ircsprintf(buf, "[BUG] delfrom_fdlist() called, duplicate entries detected! fd=%d, fdlist=%p, client=%s (%p/%p/%p/%p)",
-			fd, listp, local[fd] ? local[fd]->name : "<null>", &default_fdlist, &busycli_fdlist, &serv_fdlist, &oper_fdlist);
-		sendto_realops("%s", buf);
-		ircd_log(LOG_ERROR, "%s", buf);
+		sendto_realops("[BUG] trying to close fd #%d in fd table, but this FD isn't reported open",
+				fd);
+		ircd_log(LOG_ERROR, "[BUG] trying to close fd #%d in fd table, but this FD isn't reported open",
+				fd);
 		return;
 	}
-#endif
 
+	memset(fde, 0, sizeof(FDEntry));
 
-	for (i = listp->last_entry; i; i--)
-	{
-		if (listp->entry[i] == fd)
-			break;
-	}
-	if (!i)
-		return;		/*
-				 * could not find it! 
-				 */
-	/*
-	 * swap with last_entry 
-	 */
-	if (i == listp->last_entry)
-	{
-		listp->entry[i] = 0;
-		listp->last_entry--;
-		return;
-	}
-	else
-	{
-		listp->entry[i] = listp->entry[listp->last_entry];
-		listp->entry[listp->last_entry] = 0;
-		listp->last_entry--;
-		return;
-	}
+	fde->fd = fd;
+
+	/* only notify the backend if it is actively tracking the FD */
+	if (fde->backend_flags)
+		fd_refresh(fd);
+
+	CLOSE_SOCK(fd);
 }
 
-void init_fdlist(fdlist * listp)
+int fd_socket(int family, int type, int protocol, const char *desc)
 {
-	listp->last_entry = 0;
-	memset((char *)listp->entry, '\0', sizeof(listp->entry));
-	return;
+	int fd;
+
+	fd = socket(family, type, protocol);
+	if (fd < 0)
+		return -1;
+
+	return fd_open(fd, desc);
+}
+
+int fd_accept(int sockfd)
+{
+	const char buf[] = "Incoming connection";
+	int fd;
+
+	fd = accept(sockfd, NULL, NULL);
+	if (fd < 0)
+		return -1;
+
+	return fd_open(fd, buf);
+}
+
+void fd_desc(int fd, const char *desc)
+{
+	FDEntry *fde;
+
+	if ((fd < 0) || (fd >= MAXCONNECTIONS))
+	{
+		sendto_realops("[BUG] trying to modify fd #%d in fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
+		ircd_log(LOG_ERROR, "[BUG] trying to modify fd #%d in fd table, but MAXCONNECTIONS is %d",
+				fd, MAXCONNECTIONS);
+		return;
+	}
+
+	fde = &fd_table[fd];
+	if (!fde->is_open)
+	{
+		sendto_realops("[BUG] trying to modify fd #%d in fd table, but this FD isn't reported open",
+				fd);
+		ircd_log(LOG_ERROR, "[BUG] trying to modify fd #%d in fd table, but this FD isn't reported open",
+				fd);
+		return;
+	}
+
+	strlcpy(fde->desc, desc, FD_DESC_SZ);
 }
 

@@ -48,7 +48,6 @@ DLLFUNC int m_list(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 void _send_list(aClient *cptr, int numsend);
 
 #define MSG_LIST 	"LIST"	
-#define TOK_LIST 	"("	
 
 ModuleHeader MOD_HEADER(m_list)
   = {
@@ -68,7 +67,7 @@ DLLFUNC int MOD_TEST(m_list)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_list)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_LIST, TOK_LIST, m_list, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_LIST, m_list, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -80,11 +79,6 @@ DLLFUNC int MOD_LOAD(m_list)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_list)(int module_unload)
 {
-	if (del_Command(MSG_LIST, TOK_LIST, m_list) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_list).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -140,17 +134,6 @@ DLLFUNC CMD_FUNC(m_list)
 		return 0;
 	}
 
-	/* if HTM, drop this too */
-#ifndef NO_FDLIST
-	if (lifesux && !IsOper(cptr))
-	{
-		sendto_one(sptr, err_str(ERR_HTMDISABLED), me.name,
-		    sptr->name, "/List");
-		/* We need this for mIRC compatibility -- codemastr */
-		sendto_one(sptr, rpl_str(RPL_LISTEND), me.name, parv[0]);
-		return 0;
-	}
-#endif
 	if (parc < 2 || BadPtr(parv[1]))
 	{
 
@@ -272,7 +255,7 @@ DLLFUNC CMD_FUNC(m_list)
 				  if (chptr && (ShowChannel(sptr, chptr) || OPCanSeeSecret(sptr))) {
 #ifdef LIST_SHOW_MODES
 					modebuf[0] = '[';
-					channel_modes(sptr, &modebuf[1], parabuf, chptr);
+					channel_modes(sptr, modebuf+1, parabuf, sizeof(modebuf)-1, sizeof(parabuf), chptr);
 					if (modebuf[2] == '\0')
 						modebuf[0] = '\0';
 					else
@@ -399,7 +382,7 @@ void _send_list(aClient *cptr, int numsend)
 				}
 #ifdef LIST_SHOW_MODES
 				modebuf[0] = '[';
-				channel_modes(cptr, &modebuf[1], parabuf, chptr);
+				channel_modes(cptr, modebuf+1, parabuf, sizeof(modebuf)-1, sizeof(parabuf), chptr);
 				if (modebuf[2] == '\0')
 					modebuf[0] = '\0';
 				else

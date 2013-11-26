@@ -48,7 +48,6 @@ DLLFUNC int m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_VHOST       "VHOST"
-#define TOK_VHOST       "BE"
 
 ModuleHeader MOD_HEADER(m_vhost)
   = {
@@ -62,10 +61,7 @@ ModuleHeader MOD_HEADER(m_vhost)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_vhost)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_VHOST, TOK_VHOST, m_vhost, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_VHOST, m_vhost, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -80,11 +76,6 @@ DLLFUNC int MOD_LOAD(m_vhost)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_vhost)(int module_unload)
 {
-	if (del_Command(MSG_VHOST, TOK_VHOST, m_vhost) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_vhost).name);
-	}
 	return MOD_SUCCESS;	
 }
 
@@ -140,7 +131,6 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	if (i > 0)
 	{
 		char olduser[USERLEN+1];
-		DYN_LOCAL(char, did_parts, sptr->user->joined);
 		
 		switch (UHOST_ALLOWED)
 		{
@@ -148,7 +138,6 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				if (MyClient(sptr))
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /vhost is disabled", me.name, sptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
@@ -158,12 +147,11 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				if (MyClient(sptr) && sptr->user->joined)
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /vhost can not be used while you are on a channel", me.name, sptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
 			case UHALLOW_REJOIN:
-				rejoin_doparts(sptr, did_parts);
+				rejoin_doquits(sptr);
 				/* join sent later when the host has been changed */
 				break;
 		}
@@ -179,14 +167,12 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		if (vhost->virtuser) {
 			strcpy(olduser, sptr->user->username);
 			strlcpy(sptr->user->username, vhost->virtuser, USERLEN);
-			sendto_serv_butone_token(cptr, sptr->name, MSG_SETIDENT, TOK_SETIDENT,
-						 "%s", sptr->user->username);
+			sendto_server(cptr, 0, 0, ":%s SETIDENT %s", sptr->name,
+			    sptr->user->username);
 		}
 		sptr->umodes |= UMODE_HIDE;
 		sptr->umodes |= UMODE_SETHOST;
-		sendto_serv_butone_token(cptr, sptr->name,
-			MSG_SETHOST, TOK_SETHOST,
-			"%s", sptr->user->virthost);
+		sendto_server(cptr, 0, 0, ":%s SETHOST %s", sptr->name, sptr->user->virthost);
 		sendto_one(sptr, ":%s MODE %s :+tx",
 		    sptr->name, sptr->name);
 		if (vhost->swhois) {
@@ -194,8 +180,8 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				MyFree(sptr->user->swhois);
 			sptr->user->swhois = MyMalloc(strlen(vhost->swhois) +1);
 			strcpy(sptr->user->swhois, vhost->swhois);
-			sendto_serv_butone_token(cptr, me.name,
-				MSG_SWHOIS, TOK_SWHOIS, "%s :%s", sptr->name, vhost->swhois);
+			sendto_server(cptr, 0, 0, ":%s SWHOIS %s :%s", me.name,
+			    sptr->name, vhost->swhois);
 		}
 		sendto_one(sptr,
 		    ":%s NOTICE %s :*** Your vhost is now %s%s%s",
@@ -208,8 +194,7 @@ int  m_vhost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		    sptr->user->realhost, vhost->virtuser ? vhost->virtuser : "", 
 		    	vhost->virtuser ? "@" : "", vhost->virthost);
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
-			rejoin_dojoinandmode(sptr, did_parts);
-		DYN_FREE(did_parts);
+			rejoin_dojoinandmode(sptr);
 		return 0;
 	}
 	if (i == -1)

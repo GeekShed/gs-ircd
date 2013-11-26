@@ -52,7 +52,6 @@
 #endif
 
 #define MSG_CHGIDENT 	"CHGIDENT"
-#define TOK_CHGIDENT 	"AZ"
 
 DLLFUNC int m_chgident(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
@@ -73,10 +72,7 @@ DLLFUNC int MOD_INIT(m_chgident)(ModuleInfo *modinfo)
 	   the module_load() will use this to add to the modules linked 
 	   list
 	*/
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_CHGIDENT, TOK_CHGIDENT, m_chgident, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_CHGIDENT, m_chgident, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -88,11 +84,6 @@ DLLFUNC int MOD_LOAD(m_chgident)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_chgident)(int module_unload)
 {
-	if (del_Command(MSG_CHGIDENT, TOK_CHGIDENT, m_chgident) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_chgident).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -158,12 +149,10 @@ int  legalident = 1;
 
 	if ((acptr = find_person(parv[1], NULL)))
 	{
-		DYN_LOCAL(char, did_parts, acptr->user->joined);
 		if (MyClient(sptr) && (IsLocOp(sptr) && !MyClient(acptr)))
 		{
 			sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name,
 				parv[0]);
-			DYN_FREE(did_parts);
 			return 0;
 		}
 
@@ -174,7 +163,6 @@ int  legalident = 1;
 				{
 					sendto_one(sptr, err_str(ERR_DISABLED), me.name, sptr->name, "CHGIDENT",
 						"This command is disabled on this server");
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
@@ -184,12 +172,11 @@ int  legalident = 1;
 				if (IsPerson(acptr) && MyClient(sptr) && acptr->user->joined)
 				{
 					sendnotice(sptr, "*** /ChgIdent can not be used while %s is on a channel", acptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
 			case UHALLOW_REJOIN:
-				rejoin_doparts(acptr, did_parts);
+				rejoin_doquits(acptr);
 				/* join sent later when the ident has been changed */
 				break;
 		}
@@ -208,13 +195,11 @@ int  legalident = 1;
 
 
 
-		sendto_serv_butone_token(cptr, sptr->name,
-		    MSG_CHGIDENT,
-		    TOK_CHGIDENT, "%s %s", acptr->name, parv[2]);
-		ircsprintf(acptr->user->username, "%s", parv[2]);
+		sendto_server(cptr, 0, 0, ":%s CHGIDENT %s %s",
+		    sptr->name, acptr->name, parv[2]);
+		ircsnprintf(acptr->user->username, sizeof(acptr->user->username), "%s", parv[2]);
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
-			rejoin_dojoinandmode(acptr, did_parts);
-		DYN_FREE(did_parts);
+			rejoin_dojoinandmode(acptr);
 		return 0;
 	}
 	else

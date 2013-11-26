@@ -47,7 +47,6 @@ DLLFUNC int m_unkline(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_UNKLINE     "UNKLINE"       /* UNKLINE */
-#define TOK_UNKLINE     "X"     /* 88 */  
 
 ModuleHeader MOD_HEADER(m_unkline)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_unkline)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_unkline)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_UNKLINE, TOK_UNKLINE, m_unkline, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_UNKLINE, m_unkline, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_unkline)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_unkline)(int module_unload)
 {
-	if (del_Command(MSG_UNKLINE, TOK_UNKLINE, m_unkline) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_unkline).name);
-	}
 	return MOD_SUCCESS;
 }
 

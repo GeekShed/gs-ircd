@@ -55,13 +55,11 @@ DLLFUNC int m_message(aClient *cptr, aClient *sptr, int parc, char *parv[], int 
 DLLFUNC int  m_notice(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 DLLFUNC int  m_private(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
-extern int webtv_parse(aClient *sptr, char *string);
+static int webtv_parse(aClient *sptr, char *string);
 
 /* Place includes here */
 #define MSG_PRIVATE     "PRIVMSG"       /* PRIV */
-#define TOK_PRIVATE     "!"     /* 33 */
 #define MSG_NOTICE      "NOTICE"        /* NOTI */
-#define TOK_NOTICE      "B"     /* 66 */
 
 ModuleHeader MOD_HEADER(m_message)
   = {
@@ -87,14 +85,10 @@ DLLFUNC int MOD_TEST(m_message)(ModuleInfo *modinfo)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_message)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_CommandX(MSG_PRIVATE, TOK_PRIVATE, m_private, 2, M_USER|M_SERVER|M_RESETIDLE|M_VIRUS);
-	add_Command(MSG_NOTICE, TOK_NOTICE, m_notice, 2);
+	CommandAdd(modinfo->handle, MSG_PRIVATE, m_private, 2, M_USER|M_SERVER|M_RESETIDLE|M_VIRUS);
+	CommandAdd(modinfo->handle, MSG_NOTICE, m_notice, 2, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
-	return MOD_SUCCESS;
-	
+	return MOD_SUCCESS;	
 }
 
 /* Is first run when server is 100% ready */
@@ -106,16 +100,6 @@ DLLFUNC int MOD_LOAD(m_message)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_message)(int module_unload)
 {
-	if (del_Command(MSG_PRIVATE, TOK_PRIVATE, m_private) < 0)
-	{
-		sendto_realops("Failed to delete command privmsg when unloading %s",
-				MOD_HEADER(m_message).name);
-	}
-	if (del_Command(MSG_NOTICE, TOK_NOTICE, m_notice) < 0)
-	{
-		sendto_realops("Failed to delete command notice when unloading %s",
-				MOD_HEADER(m_message).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -185,8 +169,6 @@ int ret;
 #endif
 		Hook *tmphook;
 		
-		if (notice && IsWebTV(acptr) && **text != '\1')
-			*cmd = MSG_PRIVATE;
 		if (!notice && MyConnect(sptr) &&
 		    acptr->user && acptr->user->away)
 			sendto_one(sptr, rpl_str(RPL_AWAY),
@@ -454,11 +436,8 @@ DLLFUNC int m_message(aClient *cptr, aClient *sptr, int parc, char *parv[], int 
 				int blocked = 0;
 #endif
 				Hook *tmphook;
-#ifdef NEWCHFLOODPROT
+
 				if (chptr->mode.floodprot && chptr->mode.floodprot->l[FLD_TEXT])
-#else
-				if (chptr->mode.per)
-#endif
 					if (check_for_chan_flood(cptr, sptr, chptr) == 1)
 						continue;
 
@@ -512,14 +491,12 @@ DLLFUNC int m_message(aClient *cptr, aClient *sptr, int parc, char *parv[], int 
 				if (!text)
 					continue;
 
-				sendto_channelprefix_butone_tok(cptr,
+				sendto_channelprefix_butone(cptr,
 				    sptr, chptr,
 				    prefix,
-				    notice ? MSG_NOTICE : MSG_PRIVATE,
-				    notice ? TOK_NOTICE : TOK_PRIVATE,
-				    nick, text, 1);
+				    notice ? ":%s NOTICE %s :%s" : ":%s PRIVMSG %s :%s",
+				    parv[0], nick, text);
 
-#ifdef NEWCHFLOODPROT
 				if (chptr->mode.floodprot && !is_skochanop(sptr, chptr) &&
 				    !IsULine(sptr) && do_chanflood(chptr->mode.floodprot, FLD_MSG) &&
 				    MyClient(sptr))
@@ -533,7 +510,7 @@ DLLFUNC int m_message(aClient *cptr, aClient *sptr, int parc, char *parv[], int 
 				{
 					do_chanflood_action(chptr, FLD_CTCP, "CTCP");
 				}
-#endif
+
 				sendanyways = 0;
 				continue;
 			}
@@ -672,7 +649,7 @@ int _is_silenced(aClient *sptr, aClient *acptr)
 	if (!(acptr->user) || !(lp = acptr->user->silence) ||
 	    !(user = sptr->user)) return 0;
 
-	ircsprintf(sender, "%s!%s@%s", sptr->name, user->username,
+	ircsnprintf(sender, sizeof(sender), "%s!%s@%s", sptr->name, user->username,
 	    user->realhost);
 	/* We also check for matches against sptr->user->virthost if present,
 	 * this is checked regardless of mode +x so you can't do tricks like:
@@ -681,7 +658,7 @@ int _is_silenced(aClient *sptr, aClient *acptr)
 	 */
 	if (sptr->user->virthost)
 	{
-		ircsprintf(senderx, "%s!%s@%s", sptr->name, user->username,
+		ircsnprintf(senderx, sizeof(senderx), "%s!%s@%s", sptr->name, user->username,
 		    sptr->user->virthost);
 		checkv = 1;
 	}
@@ -815,7 +792,7 @@ int size_string, ret;
 		sendto_umode(UMODE_VICTIM,
 		    "%s tried to send forbidden file %s (%s) to %s (is blocked now)",
 		    sptr->name, displayfile, fl->reason, target);
-		sendto_serv_butone(NULL, ":%s SMO v :%s tried to send forbidden file %s (%s) to %s (is blocked now)",
+		sendto_server(NULL, 0, 0, ":%s SMO v :%s tried to send forbidden file %s (%s) to %s (is blocked now)",
 			me.name, sptr->name, displayfile, fl->reason, target);
 		sptr->flags |= FLAGS_DCCBLOCK;
 		return 0; /* block */
@@ -917,7 +894,6 @@ int size_string;
  * for the word found. Also the freeing function has been ditched. -- codemastr
  */
 
-#ifdef FAST_BADWORD_REPLACE
 /*
  * our own strcasestr implementation because strcasestr is often not
  * available or is not working correctly (??).
@@ -1054,7 +1030,6 @@ int cleaned = 0;
 	}
 	return cleaned;
 }
-#endif
 
 /*
  * Returns a string, which has been filtered by the words loaded via
@@ -1087,7 +1062,6 @@ char *stripbadwords(char *str, ConfigItem_badword *start_bw, int *blocked)
 
 	for (this_word = start_bw; this_word; this_word = (ConfigItem_badword *)this_word->next)
 	{
-#ifdef FAST_BADWORD_REPLACE
 		if (this_word->type & BADW_TYPE_FAST)
 		{
 			if (this_word->action == BADWORD_BLOCK)
@@ -1111,7 +1085,6 @@ char *stripbadwords(char *str, ConfigItem_badword *start_bw, int *blocked)
 		} else
 		if (this_word->type & BADW_TYPE_REGEX)
 		{
-#endif
 			if (this_word->action == BADWORD_BLOCK)
 			{
 				if (!regexec(&this_word->expr, cleanstr, 0, NULL, 0))
@@ -1148,9 +1121,7 @@ char *stripbadwords(char *str, ConfigItem_badword *start_bw, int *blocked)
 				if (matchlen == stringlen)
 					break;
 			}
-#ifdef FAST_BADWORD_REPLACE
 		}
-#endif
 	}
 
 	cleanstr[511] = '\0'; /* cutoff, just to be sure */
@@ -1334,3 +1305,110 @@ char *_StripControlCodes(unsigned char *text)
 	return new_str;
 }
 
+typedef struct zMessage aMessage;
+struct zMessage {
+	char *command;
+	int  (*func) ();
+	int  maxpara;
+};
+
+/* This really has nothing to do with WebTV yet, but eventually it will, so I figured
+ * it's easiest to put it here so why not? -- codemastr
+ */
+static int ban_version(aClient *cptr, aClient *sptr, int parc, char *parv[]);
+
+static aMessage webtv_cmds[] = 
+{
+	{"\1VERSION", ban_version, 1},
+	{"\1SCRIPT", ban_version, 1},
+	{NULL, 0, 15}
+};
+
+
+static int webtv_parse(aClient *sptr, char *string)
+{
+	char *cmd = NULL, *s = NULL;
+	int i, n;
+	aMessage *message = webtv_cmds;
+	static char *para[MAXPARA + 2];
+	
+	if (!string || !*string)
+	{
+		sendto_one(sptr, ":IRC %s %s :No command given", MSG_PRIVATE, sptr->name);
+		return 0;
+	}
+
+	n = strlen(string);
+	cmd = strtok(string, " ");
+	if (!cmd)
+		return -99;	
+		
+	for (message = webtv_cmds; message->command; message++)
+		if (strcasecmp(message->command, cmd) == 0)
+			break;
+
+	if (!message->command || !message->func)
+ 	{
+/*		sendto_one(sptr, ":IRC %s %s :Sorry, \"%s\" is an unknown command to me",
+			MSG_PRIVATE, sptr->name, cmd); */
+		/* restore the string*/
+		if (strlen(cmd) < n)
+			cmd[strlen(cmd)]= ' ';
+		return -99;
+	}
+
+	i = 0;
+	s = strtok(NULL, "");
+	if (s)
+	{
+		if (message->maxpara > MAXPARA)
+			message->maxpara = MAXPARA; /* paranoid ? ;p */
+		for (;;)
+		{
+			/*
+			   ** Never "FRANCE " again!! ;-) Clean
+			   ** out *all* blanks.. --msa
+			 */
+			while (*s == ' ')
+				*s++ = '\0';
+
+			if (*s == '\0')
+				break;
+			if (*s == ':')
+			{
+				/*
+				   ** The rest is single parameter--can
+				   ** include blanks also.
+				 */
+				para[++i] = s + 1;
+				break;
+			}
+			para[++i] = s;
+			if (i >= message->maxpara)
+				break;
+			for (; *s != ' ' && *s; s++)
+				;
+		}
+	}
+	para[++i] = NULL;
+
+	para[0] = sptr->name;
+
+	return (*message->func) (sptr->from, sptr, i, para);
+}
+
+int	ban_version(aClient *cptr, aClient *sptr, int parc, char *parv[])
+{	
+	int len;
+	ConfigItem_ban *ban;
+	if (parc < 2)
+		return 0;
+	len = strlen(parv[1]);
+	if (!len)
+		return 0;
+	if (parv[1][len-1] == '\1')
+		parv[1][len-1] = '\0';
+	if ((ban = Find_ban(NULL, parv[1], CONF_BAN_VERSION)))
+		return place_host_ban(sptr, ban->action, ban->reason, BAN_VERSION_TKL_TIME);
+	return 0;
+}

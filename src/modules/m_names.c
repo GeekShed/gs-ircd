@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_names);
 
 #define MSG_NAMES 	"NAMES"
-#define TOK_NAMES 	"?"
 
 ModuleHeader MOD_HEADER(m_names)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_names)
 
 DLLFUNC int MOD_INIT(m_names)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_NAMES, TOK_NAMES, m_names, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_NAMES, m_names, MAXPARA, M_USER|M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -108,10 +107,6 @@ DLLFUNC CMD_FUNC(m_names)
 		    parv[0], "*");
 		return 0;
 	}
-
-	if (parc > 1 &&
-	    hunt_server_token(cptr, sptr, MSG_NAMES, TOK_NAMES, "%s %s", 2, parc, parv))
-		return 0;
 
 	for (s = para; *s; s++)
 	{
@@ -206,7 +201,7 @@ DLLFUNC CMD_FUNC(m_names)
 				buf[idx++] = '+';
 		}
 
-		if (lifesux || !uhnames) {
+		if (!uhnames) {
 			s = acptr->name;
 		} else {
 			strlcpy(nuhBuffer,

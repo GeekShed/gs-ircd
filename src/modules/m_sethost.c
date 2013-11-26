@@ -49,7 +49,6 @@ DLLFUNC int m_sethost(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SETHOST 	"SETHOST"	/* sethost */
-#define TOK_SETHOST 	"AA"	/* 127 4ever !;) */
 
 ModuleHeader MOD_HEADER(m_sethost)
   = {
@@ -62,10 +61,7 @@ ModuleHeader MOD_HEADER(m_sethost)
 
 DLLFUNC int MOD_INIT(m_sethost)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SETHOST, TOK_SETHOST, m_sethost, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SETHOST, m_sethost, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -77,11 +73,6 @@ DLLFUNC int MOD_LOAD(m_sethost)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_sethost)(int module_unload)
 {
-	if (del_Command(MSG_SETHOST, TOK_SETHOST, m_sethost) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_sethost).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -195,14 +186,12 @@ DLLFUNC int m_sethost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	}
 
 	{
-		DYN_LOCAL(char, did_parts, sptr->user->joined);
 		switch (UHOST_ALLOWED)
 		{
 			case UHALLOW_NEVER:
 				if (MyClient(sptr))
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /SetHost is disabled", me.name, sptr->name);
-					DYN_FREE(did_parts);	
 					return 0;
 				}
 				break;
@@ -212,12 +201,11 @@ DLLFUNC int m_sethost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				if (MyClient(sptr) && sptr->user->joined)
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /SetHost can not be used while you are on a channel", me.name, sptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
 			case UHALLOW_REJOIN:
-				rejoin_doparts(sptr, did_parts);
+				rejoin_doquits(sptr);
 				/* join sent later when the host has been changed */
 				break;
 		}
@@ -233,12 +221,10 @@ DLLFUNC int m_sethost(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		}
 		sptr->user->virthost = strdup(vhost);
 		/* spread it out */
-		sendto_serv_butone_token(cptr, sptr->name, MSG_SETHOST, TOK_SETHOST,
-		    "%s", parv[1]);
+		sendto_server(cptr, 0, 0, ":%s SETHOST %s", sptr->name, parv[1]);
 
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
-			rejoin_dojoinandmode(sptr, did_parts);
-		DYN_FREE(did_parts);
+			rejoin_dojoinandmode(sptr);
 	}
 
 	if (MyConnect(sptr))

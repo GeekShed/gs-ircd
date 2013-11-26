@@ -49,21 +49,13 @@ extern void outofmemory();
 
 #define is_enabled match
 
-TS	TS2ts(char *s)
-{
-	if (*s == '!')
-		return (base64dec(s + 1));
-	else
-		return (atoi(s));	
-}
-
 char	*my_itoa(int i)
 {
 	static char buf[128];
 #ifndef _WIN32	
-	ircsprintf(buf, "%d", i);
+	ircsnprintf(buf, sizeof(buf), "%d", i);
 #else
-	_itoa(i, buf, 10);
+	_itoa_s(i, buf, sizeof(buf), 10);
 #endif
 	return (buf);
 }
@@ -137,7 +129,7 @@ char *strerror(int err_no)
 	if (errp == (char *)NULL)
 	{
 		errp = buff;
-		(void)ircsprintf(errp, "Unknown Error %d", err_no);
+		(void)ircsnprintf(buff, sizeof(buff), "Unknown Error %d", err_no);
 
 	}
 	return errp;
@@ -165,7 +157,7 @@ char *inetntoa(char *in)
 	b = (int)*s++;
 	c = (int)*s++;
 	d = (int)*s++;
-	(void)ircsprintf(buf, "%d.%d.%d.%d", a, b, c, d);
+	(void)ircsnprintf(buf, sizeof(buf), "%d.%d.%d.%d", a, b, c, d);
 
 	return buf;
 }
@@ -198,57 +190,8 @@ int  inet_netof(struct IN_ADDR in)
  */
 char *inetntop(int af, const void *in, char *out, size_t the_size)
 {
-#ifdef IPV6_COMPRESSED
 	inet_ntop(af, in, out, the_size);
 	return out;
-#else
-	static char local_dummy[MYDUMMY_SIZE];
-
-	inet_ntop(af, in, local_dummy, the_size);
-	if (strstr(local_dummy, "::"))
-	{
-		char cnt = 0, *cp = local_dummy, *op = out;
-
-		while (*cp)
-		{
-			if (*cp == ':')
-				cnt += 1;
-			if (*cp++ == '.')
-			{
-				cnt += 1;
-				break;
-			}
-		}
-		cp = local_dummy;
-		while (*cp)
-		{
-			*op++ = *cp++;
-			if (*(cp - 1) == ':' && *cp == ':')
-			{
-				if ((cp - 1) == local_dummy)
-				{
-					op--;
-					*op++ = '0';
-					*op++ = ':';
-				}
-
-				*op++ = '0';
-				while (cnt++ < 7)
-				{
-					*op++ = ':';
-					*op++ = '0';
-				}
-			}
-		}
-		if (*(op - 1) == ':')
-			*op++ = '0';
-		*op = '\0';
-		Debug((DEBUG_DNS, "Expanding `%s' -> `%s'", local_dummy, out));
-	}
-	else
-		bcopy(local_dummy, out, 64);
-	return out;
-#endif
 }
 
 /* Made by Potvin originally, i guess */
@@ -1829,18 +1772,12 @@ char	*encode_ip(u_char *ip)
 char *decode_ip(char *buf)
 {
 	int len = strlen(buf);
+	static char result[64];
 	char targ[25];
 
 	b64_decode(buf, targ, 25);
-	if (len == 24) /* IPv6 */
-	{
-		static char result[64];
-		return inetntop(AF_INET6, targ, result, 64);
-	}
-	else if (len == 8) /* IPv4 */
-		return inet_ntoa(*(struct in_addr *)targ);
-	else /* Error?? */
-		abort();
+
+	return inetntop(len == 24 ? AF_INET6 : AF_INET, targ, result, sizeof result);
 }
 
 /* IPv6 stuff */
@@ -1924,8 +1861,8 @@ static const char *inet_ntop4(const u_char *src, char *dst, size_t size)
 	static const char fmt[] = "%u.%u.%u.%u";
 	char tmp[sizeof "255.255.255.255"];
 
-	sprintf(tmp, fmt, src[0], src[1], src[2], src[3]);
-	if ((size_t)strlen(tmp) > size) {
+	snprintf(tmp, sizeof(tmp), fmt, src[0], src[1], src[2], src[3]);
+	if ((size_t)strlen(tmp)+1 > size) {
 #ifndef _WIN32
 		errno = ENOSPC;
 #else
@@ -1933,7 +1870,7 @@ static const char *inet_ntop4(const u_char *src, char *dst, size_t size)
 #endif
 		return (NULL);
 	}
-	strcpy(dst, tmp);
+	strlcpy(dst, tmp, size);
 	return (dst);
 }
 
@@ -1991,9 +1928,10 @@ static const char *inet_ntop6(const u_char *src, char *dst, size_t size)
 	/*
 	 * Format the result.
 	 */
+        if (size < (IN6ADDRSZ / INT16SZ)) return 0;
 	tp = tmp;
 	for (i = 0; i < (IN6ADDRSZ / INT16SZ); i++) {
-		/* Are we inside the best run of 0x00's? */
+		/* Are we inside the best run of 0x00? */
 		if (best.base != -1 && i >= best.base &&
 		    i < (best.base + best.len)) {
 			if (i == best.base)
@@ -2011,7 +1949,7 @@ static const char *inet_ntop6(const u_char *src, char *dst, size_t size)
 			tp += strlen(tp);
 			break;
 		}
-		sprintf(tp, "%x", words[i]);
+		snprintf(tp, sizeof(tmp)-strlen(tmp), "%x", words[i]);
 		tp += strlen(tp);
 	}
 	/* Was it a trailing run of 0x00's? */
@@ -2030,7 +1968,7 @@ static const char *inet_ntop6(const u_char *src, char *dst, size_t size)
 #endif
 		return (NULL);
 	}
-	strcpy(dst, tmp);
+	strlcpy(dst, tmp, size);
 	return (dst);
 }
 
@@ -2347,7 +2285,7 @@ char *sock_strerror(int error)
 		else
 			return WSAErrors[mid].error_string;	
 	}
-	sprintf(unkerr, "Unknown Error: %d", error);
+	snprintf(unkerr, sizeof(unkerr), "Unknown Error: %d", error);
 	return unkerr;
 }
 #endif

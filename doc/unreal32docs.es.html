@@ -30,8 +30,8 @@ Spanish
 <br><br>
 <div align="center"><b><font size="7">UnrealIRCd</font></b><br>
   <font size="4"><a href="http://www.unrealircd.com">http://www.unrealircd.com</a></font><br>
-  <font size="4">Version: 3.2.10.2</font><br>
-  <b>Ultima actualizacion del doc:</b> 2013-04-05</div>
+  <font size="4">Version: 3.2.10</font><br>
+  <b>Ultima actualizacion del doc:</b> 2012-11-11</div>
 <br>
   <b>Programador jefe/mantenimiento:</b> Syzop<br>
   <b>Programadores:</b> binki<br>
@@ -39,8 +39,6 @@ Spanish
   WolfSage, McSkaf, Zogg,  NiQuiL,  assyrian,  chasm,  DrBin,  llthangel,
   Griever,  nighthawk<br>
   <b>Documentacion:</b> CKnight^ (documentacion inicial), Syzop (reescritura importante), codemastr, y mas contribuidores<br>
-  <b>Traducci&oacute;n al espa&ntilde;ol:</b> <a href="mailto:unknOwn@unrealircd.com">Crash</a><br>
-  <b>Traducci&oacute;n anterior:</b> Trocotronic (<a href="irc://irc.redyc.com/">irc.redyc.com</a>)<br>
 <p>Para ver esta documentacion necesita un navegador compatible, cualquiera. Docs actualizados estan 
   disponibles en <a href="http://www.vulnscan.org/UnrealIRCd/unreal32docs.html">http://www.vulnscan.org/UnrealIRCd/unreal32docs.html</a>
   y el FAQ en <a href="http://www.vulnscan.org/UnrealIRCd/faq/" TARGET="_blank">http://www.vulnscan.org/UnrealIRCd/faq/</a>.
@@ -66,7 +64,7 @@ Spanish
   -- 3.13. <a href="#feature_bantypes">Tipos de ban</a><br>
   -- 3.14. <a href="#feature_spamfilter">Filtro de spam</a><br>
   -- 3.15. <a href="#feature_cidr">CIDR</a><br>
-  -- 3.16. <a href="#feature_nickchars">Configuracion de caracteres de nick</a><br>
+  -- 3.16. <a href="#feature_nickchars">Configuraion de caracteres de nick</a><br>
   -- 3.17. <a href="#feature_cgiirc">Soporte para CGI:IRC</a><br>
   -- 3.18. <a href="#feature_timesync">Tiempo de sincronizacion</a><br>
   -- 3.19. <a href="#feature_authtypes">Tipos de autentificacion</a><br>
@@ -184,9 +182,9 @@ Windows:<br>
 </ul>
 <li><b>Versiones Windows:</b>
 <ul> 
+<li>Windows 2000 (Pro, Server, Advanced Server)
 <li>Windows XP (Home, Pro)
 <li>Windows 2003 
-<li>Windows 7
 </ul>
 <li><b>Arquitecturas probadas:</b>
 <ul>
@@ -324,7 +322,7 @@ Windows:<br>
 <p><font size="+2"><b>3.12 - Características anti-flood</b></font><a name="feature_antiflood"></a></p><div class="desc">
 <p>
 <b>Throttling</b><br>
-Throttling es un método que le permite fijar un límite de cuántas veces pueden los usuarios conectarse y desconectarse de su servidor. Puede configurarlo en el bloque set::throttle para permitir ciertas conexiones en tantos segundos para la misma IP.<br>
+Throttling es un método que le permite fijar un límite de cuántas veces pueden los usuarios conectarse y desconectarse de su servidor. Puede configurarlo en el bloque set::throttle para permitir X conexiones en YY segundos para la misma IP.<br>
 <b>Modos de canal</b><br>
 Existen varios modos de canal para prevenir ataques. Algunos son:<br>
 <b>K</b> = no /knock, <b>N</b> = no cambios de nick, <b>C</b> = no CTCPs, <b>M</b> = sólo usuarios reigstrados (+r) pueden hablar, <b>j</b> = join throttling (por usuario)<br>
@@ -430,7 +428,7 @@ Estos bans especifican qué acciones se ven afectadas por una prohibición:<br>
 <i>Ej: ~q:*!*@blah.blah.com</i></td></tr>
 <tr><td>~n</td><td>cambionick</td><td>Los usuarios que coincidan con este ban no podrán cambiarse el nick, a menos que tenga +v o superior.  <i>Ej: ~n:*!*@*.aol.com</i></td></tr>
 <tr><td>~j</td><td>join</td><td>Los usuarios que coincidan con este ban no podrán entrar al canal.
- Puede realizar todas las demás actividades, si ya está en el canal, tales como hablar y cambiar su nick.
+ He may perform all other activities if he is already on the channel, such as speaking and changing his nick.
  <i>Ej: ~j:*!*@*.aol.com</i><br>
  Podría ser útil para evitar que entren las personas con un mismo ISP, y que sean capaces de hablar/cambiar de nick libremente una vez en el canal, como después de un /INVITE.</td></tr>
 </table>
@@ -2445,8 +2443,7 @@ set {
 <p><font class="set">set::dns::retries &lt;numero-de-intentos&gt;;</font><br>
   Número de intentos si el servidor DNS no obtiene respuesta (NO IMPLEMENTADO).</p>
 <p><font class="set">set::dns::nameserver &lt;nombre-de-dns-server&gt;;</font><br>
-  Especifica la dirección IP del servidor que se utilizará en las búsquedas DNS.
-  Sólo se utiliza como reserva para cuando c-ares es incapaz de adivinar los servidores de nombres.</p>
+  Especifica el host del servidor a usar en las búsquedas DNS (NO IMPLEMENTADO).</p>
 <p><font class="set">set::dns::bind-ip &lt;ip&gt;;</font><br>
   Especifica la IP a enlazar para el resolver. Raras veces se usa.</p>
 <p><font class="set">set::network-name &lt;nombre-de-red&gt;;</font><br>

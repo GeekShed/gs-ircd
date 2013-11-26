@@ -82,9 +82,9 @@ DLLFUNC int MOD_TEST(m_nopost)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_nopost)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, "GET", NULL, m_nopost, MAXPARA, M_UNREGISTERED);
-	CommandAdd(modinfo->handle, "POST", NULL, m_nopost, MAXPARA, M_UNREGISTERED);
-	CommandAdd(modinfo->handle, "PUT", NULL, m_nopost, MAXPARA, M_UNREGISTERED);
+	CommandAdd(modinfo->handle, "GET", m_nopost, MAXPARA, M_UNREGISTERED);
+	CommandAdd(modinfo->handle, "POST", m_nopost, MAXPARA, M_UNREGISTERED);
+	CommandAdd(modinfo->handle, "PUT", m_nopost, MAXPARA, M_UNREGISTERED);
 	HookAddEx(modinfo->handle, HOOKTYPE_CONFIGRUN, m_nopost_config_run);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	init_config();
@@ -250,7 +250,10 @@ DLLFUNC CMD_FUNC(m_nopost)
 		 * ircops see them being added.
 		 */
 		if (cfg.ban_action == BAN_ACT_KILL)
+		{
 			sendto_realops("[m_nopost] Killed connection from %s", GetIP(sptr));
+			ircd_log(LOG_CLIENT, "[m_nopost] Killed connection from %s", GetIP(sptr));
+		}
 		return place_host_ban(sptr, cfg.ban_action, cfg.ban_reason, cfg.ban_time);
 	}
 	return 0;

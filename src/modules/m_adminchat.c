@@ -47,7 +47,6 @@ DLLFUNC int m_admins(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_ADMINCHAT	"ADCHAT"
-#define TOK_ADMINCHAT	"x"
 
 
 ModuleHeader MOD_HEADER(m_adminchat)
@@ -63,10 +62,7 @@ ModuleHeader MOD_HEADER(m_adminchat)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_adminchat)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_ADMINCHAT, TOK_ADMINCHAT, m_admins, 1);
+	CommandAdd(modinfo->handle, MSG_ADMINCHAT, m_admins, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -81,11 +77,6 @@ DLLFUNC int MOD_LOAD(m_adminchat)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_adminchat)(int module_unload)
 {
-	if (del_Command(MSG_ADMINCHAT, TOK_ADMINCHAT, m_admins) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_adminchat).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -116,8 +107,8 @@ DLLFUNC int m_admins(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
 		return 0;
 	}
-	sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL, parv[0],
-   	    MSG_ADMINCHAT, TOK_ADMINCHAT, ":%s", message);	
+	sendto_server(IsServer(cptr) ? cptr : NULL, 0, 0, ":%s ADCHAT :%s",
+   	    parv[0], message);	
 #ifdef ADMINCHAT
 	sendto_umode(UMODE_ADMIN, "*** AdminChat -- from %s: %s",
 	    parv[0], message);

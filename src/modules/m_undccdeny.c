@@ -47,7 +47,6 @@
 DLLFUNC int m_undccdeny(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_UNDCCDENY 	"UNDCCDENY"	
-#define TOK_UNDCCDENY 	"BJ"	
 
 ModuleHeader MOD_HEADER(m_undccdeny)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_undccdeny)
 
 DLLFUNC int MOD_INIT(m_undccdeny)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_UNDCCDENY, TOK_UNDCCDENY, m_undccdeny, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_UNDCCDENY, m_undccdeny, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_undccdeny)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_undccdeny)(int module_unload)
 {
-	if (del_Command(MSG_UNDCCDENY, TOK_UNDCCDENY, m_undccdeny) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_undccdeny).name);
-	}
 	return MOD_SUCCESS;
 }
 

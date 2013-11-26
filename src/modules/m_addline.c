@@ -47,7 +47,6 @@
 DLLFUNC int m_addline(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_ADDLINE 	"ADDLINE"	
-#define TOK_ADDLINE 	"z"	
 
 ModuleHeader MOD_HEADER(m_addline)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_addline)
 
 DLLFUNC int MOD_INIT(m_addline)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_ADDLINE, TOK_ADDLINE, m_addline, 1);
+	CommandAdd(modinfo->handle, MSG_ADDLINE, m_addline, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_addline)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_addline)(int module_unload)
 {
-	if (del_Command(MSG_ADDLINE, TOK_ADDLINE, m_addline) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_addline).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -109,8 +103,7 @@ DLLFUNC CMD_FUNC(m_addline)
 		return 0;
 	}
 	/* Display what they wrote too */
-	sendto_one(sptr, ":%s %s %s :*** Wrote (%s) to %s",
-	    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", parv[0], text, configfile);
+	sendnotice(sptr, "*** Wrote (%s) to %s", text, configfile);
 	fprintf(conf, "// Added by %s\n", make_nick_user_host(sptr->name,
 	    sptr->user->username, sptr->user->realhost));
 /*	for (i=1 ; i<parc ; i++)

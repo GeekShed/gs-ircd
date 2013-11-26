@@ -22,12 +22,6 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-#ifndef CLEAN_COMPILE
-static char sccsid[] =
-    "@(#)s_misc.c	2.42 3/1/94 (C) 1988 University of Oulu, \
-Computing Center and Jarkko Oikarinen";
-#endif
-
 #ifndef _WIN32
 #include <sys/time.h>
 #endif
@@ -37,6 +31,7 @@ Computing Center and Jarkko Oikarinen";
 #include "numeric.h"
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <assert.h>
 #if !defined(ULTRIX) && !defined(SGI) && \
     !defined(__convex__) && !defined(_WIN32)
 # include <sys/param.h>
@@ -55,18 +50,10 @@ Computing Center and Jarkko Oikarinen";
 #include "channel.h"
 #include <string.h>
 
-#ifndef NO_FDLIST
-extern fdlist serv_fdlist;
-extern fdlist oper_fdlist;
-extern float currentrate;
-extern float currentrate2;
-#endif
 extern ircstats IRCstats;
 extern char	*me_hash;
 
-static void exit_one_client(aClient *, aClient *, aClient *, char *, int);
-extern void exit_one_client_in_split(aClient *, aClient *, aClient *,
-    char *);
+static void exit_one_client(aClient *, const char *);
 
 static char *months[] = {
 	"January", "February", "March", "April",
@@ -154,7 +141,7 @@ char *date(time_t clock)
 	plus = (minswest > 0) ? '-' : '+';
 	if (minswest < 0)
 		minswest = -minswest;
-	(void)ircsprintf(buf, "%s %s %d %d -- %02d:%02d %c%02d:%02d",
+	ircsnprintf(buf, sizeof(buf), "%s %s %d %d -- %02d:%02d %c%02d:%02d",
 	    weekdays[lt->tm_wday], months[lt->tm_mon], lt->tm_mday,
 	    1900 + lt->tm_year,
 	    lt->tm_hour, lt->tm_min, plus, minswest / 60, minswest % 60);
@@ -176,9 +163,9 @@ char *convert_time (time_t ltime)
 	ltime = (ltime - minutes) / 60;
 	hours = ltime % 24;
 	days = (ltime - hours) / 24;
-	ircsprintf(buffer, "%ludays %luhours %luminutes %lusecs",
+	ircsnprintf(buffer, sizeof(buffer), "%ludays %luhours %luminutes %lusecs",
 days, hours, minutes, seconds);
-	return(*buffer ? buffer : "");
+	return buffer;
 }
 
 
@@ -212,11 +199,11 @@ char *make_user_host(char *name, char *host)
 
 	bzero(namebuf, sizeof(namebuf));
 	name = check_string(name);
-	strncpyzt(s, name, USERLEN + 1);
+	strlcpy(s, name, USERLEN + 1);
 	s += strlen(s);
 	*s++ = '@';
 	host = check_string(host);
-	strncpyzt(s, host, HOSTLEN + 1);
+	strlcpy(s, host, HOSTLEN + 1);
 	s += strlen(s);
 	*s = '\0';
 	return (namebuf);
@@ -233,15 +220,15 @@ inline char *make_nick_user_host_r(char *namebuf, char *nick, char *name, char *
 
 	bzero(namebuf, sizeof(namebuf));
 	nick = check_string(nick);
-	strncpyzt(namebuf, nick, NICKLEN + 1);
+	strlcpy(namebuf, nick, NICKLEN + 1);
 	s += strlen(s);
 	*s++ = '!';
 	name = check_string(name);
-	strncpyzt(s, name, USERLEN + 1);
+	strlcpy(s, name, USERLEN + 1);
 	s += strlen(s);
 	*s++ = '@';
 	host = check_string(host);
-	strncpyzt(s, host, HOSTLEN + 1);
+	strlcpy(s, host, HOSTLEN + 1);
 	s += strlen(s);
 	*s = '\0';
 	return (namebuf);
@@ -353,7 +340,7 @@ char *get_client_name(aClient *sptr, int showip)
 	if (MyConnect(sptr))
 	{
 		if (showip)
-			(void)ircsprintf(nbuf, "%s[%s@%s.%u]",
+			(void)ircsnprintf(nbuf, sizeof(nbuf), "%s[%s@%s.%u]",
 			    sptr->name,
 			    (!(sptr->flags & FLAGS_GOTID)) ? "" :
 			    sptr->username,
@@ -367,7 +354,7 @@ char *get_client_name(aClient *sptr, int showip)
 		else
 		{
 			if (mycmp(sptr->name, sptr->sockhost))
-				(void)ircsprintf(nbuf, "%s[%s]",
+				(void)ircsnprintf(nbuf, sizeof(nbuf), "%s[%s]",
 				    sptr->name, sptr->sockhost);
 			else
 				return sptr->name;
@@ -385,7 +372,7 @@ char *get_client_host(aClient *cptr)
 		return cptr->name;
 	if (!cptr->hostp)
 		return get_client_name(cptr, FALSE);
-	(void)ircsprintf(nbuf, "%s[%-.*s@%-.*s]",
+	(void)ircsnprintf(nbuf, sizeof(nbuf), "%s[%-.*s@%-.*s]",
 	    cptr->name, USERLEN,
   	    (!(cptr->flags & FLAGS_GOTID)) ? "" : cptr->username,
 	    HOSTLEN, cptr->hostp->h_name);
@@ -403,7 +390,7 @@ void get_sockhost(aClient *cptr, char *host)
 		s++;
 	else
 		s = host;
-	strncpyzt(cptr->sockhost, s, sizeof(cptr->sockhost));
+	strlcpy(cptr->sockhost, s, sizeof(cptr->sockhost));
 }
 
 void remove_dcc_references(aClient *sptr)
@@ -448,6 +435,150 @@ int found;
 	}
 }
 
+/*
+ * Recursively send QUITs and SQUITs for cptr and all of it's dependent
+ * clients.  A server needs the client QUITs if it does not support NOQUIT.
+ *    - kaniini
+ */
+static void
+recurse_send_quits(aClient *cptr, aClient *sptr, aClient *from, aClient *to,
+	const char *comment, const char *splitstr)
+{
+	aClient *acptr, *next;
+
+	if (!CHECKPROTO(to, PROTO_NOQUIT))
+	{
+		list_for_each_entry_safe(acptr, next, &client_list, client_node)
+		{
+			if (acptr->srvptr != sptr)
+				continue;
+
+			sendto_one(to, ":%s QUIT :%s", acptr->name, splitstr);
+		}
+	}
+
+	list_for_each_entry_safe(acptr, next, &global_server_list, client_node)
+	{
+		if (acptr->srvptr != sptr)
+			continue;
+
+		recurse_send_quits(cptr, acptr, from, to, comment, splitstr);
+	}
+
+	if ((cptr == sptr && to != from) || !CHECKPROTO(to, PROTO_NOQUIT))
+		sendto_one(to, "SQUIT %s :%s", sptr->name, comment);
+}
+
+/*
+ * Remove all clients that depend on source_p; assumes all (S)QUITs have
+ * already been sent.  we make sure to exit a server's dependent clients
+ * and servers before the server itself; exit_one_client takes care of
+ * actually removing things off llists.   tweaked from +CSr31  -orabidoo
+ */
+static void
+recurse_remove_clients(aClient *sptr, const char *comment)
+{
+	aClient *acptr, *next;
+
+	list_for_each_entry_safe(acptr, next, &client_list, client_node)
+	{
+		if (acptr->srvptr != sptr)
+			continue;
+
+		exit_one_client(acptr, comment);
+	}
+
+	list_for_each_entry_safe(acptr, next, &global_server_list, client_node)
+	{
+		if (acptr->srvptr != sptr)
+			continue;
+
+		recurse_remove_clients(acptr, comment);
+		exit_one_client(acptr, comment);
+	}
+}
+
+/*
+** Remove *everything* that depends on source_p, from all lists, and sending
+** all necessary QUITs and SQUITs.  source_p itself is still on the lists,
+** and its SQUITs have been sent except for the upstream one  -orabidoo
+*/
+static void
+remove_dependents(aClient *sptr, aClient *from, const char *comment, const char *splitstr)
+{
+	aClient *acptr;
+
+	list_for_each_entry(acptr, &global_server_list, client_node)
+		recurse_send_quits(sptr, sptr, from, acptr, comment, splitstr);
+
+	recurse_remove_clients(sptr, splitstr);
+}
+
+/*
+** Exit one client, local or remote. Assuming all dependants have
+** been already removed, and socket closed for local client.
+*/
+/* DANGER: Ugly hack follows. */
+/* Yeah :/ */
+static void exit_one_client(aClient *sptr, const char *comment)
+{
+	Link *lp;
+	Membership *mp;
+
+	assert(!IsMe(sptr));
+
+	if (IsClient(sptr))
+	{
+		sendto_common_channels(sptr, ":%s QUIT :%s",
+		    sptr->name, comment);
+
+		if (!MyClient(sptr))
+		{
+			RunHook2(HOOKTYPE_REMOTE_QUIT, sptr, comment);
+		}
+
+#ifdef JOINTHROTTLE
+		cmodej_deluserentries(sptr);
+#endif
+		while ((mp = sptr->user->channel))
+			remove_user_from_channel(sptr, mp->chptr);
+
+		/* Clean up invitefield */
+		while ((lp = sptr->user->invited))
+			del_invite(sptr, lp->value.chptr);
+		/* again, this is all that is needed */
+
+		/* Clean up silencefield */
+		while ((lp = sptr->user->silence))
+			(void)del_silence(sptr, lp->value.cp);
+
+		/* Clean up dccallow list and (if needed) notify other clients
+		 * that have this person on DCCALLOW that the user just left/got removed.
+		 */
+		remove_dcc_references(sptr);
+
+		/* For remote clients, we need to check for any outstanding async
+		 * connects attached to this 'sptr', and set those records to NULL.
+		 * Why not for local? Well, we already do that in close_connection ;)
+		 */
+		if (!MyConnect(sptr))
+			unrealdns_delreq_bycptr(sptr);
+	}
+
+	/* Remove sptr from the client list */
+	if (*sptr->id)
+		del_from_id_hash_table(sptr->id, sptr);
+	if (*sptr->name)
+		if (del_from_client_hash_table(sptr->name, sptr) != 1)
+			Debug((DEBUG_ERROR, "%#x !in tab %s[%s] %#x %#x %#x %d %d %#x",
+			    sptr, sptr->name,
+			    sptr->from ? sptr->from->sockhost : "??host",
+			    sptr->from, sptr->next, sptr->prev, sptr->fd,
+			    sptr->status, sptr->user));
+	if (IsRegisteredUser(sptr))
+		hash_check_watch(sptr, RPL_LOGOFF);
+	remove_client_from_list(sptr);
+}
 
 /*
 ** exit_client
@@ -472,43 +603,11 @@ int found;
 */
 int  exit_client(aClient *cptr, aClient *sptr, aClient *from, char *comment)
 {
-	aClient *acptr;
-	aClient *next;
 	time_t on_for;
 	ConfigItem_listen *listen_conf;
-	static char comment1[HOSTLEN + HOSTLEN + 2];
-	static int recurse = 0;
 
 	if (MyConnect(sptr))
 	{
-#ifndef NO_FDLIST
-#define FDLIST_DEBUG
-#ifdef FDLIST_DEBUG
-		{
-			int i;
-			
-			if (!IsAnOper(sptr))
-			{
-				for (i = oper_fdlist.last_entry; i; i--)
-				{
-					if (oper_fdlist.entry[i] == sptr->slot)
-					{
-						sendto_realops("[BUG] exit_client: oper_fdlist entry while not oper, fd=%d, user='%s'",
-							sptr->slot, sptr->name);
-						ircd_log(LOG_ERROR, "[BUG] exit_client: oper_fdlist entry while not oper, fd=%d, user='%s'",
-							sptr->slot, sptr->name);
-						delfrom_fdlist(sptr->slot, &oper_fdlist); /* be kind of enough to fix the problem.. */
-						break; /* MUST break here */
-					}
-				}
-			}
-		}
-#endif
-		if (IsAnOper(sptr))
-			delfrom_fdlist(sptr->slot, &oper_fdlist);
-		if (IsServer(sptr))
-			delfrom_fdlist(sptr->slot, &serv_fdlist);
-#endif
 		if (sptr->class)
 		{
 			sptr->class->clients--;
@@ -540,12 +639,11 @@ int  exit_client(aClient *cptr, aClient *sptr, aClient *from, char *comment)
 		}
 		free_pending_net(sptr);
 		if (sptr->listener)
-			if (sptr->listener->class && !IsOutgoing(sptr))
+			if (sptr->listener && !IsOutgoing(sptr))
 			{
-				listen_conf = (ConfigItem_listen *) sptr->listener->class;
+				listen_conf = sptr->listener;
 				listen_conf->clients--;
-				if (listen_conf->flag.temporary
-				    && (listen_conf->clients == 0))
+				if (listen_conf->flag.temporary && (listen_conf->clients == 0))
 				{
 					/* Call listen cleanup */
 					listen_cleanup();
@@ -606,241 +704,55 @@ int  exit_client(aClient *cptr, aClient *sptr, aClient *from, char *comment)
 		 */
 		close_connection(sptr);
 	}
+	else if (IsPerson(sptr) && !IsULine(sptr))
+	{
+		if (sptr->srvptr != &me)
+			sendto_fconnectnotice(sptr->name, sptr->user, sptr, 1, comment);
+	}
 
 	/*
 	 * Recurse down the client list and get rid of clients who are no
 	 * longer connected to the network (from my point of view)
 	 * Only do this expensive stuff if exited==server -Donwulff
 	 */
-
 	if (IsServer(sptr))
 	{
-		/*
-		 * Is this right? Not recreateing the split message if
-		 * we have been called recursivly? I hope so, cuz thats
-		 * the only way I could make this give the right servers
-		 * in the quit msg. -Cabal95
-		 */
-		if (cptr && !recurse)
-		{
-			/*
-			 * We are sure as we RELY on sptr->srvptr->name and 
-			 * sptr->name to be less or equal to HOSTLEN
-			 * Waste of strlcpy/strlcat here
-			*/
-			(void)strcpy(comment1, sptr->srvptr->name);
-			(void)strcat(comment1, " ");
-			(void)strcat(comment1, sptr->name);
-		}
-		/*
-		 * First, remove the clients on the server itself.
-		 */
-		for (acptr = client; acptr; acptr = next)
-		{
-			next = acptr->next;
-			if (IsClient(acptr) && (acptr->srvptr == sptr))
-				exit_one_client(NULL, acptr,
-				    &me, comment1, 1);
-		}
+		char splitstr[HOSTLEN + HOSTLEN + 2];
 
-		/*
-		 * Now, go SQUIT off the servers which are down-stream of
-		 * the one we just lost.
-		 */
-		recurse++;
-		for (acptr = client; acptr; acptr = next)
-		{
-			next = acptr->next;
-			if (IsServer(acptr) && acptr->srvptr == sptr)
-				exit_client(sptr, acptr, sptr, comment1); /* RECURSION */
-			/*
-			 * I am not masking SQUITS like I do QUITs.  This
-			 * is probobly something we could easily do, but
-			 * how much savings is there really in something
-			 * like that?
-			 */
-#ifdef DEBUGMODE
-			else if (IsServer(acptr) &&
-			    (find_server(acptr->serv->up, NULL) == sptr))
-			{
-				sendto_ops("WARNING, srvptr!=sptr but "
-				    "find_server did!  Server %s on "
-				    "%s thought it was on %s while "
-				    "losing %s.  Tell coding team.",
-				    acptr->name, acptr->serv->up,
-				    acptr->srvptr ? acptr->
-				    srvptr->name : "<noserver>", sptr->name);
-				exit_client(sptr, acptr, sptr, comment1);
-			}
-#endif
-		}
-		recurse--;
+		assert(sptr->serv != NULL && sptr->srvptr != NULL);
+
+		if (FLAT_MAP)
+			strlcpy(splitstr, "*.net *.split", sizeof splitstr);
+		else
+			ircsnprintf(splitstr, sizeof splitstr, "%s %s", sptr->srvptr->name, sptr->name);
+
+		remove_dependents(sptr, cptr, comment, splitstr);
+
 		RunHook(HOOKTYPE_SERVER_QUIT, sptr);
 	}
-
+	else if (IsClient(sptr) && !(sptr->flags & FLAGS_KILLED))
+	{
+		sendto_server(cptr, PROTO_SID, 0,
+			":%s QUIT :%s", ID(sptr), comment);
+		sendto_server(cptr, 0, PROTO_SID,
+			":%s QUIT :%s", sptr->name, comment);
+	}
 
 	/*
 	 * Finally, clear out the server we lost itself
 	 */
-	exit_one_client(cptr, sptr, from, comment, recurse);
+	exit_one_client(sptr, comment);
 	return cptr == sptr ? FLUSH_BUFFER : 0;
 }
 
-/*
-** Exit one client, local or remote. Assuming all dependants have
-** been already removed, and socket closed for local client.
-*/
-/* DANGER: Ugly hack follows. */
-/* Yeah :/ */
-static void exit_one_client(aClient *cptr, aClient *sptr, aClient *from, char *comment, int split)
-{
-	aClient *acptr;
-	int  i;
-	Link *lp;
-	Membership *mp;
-	/*
-	   **  For a server or user quitting, propagage the information to
-	   **  other servers (except to the one where is came from (cptr))
-	 */
-	if (IsMe(sptr))
-	{
-		sendto_ops("ERROR: tried to exit me! : %s", comment);
-		return;		/* ...must *never* exit self!! */
-	}
-	else if (IsServer(sptr))
-	{
-		/*
-		   ** Old sendto_serv_but_one() call removed because we now
-		   ** need to send different names to different servers
-		   ** (domain name matching)
-		 */
-		for (i = 0; i <= LastSlot; i++)
-		{
-
-			if (!(acptr = local[i]) || !IsServer(acptr) || acptr == cptr || IsMe(acptr)
-			    || (DontSendQuit(acptr) && split))
-				continue;
-			/*
-			   ** SQUIT going "upstream". This is the remote
-			   ** squit still hunting for the target. Use prefixed
-			   ** form. "from" will be either the oper that issued
-			   ** the squit or some server along the path that
-			   ** didn't have this fix installed. --msa
-			 */
-			if (sptr->from == acptr)
-			{
-				sendto_one(acptr, ":%s SQUIT %s :%s", from->name, sptr->name, comment);
-			}
-			else
-			{
-				sendto_one(acptr, "SQUIT %s :%s", sptr->name, comment);
-			}
-		}
-	}
-	else if (!(IsPerson(sptr)))
-		/* ...this test is *dubious*, would need
-		   ** some thougth.. but for now it plugs a
-		   ** nasty hole in the server... --msa
-		 */
-		;		/* Nothing */
-	else if (sptr->name[0])	/* ...just clean all others with QUIT... */
-	{
-		/*
-		   ** If this exit is generated from "m_kill", then there
-		   ** is no sense in sending the QUIT--KILL's have been
-		   ** sent instead.
-		 */
-		if ((sptr->flags & FLAGS_KILLED) == 0)
-		{
-			if (split == 0)
-				sendto_serv_butone_token
-				    (cptr, sptr->name, MSG_QUIT, TOK_QUIT,
-				    ":%s", comment);
-			else
-				/*
-				 * Then this is a split, only old (stupid)
-				 * clients need to get quit messages
-				 */
-				sendto_serv_butone_quit(cptr, ":%s QUIT :%s",
-				    sptr->name, comment);
-		}
-		/*
-		   ** If a person is on a channel, send a QUIT notice
-		   ** to every client (person) on the same channel (so
-		   ** that the client can show the "**signoff" message).
-		   ** (Note: The notice is to the local clients *only*)
-		 */
-		if (sptr->user)
-		{
-			sendto_common_channels(sptr, ":%s QUIT :%s",
-			    sptr->name, comment);
-
-			if (!IsULine(sptr) && !split)
-				if (sptr->user->server != me_hash)
-					sendto_fconnectnotice(sptr->name, sptr->user, sptr, 1, comment);
-			if (!MyClient(sptr))
-			{
-				RunHook2(HOOKTYPE_REMOTE_QUIT, sptr, comment);
-			}
-#ifdef JOINTHROTTLE
-			cmodej_deluserentries(sptr);
-#endif
-			while ((mp = sptr->user->channel))
-				remove_user_from_channel(sptr, mp->chptr);
-
-			/* Clean up invitefield */
-			while ((lp = sptr->user->invited))
-				del_invite(sptr, lp->value.chptr);
-			/* again, this is all that is needed */
-
-			/* Clean up silencefield */
-			while ((lp = sptr->user->silence))
-				(void)del_silence(sptr, lp->value.cp);
-
-			/* Clean up dccallow list and (if needed) notify other clients
-			 * that have this person on DCCALLOW that the user just left/got removed.
-			 */
-			remove_dcc_references(sptr);
-			
-			/* For remote clients, we need to check for any outstanding async
-			 * connects attached to this 'sptr', and set those records to NULL.
-			 * Why not for local? Well, we already do that in close_connection ;)
-			 */
-			if (!MyConnect(sptr))
-				unrealdns_delreq_bycptr(sptr);
-		}
-	}
-
-	/* Remove sptr from the client list */
-	if (del_from_client_hash_table(sptr->name, sptr) != 1)
-		Debug((DEBUG_ERROR, "%#x !in tab %s[%s] %#x %#x %#x %d %d %#x",
-		    sptr, sptr->name,
-		    sptr->from ? sptr->from->sockhost : "??host",
-		    sptr->from, sptr->next, sptr->prev, sptr->fd,
-		    sptr->status, sptr->user));
-	if (IsRegisteredUser(sptr))
-		hash_check_watch(sptr, RPL_LOGOFF);
-	remove_client_from_list(sptr);
-	return;
-}
-
-
 void checklist(void)
 {
-	aClient *acptr;
-	int  i, j;
-
 	if (!(bootopt & BOOT_AUTODIE))
 		return;
-	for (j = i = 0; i <= LastSlot; i++)
-		if (!(acptr = local[i]))
-			continue;
-		else if (IsClient(acptr))
-			j++;
-	if (!j)
-	{
-		exit(0);
-	}
+
+	if (!list_empty(&lclient_list))
+		exit (0);
+
 	return;
 }
 
@@ -855,14 +767,14 @@ int counted = 0;
 aClient *acptr;
 char text[2048];
 
-	for (acptr = client; acptr; acptr = acptr->next)
+	list_for_each_entry(acptr, &client_list, client_node)
 	{
 		if (IsOper(acptr) && !IsHideOper(acptr))
 			counted++;
 	}
 	if (counted == IRCstats.operators)
 		return;
-	sprintf(text, "[BUG] operator count bug! value in /lusers is '%d', we counted '%d', "
+	snprintf(text, sizeof(text), "[BUG] operator count bug! value in /lusers is '%d', we counted '%d', "
 	               "user='%s', userserver='%s', tag=%s. Corrected. ",
 	               IRCstats.operators, counted, orig->name ? orig->name : "<null>",
 	               orig->srvptr ? orig->srvptr->name : "<null>", tag ? tag : "<null>");
@@ -921,14 +833,14 @@ Ilovegotos:
 			errorbufsize = regerror(errorcode, &expr, NULL, 0)+1;
 			errtmp = MyMalloc(errorbufsize);
 			regerror(errorcode, &expr, errtmp, errorbufsize);
-			strncpyzt(errorbuf, errtmp, sizeof(errorbuf));
+			strlcpy(errorbuf, errtmp, sizeof(errorbuf));
 			free(errtmp);
 			regfree(&expr);
 			return errorbuf;
 		}
 		if (check_broadness && !regexec(&expr, "", 0, NULL, 0))
 		{
-			strncpyzt(errorbuf, "Regular expression is too broad", sizeof(errorbuf));
+			strlcpy(errorbuf, "Regular expression is too broad", sizeof(errorbuf));
 			regfree(&expr);
 			return errorbuf;
 		}
@@ -1166,7 +1078,7 @@ void kick_insecure_users(aChannel *chptr)
 				sendto_channel_butserv(chptr, &me, ":%s KICK %s %s :%s", me.name, chptr->chname, cptr->name, comment);
 			}
 
-			sendto_serv_butone_token(&me, me.name, MSG_KICK, TOK_KICK, "%s %s :%s", chptr->chname, cptr->name, comment);
+			sendto_server(&me, 0, 0, ":%s KICK %s %s :%s", me.name, chptr->chname, cptr->name, comment);
 
 			remove_user_from_channel(cptr, chptr);
 		}

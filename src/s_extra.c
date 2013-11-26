@@ -108,8 +108,7 @@ void dcc_sync(aClient *sptr)
 	for (p = conf_deny_dcc; p; p = (ConfigItem_deny_dcc *) p->next)
 	{
 		if (p->flag.type2 == CONF_BAN_TYPE_AKILL)
-			sendto_one(sptr, ":%s %s + %s :%s", me.name,
-			    (IsToken(sptr) ? TOK_SVSFLINE : MSG_SVSFLINE),
+			sendto_one(sptr, ":%s SVSFLINE + %s :%s", me.name,
 			    p->filename, p->reason);
 	}
 }
@@ -257,7 +256,8 @@ int found = 0;
 int  channel_canjoin(aClient *sptr, char *name)
 {
 	ConfigItem_deny_channel *p;
-
+	aTKline *tklban;
+	int ishold;
 	if (IsOper(sptr))
 		return 1;
 	if (IsULine(sptr))
@@ -267,17 +267,16 @@ int  channel_canjoin(aClient *sptr, char *name)
 	p = Find_channel_allowed(sptr, name);
 	if (p)
 	{
-		sendto_one(sptr, ":%s NOTICE %s :*** %s",
-			me.name, sptr->name, p->reason);
+		sendto_one(sptr, err_str(ERR_FORBIDDENCHANNEL), me.name, sptr->name, name, p->reason);
+		return 0;
+	}
+	if ((tklban = find_qline(sptr, name, &ishold)))
+	{
+		sendto_one(sptr, err_str(ERR_FORBIDDENCHANNEL), me.name, sptr->name, name, tklban->reason);
 		return 0;
 	}
 	return 1;
 }
-
-#ifndef _WIN32
-extern uid_t irc_uid;
-extern gid_t irc_gid; 
-#endif
 
 /* irc logs.. */
 void ircd_log(int flags, char *format, ...)
@@ -287,16 +286,15 @@ static int last_log_file_warning = 0;
 	va_list ap;
 	ConfigItem_log *logs;
 	char buf[2048], timebuf[128];
-	int fd;
 	struct stat fstats;
 	int written = 0, write_failure = 0;
 
 	va_start(ap, format);
-	ircvsprintf(buf, format, ap);
+	ircvsnprintf(buf, sizeof(buf), format, ap);
 	va_end(ap);
-	snprintf(timebuf, sizeof timebuf, "[%s] - ", myctime(TStime()));
+	snprintf(timebuf, sizeof(timebuf), "[%s] - ", myctime(TStime()));
 	RunHook3(HOOKTYPE_LOG, flags, timebuf, buf);
-	strlcat(buf, "\n", sizeof buf);
+	strlcat(buf, "\n", sizeof(buf));
 
 	for (logs = conf_log; logs; logs = (ConfigItem_log *) logs->next) {
 #ifdef HAVE_SYSLOG
@@ -310,22 +308,24 @@ static int last_log_file_warning = 0;
 		{
 			if (stat(logs->file, &fstats) != -1 && logs->maxsize && fstats.st_size >= logs->maxsize)
 			{
+				if (logs->logfd != -1)
+					fd_close(logs->logfd);
 #ifndef _WIN32
-				fd = open(logs->file, O_CREAT|O_WRONLY|O_TRUNC, S_IRUSR|S_IWUSR);
+				logs->logfd = fd_fileopen(logs->file, O_CREAT|O_WRONLY|O_TRUNC);
 #else
-				fd = open(logs->file, O_CREAT|O_WRONLY|O_TRUNC, S_IREAD|S_IWRITE);
+				logs->logfd = fd_fileopen(logs->file, O_CREAT|O_WRONLY|O_TRUNC);
 #endif
-				if (fd == -1)
+				if (logs->logfd == -1)
 					continue;
-				write(fd, "Max file size reached, starting new log file\n", 45);
+				write(logs->logfd, "Max file size reached, starting new log file\n", 45);
 			}
-			else {
+			else if (logs->logfd == -1) {
 #ifndef _WIN32
-				fd = open(logs->file, O_CREAT|O_APPEND|O_WRONLY, S_IRUSR|S_IWUSR);
+				logs->logfd = fd_fileopen(logs->file, O_CREAT|O_APPEND|O_WRONLY);
 #else
-				fd = open(logs->file, O_CREAT|O_APPEND|O_WRONLY, S_IREAD|S_IWRITE);
+				logs->logfd = fd_fileopen(logs->file, O_CREAT|O_APPEND|O_WRONLY);
 #endif
-				if (fd == -1)
+				if (logs->logfd == -1)
 				{
 					if (!loop.ircd_booted)
 					{
@@ -340,9 +340,12 @@ static int last_log_file_warning = 0;
 					write_failure = 1;
 					continue;
 				}
-			}	
-			write(fd, timebuf, strlen(timebuf));
-			if (write(fd, buf, strlen(buf)) == strlen(buf))
+			}
+			/* this shouldn't happen, but lets not waste unnecessary syscalls... */
+			if (logs->logfd == -1)
+				continue;
+			write(logs->logfd, timebuf, strlen(timebuf));
+			if (write(logs->logfd, buf, strlen(buf)) == strlen(buf))
 			{
 				written++;
 			}
@@ -360,11 +363,8 @@ static int last_log_file_warning = 0;
 				}
 				write_failure = 1;
 			}
-			close(fd);
-#if defined(IRC_USER) && defined(IRC_GROUP)
-			/* Change ownership of the log file to irc user/group so it can still write after the setuid() */
-			if (!loop.ircd_booted)
-				chown(logs->file, irc_uid, irc_gid);
+#ifndef _WIN32
+			fsync(logs->logfd);
 #endif
 		}
 	}

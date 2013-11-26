@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_botmotd);
 
 #define MSG_BOTMOTD 	"BOTMOTD"	
-#define TOK_BOTMOTD 	"BF"	
 
 ModuleHeader MOD_HEADER(m_botmotd)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_botmotd)
 
 DLLFUNC int MOD_INIT(m_botmotd)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_BOTMOTD, TOK_BOTMOTD, m_botmotd, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_BOTMOTD, m_botmotd, MAXPARA, M_USER|M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -84,8 +83,7 @@ DLLFUNC CMD_FUNC(m_botmotd)
 	ConfigItem_tld *tld;
 	char userhost[HOSTLEN + USERLEN + 6];
 
-	if (hunt_server_token(cptr, sptr, MSG_BOTMOTD, TOK_BOTMOTD, ":%s", 1, parc,
-	    parv) != HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s BOTMOTD :%s", 1, parc, parv) != HUNTED_ISME)
 		return 0;
 
 	if (!IsPerson(sptr))

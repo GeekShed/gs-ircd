@@ -61,9 +61,6 @@
 #  include <sys/syslog.h>
 # endif
 #endif
-#ifdef ZIP_LINKS
-#include "zip.h"
-#endif
 #include "auth.h" 
 #include "tre/regex.h"
 
@@ -155,10 +152,6 @@ typedef struct SMembershipL MembershipL;
 typedef struct JFlood aJFlood;
 typedef struct PendingNet aPendingNet;
 
-#ifdef ZIP_LINKS
-typedef struct  Zdata   aZdata;
-#endif
-
 #ifdef NEED_U_INT32_T
 typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #endif
@@ -183,6 +176,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	MAXRECIPIENTS 	20
 #define	MAXKILLS	20
 #define	MAXSILELENGTH	NICKLEN+USERLEN+HOSTLEN+10
+#define IDLEN		10
 #define UMODETABLESZ (sizeof(long) * 8)
 /*
  * Watch it - Don't change this unless you also change the ERR_TOOMANYWATCH
@@ -278,33 +272,10 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define IsSynched(x)	(x->serv->flags.synced)
 #define IsServerSent(x) (x->serv && x->serv->flags.server_sent)
 
-/* opt.. */
-#define OPT_SJOIN	0x0001
-#define OPT_NOT_SJOIN	0x0002
-#define OPT_NICKv2	0x0004
-#define OPT_NOT_NICKv2	0x0008
-#define OPT_SJOIN2	0x0010
-#define OPT_NOT_SJOIN2	0x0020
-#define OPT_UMODE2	0x0040
-#define OPT_NOT_UMODE2	0x0080
-#define OPT_SJ3		0x0100
-#define OPT_NOT_SJ3	0x0200
-#define OPT_SJB64	0x0400
-#define OPT_NOT_SJB64	0x0800
-#define OPT_VHP		0x1000
-#define OPT_NOT_VHP	0x2000
-#define OPT_TKLEXT	0x4000
-#define OPT_NOT_TKLEXT	0x8000
-#define OPT_NICKIP	0x10000
-#define OPT_NOT_NICKIP  0x20000
-#define OPT_CLK	0x10000
-#define OPT_NOT_CLK  0x20000
-
 /* client->flags (32 bits): 28 used, 4 free */
 #define	FLAGS_PINGSENT   0x0001	/* Unreplied ping sent */
 #define	FLAGS_DEADSOCKET 0x0002	/* Local socket is dead--Exiting soon */
 #define	FLAGS_KILLED     0x0004	/* Prevents "QUIT" from being sent for this */
-#define	FLAGS_BLOCKED    0x0008	/* socket is in a blocked condition */
 #define FLAGS_OUTGOING   0x0010 /* outgoing connection, do not touch cptr->listener->clients */
 #define	FLAGS_CLOSING    0x0020	/* set when closing to suppress errors */
 #define	FLAGS_LISTEN     0x0040	/* used to mark clients which we listen() on */
@@ -325,9 +296,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define FLAGS_NETINFO    0x200000
 #define FLAGS_HYBNOTICE  0x400000
 #define FLAGS_QUARANTINE 0x800000
-#ifdef ZIP_LINKS
-#define FLAGS_ZIP        0x1000000
-#endif
+//0x1000000 unused (was ziplinks)
 #define FLAGS_DCCNOTICE  0x2000000 /* Has the user seen a notice on how to use DCCALLOW already? */
 #define FLAGS_SHUNNED    0x4000000
 #define FLAGS_VIRUS      0x8000000 /* tagged by spamfilter */
@@ -354,17 +323,15 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	FLAGS_ID	(FLAGS_DOID|FLAGS_GOTID)
 
 #define PROTO_NOQUIT	0x0001	/* Negotiated NOQUIT protocol */
-#define PROTO_TOKEN		0x0002	/* Negotiated TOKEN protocol */
 #define PROTO_SJOIN		0x0004	/* Negotiated SJOIN protocol */
 #define PROTO_NICKv2	0x0008	/* Negotiated NICKv2 protocol */
 #define PROTO_SJOIN2	0x0010	/* Negotiated SJOIN2 protocol */
 #define PROTO_UMODE2	0x0020	/* Negotiated UMODE2 protocol */
-#define PROTO_NS		0x0040	/* Negotiated NS protocol */
-#define PROTO_ZIP		0x0080	/* Negotiated ZIP protocol */
+#define PROTO_INVITENOTIFY	0x0080	/* client supports invite-notify */
 #define PROTO_VL		0x0100	/* Negotiated VL protocol */
 #define PROTO_SJ3		0x0200	/* Negotiated SJ3 protocol */
 #define PROTO_VHP		0x0400	/* Send hostnames in NICKv2 even if not sethosted */
-#define PROTO_SJB64		0x0800
+#define PROTO_SID	0x0800	/* SID/UID mode */
 #define PROTO_TKLEXT	0x1000	/* TKL extension: 10 parameters instead of 8 (3.2RC2) */
 #define PROTO_NICKIP	0x2000  /* Send IP addresses in the NICK command */
 #define PROTO_NAMESX	0x4000  /* Send all rights in NAMES output */
@@ -407,7 +374,6 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define IsRegNick(x)		((x)->umodes & UMODE_REGNICK)
 #define IsRegNickMsg(x)		((x)->umodes & UMODE_RGSTRONLY)
 #define IsNoCTCP(x)		((x)->umodes & UMODE_NOCTCP)
-#define IsWebTV(x)		((x)->umodes & UMODE_WEBTV)
 #define	IsPerson(x)		((x)->user && IsClient(x))
 #define	IsPrivileged(x)		(IsAnOper(x) || IsServer(x))
 #define	SendWallops(x)		(!IsMe(x) && IsPerson(x) && ((x)->umodes & UMODE_WALLOP))
@@ -417,7 +383,6 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	IsLocal(x)		((x)->flags & FLAGS_LOCAL)
 #define	IsDead(x)		((x)->flags & FLAGS_DEADSOCKET)
 #define GotProtoctl(x)		((x)->flags & FLAGS_PROTOCTL)
-#define IsBlocked(x)		((x)->flags & FLAGS_BLOCKED)
 #define IsOutgoing(x)		((x)->flags & FLAGS_OUTGOING)
 #define GotNetInfo(x) 		((x)->flags & FLAGS_NETINFO)
 #define SetNetInfo(x)		((x)->flags |= FLAGS_NETINFO)
@@ -434,14 +399,6 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define IsSecure(x)		((x)->flags & FLAGS_SSL)
 #else
 #define IsSecure(x)		(0)
-#endif
-
-#ifdef ZIP_LINKS
-#define IsZipped(x) 	((x)->flags & FLAGS_ZIP)
-#define IsZipStart(x)	(((x)->flags & FLAGS_ZIP) && ((x)->zip->first == 1))
-#else
-#define IsZipped(x)		(0)
-#define IsZipStart(x)	(0)
 #endif
 
 /* Fake lag exception */
@@ -461,7 +418,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	IsNotSpoof(x)		((x)->nospoof == 0)
 
 #define GetHost(x)			(IsHidden(x) ? (x)->user->virthost : (x)->user->realhost)
-#define GetIP(x)			((x->user && x->user->ip_str) ? x->user->ip_str : (MyConnect(x) ? Inet_ia2p(&x->ip) : NULL))
+#define GetIP(x)			((x->user && x->user->ip_str) ? x->user->ip_str : (MyConnect(x) ? Inet_ia2p(&x->ip) : "255.255.255.255"))
 
 #define SetKillsF(x)		((x)->user->snomask |= SNO_KILLS)
 #define SetClientF(x)		((x)->user->snomask |= SNO_CLIENT)
@@ -479,7 +436,6 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	SetDNS(x)		((x)->flags |= FLAGS_DOINGDNS)
 #define	DoingDNS(x)		((x)->flags & FLAGS_DOINGDNS)
 #define	SetAccess(x)		((x)->flags |= FLAGS_CHKACCESS); Debug((DEBUG_DEBUG, "SetAccess(%s)", (x)->name))
-#define SetBlocked(x)		((x)->flags |= FLAGS_BLOCKED)
 #define SetOutgoing(x)		do { x->flags |= FLAGS_OUTGOING; } while(0)
 #define SetCGIIRC(x)		do { x->flags |= FLAGS_CGIIRC; } while(0)
 #define	DoingAuth(x)		((x)->flags & FLAGS_AUTH)
@@ -507,14 +463,8 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	ClearDNS(x)		((x)->flags &= ~FLAGS_DOINGDNS)
 #define	ClearAuth(x)		((x)->flags &= ~FLAGS_AUTH)
 #define	ClearAccess(x)		((x)->flags &= ~FLAGS_CHKACCESS)
-#define ClearBlocked(x)		((x)->flags &= ~FLAGS_BLOCKED)
 #define ClearHidden(x)          ((x)->umodes &= ~UMODE_HIDE)
 #define ClearHideOper(x)    ((x)->umodes &= ~UMODE_HIDEOPER)
-
-#ifdef ZIP_LINKS
-#define SetZipped(x)        ((x)->flags |= FLAGS_ZIP)
-#define ClearZipped(x)      ((x)->flags &= ~FLAGS_ZIP)
-#endif
 
 /*
  * ProtoCtl options
@@ -526,13 +476,11 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #endif
 
 #define DontSendQuit(x)		(CHECKPROTO(x, PROTO_NOQUIT))
-#define IsToken(x)		(CHECKPROTO(x, PROTO_TOKEN))
 #define SupportSJOIN(x)		(CHECKPROTO(x, PROTO_SJOIN))
 #define SupportNICKv2(x)	(CHECKPROTO(x, PROTO_NICKv2))
 #define SupportNICKIP(x)	(CHECKPROTO(x, PROTO_NICKIP))
 #define SupportSJOIN2(x)	(CHECKPROTO(x, PROTO_SJOIN2))
 #define SupportUMODE2(x)	(CHECKPROTO(x, PROTO_UMODE2))
-#define SupportNS(x)		(CHECKPROTO(x, PROTO_NS))
 #define SupportVL(x)		(CHECKPROTO(x, PROTO_VL))
 #define SupportSJ3(x)		(CHECKPROTO(x, PROTO_SJ3))
 #define SupportVHP(x)		(CHECKPROTO(x, PROTO_VHP))
@@ -540,14 +488,13 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define SupportNAMESX(x)	(CHECKPROTO(x, PROTO_NAMESX))
 #define SupportCLK(x)		(CHECKPROTO(x, PROTO_CLK))
 #define SupportUHNAMES(x)	(CHECKPROTO(x, PROTO_UHNAMES))
+#define SupportSID(x)		(CHECKPROTO(x, PROTO_SID))
 
 #define SetSJOIN(x)		((x)->proto |= PROTO_SJOIN)
 #define SetNoQuit(x)		((x)->proto |= PROTO_NOQUIT)
-#define SetToken(x)		((x)->proto |= PROTO_TOKEN)
 #define SetNICKv2(x)		((x)->proto |= PROTO_NICKv2)
 #define SetSJOIN2(x)		((x)->proto |= PROTO_SJOIN2)
 #define SetUMODE2(x)		((x)->proto |= PROTO_UMODE2)
-#define SetNS(x)		((x)->proto |= PROTO_NS)
 #define SetVL(x)		((x)->proto |= PROTO_VL)
 #define SetSJ3(x)		((x)->proto |= PROTO_SJ3)
 #define SetVHP(x)		((x)->proto |= PROTO_VHP)
@@ -558,7 +505,6 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 
 #define ClearSJOIN(x)		((x)->proto &= ~PROTO_SJOIN)
 #define ClearNoQuit(x)		((x)->proto &= ~PROTO_NOQUIT)
-#define ClearToken(x)		((x)->proto &= ~PROTO_TOKEN)
 #define ClearNICKv2(x)		((x)->proto &= ~PROTO_NICKv2)
 #define ClearSJOIN2(x)		((x)->proto &= ~PROTO_SJOIN2)
 #define ClearUMODE2(x)		((x)->proto &= ~PROTO_UMODE2)
@@ -570,24 +516,25 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
  * defined operator access levels
  */
 #define OFLAG_REHASH	0x00000001	/* Oper can /rehash server */
-#define OFLAG_DIE		0x00000002	/* Oper can /die the server */
+#define OFLAG_DIE	0x00000002	/* Oper can /die the server */
 #define OFLAG_RESTART	0x00000004	/* Oper can /restart the server */
 #define OFLAG_DCCDENY	0x00000008	/* Oper can use /dccdeny and /undccdeny */
 #define OFLAG_HELPOP	0x00000010	/* Oper can send /HelpOps */
 #define OFLAG_GLOBOP	0x00000020	/* Oper can send /GlobOps */
 #define OFLAG_WALLOP	0x00000040	/* Oper can send /WallOps */
-#define OFLAG_LOCOP		0x00000080	/* Oper can send /LocOps */
+#define OFLAG_LOCOP	0x00000080	/* Oper can send /LocOps */
 #define OFLAG_LROUTE	0x00000100	/* Oper can do local routing */
 #define OFLAG_GROUTE	0x00000200	/* Oper can do global routing */
-#define OFLAG_LKILL		0x00000400	/* Oper can do local kills */
-#define OFLAG_GKILL		0x00000800	/* Oper can do global kills */
-#define OFLAG_KLINE		0x00001000	/* Oper can /kline users */
+#define OFLAG_LKILL	0x00000400	/* Oper can do local kills */
+#define OFLAG_GKILL	0x00000800	/* Oper can do global kills */
+#define OFLAG_KLINE	0x00001000	/* Oper can /kline users */
 #define OFLAG_UNKLINE	0x00002000	/* Oper can /unkline users */
 #define OFLAG_LNOTICE	0x00004000	/* Oper can send local serv notices */
 #define OFLAG_GNOTICE	0x00008000	/* Oper can send global notices */
-#define OFLAG_ADMIN		0x00010000	/* Admin */
+#define OFLAG_ADMIN	0x00010000	/* Admin */
 #define OFLAG_ADDLINE	0x00020000	/* Oper can use /addline */
-#define OFLAG_ZLINE		0x00080000	/* Oper can use /zline and /unzline */
+#define OFLAG_TSCTL	0x00040000	/* Oper can use /tsctl */
+#define OFLAG_ZLINE	0x00080000	/* Oper can use /zline and /unzline */
 #define OFLAG_NETADMIN	0x00200000	/* netadmin gets +N */
 #define OFLAG_COADMIN	0x00800000	/* co admin gets +C */
 #define OFLAG_SADMIN	0x01000000	/* services admin gets +a */
@@ -614,6 +561,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define OPCanZline(x)   ((x)->oflag & OFLAG_ZLINE)
 #define OPCanRehash(x)	((x)->oflag & OFLAG_REHASH)
 #define OPCanDie(x)	((x)->oflag & OFLAG_DIE)
+#define OPCanTSCtl(x)	((x)->oflag & OFLAG_TSCTL)
 #define OPCanRestart(x)	((x)->oflag & OFLAG_RESTART)
 #define OPCanHelpOp(x)	((x)->oflag & OFLAG_HELPOP)
 #define OPCanGlobOps(x)	((x)->oflag & OFLAG_GLOBOP)
@@ -640,6 +588,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 
 #define OPSetRehash(x)	((x)->oflag |= OFLAG_REHASH)
 #define OPSetDie(x)	((x)->oflag |= OFLAG_DIE)
+#define OPSetTSCtl(x)	((x)->oflag |= OFLAG_TSCTL)
 #define OPSetRestart(x)	((x)->oflag |= OFLAG_RESTART)
 #define OPSetHelpOp(x)	((x)->oflag |= OFLAG_HELPOP)
 #define OPSetGlobOps(x)	((x)->oflag |= OFLAG_GLOBOP)
@@ -661,6 +610,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define OPSetWhois(x)   ((x)->oflag |= OFLAG_WHOIS)
 #define OPClearRehash(x)	((x)->oflag &= ~OFLAG_REHASH)
 #define OPClearDie(x)		((x)->oflag &= ~OFLAG_DIE)
+#define OPClearTSCtl(x)		((x)->oflag &= ~OFLAG_TSCTL)
 #define OPClearRestart(x)	((x)->oflag &= ~OFLAG_RESTART)
 #define OPClearHelpOp(x)	((x)->oflag &= ~OFLAG_HELPOP)
 #define OPClearGlobOps(x)	((x)->oflag &= ~OFLAG_GLOBOP)
@@ -711,6 +661,8 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 /* Linked list dcc flags */
 #define DCC_LINK_ME		1 /* My dcc allow */
 #define DCC_LINK_REMOTE	2 /* I need to remove dccallows from these clients when I die */
+
+#define ID(sptr)	(*sptr->id ? sptr->id : sptr->name)
 
 struct irc_netmask
 {
@@ -772,9 +724,6 @@ struct MotdItem {
 struct aloopStruct {
 	unsigned do_garbage_collect : 1;
 	unsigned ircd_booted : 1;
-	unsigned do_bancheck : 1; /* perform *line bancheck? */
-	unsigned do_bancheck_spamf_user : 1; /* perform 'user' spamfilter bancheck */
-	unsigned do_bancheck_spamf_away : 1; /* perform 'away' spamfilter bancheck */
 	unsigned ircd_rehashing : 1;
 	unsigned tainted : 1;
 	aClient *rehash_save_cptr, *rehash_save_sptr;
@@ -853,7 +802,6 @@ struct Server {
 	char 		by[NICKLEN + 1];
 	ConfigItem_link *conf;
 	TS   		timestamp;		/* Remotely determined connect try time */
-	unsigned short  numeric;	/* NS numeric, 0 if none */
 	long		 users;
 #ifdef	LIST_DEBUG
 	aClient *bcptr;
@@ -873,6 +821,7 @@ struct Server {
 #define M_RESETIDLE		0x0040
 #define M_VIRUS			0x0080
 #define M_ANNOUNCE		0x0100
+#define M_OPER			0x0200
 
 
 /* tkl:
@@ -951,10 +900,8 @@ extern MODVAR short	 Usermode_highest;
 extern MODVAR Snomask *Snomask_Table;
 extern MODVAR short Snomask_highest;
 
-#ifdef EXTCMODE
 extern MODVAR Cmode *Channelmode_Table;
 extern MODVAR unsigned short Channelmode_highest;
-#endif
 
 extern Umode *UmodeAdd(Module *module, char ch, int options, int (*allowed)(aClient *sptr, int what), long *mode);
 extern void UmodeDel(Umode *umode);
@@ -962,10 +909,8 @@ extern void UmodeDel(Umode *umode);
 extern Snomask *SnomaskAdd(Module *module, char ch, int (*allowed)(aClient *sptr, int what), long *mode);
 extern void SnomaskDel(Snomask *sno);
 
-#ifdef EXTCMODE
 extern Cmode *CmodeAdd(Module *reserved, CmodeInfo req, Cmode_t *mode);
 extern void CmodeDel(Cmode *cmode);
-#endif
 
 typedef struct {
 	EXTCM_PAR_HEADER
@@ -976,16 +921,15 @@ typedef struct {
 #define LISTENER_NORMAL		0x000001
 #define LISTENER_CLIENTSONLY	0x000002
 #define LISTENER_SERVERSONLY	0x000004
-#define LISTENER_REMOTEADMIN	0x000008
-#define LISTENER_JAVACLIENT	0x000010
-#define LISTENER_MASK		0x000020
-#define LISTENER_SSL		0x000040
-#define LISTENER_BOUND		0x000080
+#define LISTENER_JAVACLIENT	0x000008
+#define LISTENER_SSL		0x000010
+#define LISTENER_BOUND		0x000020
+#define LISTENER_DEFER_ACCEPT	0x000040
 
-#define IsServersOnlyListener(x)	((x) && ((x)->umodes & LISTENER_SERVERSONLY))
+#define IsServersOnlyListener(x)	((x) && ((x)->options & LISTENER_SERVERSONLY))
 
 #define CONNECT_SSL		0x000001
-#define CONNECT_ZIP		0x000002 
+//0x000002 unused (was ziplinks)
 #define CONNECT_AUTO		0x000004
 #define CONNECT_QUARANTINE	0x000008
 #define CONNECT_NODNSCACHE	0x000010
@@ -997,18 +941,22 @@ typedef struct {
 #define SSLFLAG_NOSTARTTLS	0x8
 
 struct Client {
-	struct Client *next, *prev, *hnext;
+	struct list_head client_node; 	/* for global client list (client_list) */
+	struct list_head client_hash;	/* for clientTable */
+	struct list_head id_hash;	/* for idTable */
+
 	anUser *user;		/* ...defined, if this is a User */
 	aServer *serv;		/* ...defined, if this is a server */
 	TS   lastnick;		/* TimeStamp on nick */
 	long flags;		/* client flags */
 	long umodes;		/* client usermodes */
-	aClient *from;		/* == self, if Local Client, *NEVER* NULL! */
+	aClient *from;		/* == &me, if Local Client, *NEVER* NULL! */
 	int  fd;		/* >= 0, for local clients */
 	unsigned char hopcount;		/* number of servers to this 0 = local */
 	char name[HOSTLEN + 1];	/* Unique name of the client, nick or host */
 	char username[USERLEN + 1];	/* username here now for auth stuff */
 	char info[REALLEN + 1];	/* Free form additional client information */
+	char id[IDLEN + 1];	/* SID or UID */
 	aClient *srvptr;	/* Server introducing this.  May be &me */
 	short status;		/* client type */
 	/*
@@ -1019,6 +967,10 @@ struct Client {
 	   ** these fields, if (from != self).
 	 */
 	int  count;		/* Amount of data in buffer */
+
+	struct list_head lclient_node;	/* for local client list (lclient_list) */
+	struct list_head special_node;	/* for special lists (server || unknown || oper) */
+
 #if 1
 	int  oflag;		/* oper access flags (removed from anUser for mem considerations) */
 	TS   since;		/* time they will next be allowed to send something */
@@ -1038,11 +990,6 @@ struct Client {
 	long sendM;		/* Statistics: protocol messages send */
 	long sendK;		/* Statistics: total k-bytes send */
 	long receiveM;		/* Statistics: protocol messages received */
-#ifdef ZIP_LINKS
-	struct Zdata *zip;	/* zip data */
-#elif defined(_WIN32)
-	void *zip_NOTUSED; /* (win32 binary compatability) */
-#endif
 #ifdef USE_SSL
 	SSL		*ssl;
 #elif defined(_WIN32)
@@ -1055,10 +1002,10 @@ struct Client {
 	long receiveK;		/* Statistics: total k-bytes received */
 	u_short sendB;		/* counters to count upto 1-k lots of bytes */
 	u_short receiveB;	/* sent and received. */
-	aClient *listener;
+	ConfigItem_listen *listener;
 	ConfigItem_class *class;		/* Configuration record associated */
 	int authfd;		/* fd for rfc931 authentication */
-        short slot;         /* my offset in the local fd table */
+        long serial;            /* current serial for send.c functions */
 	struct IN_ADDR ip;	/* keep real ip# too */
 	u_short port;		/* and the remote port# too :-) */
 	struct hostent *hostp;
@@ -1172,8 +1119,7 @@ struct _configitem {
 };
 
 struct _configitem_me {
-	char	   *name, *info;
-	unsigned short	   numeric;
+	char	   *name, *info, *sid;
 };
 
 struct _configitem_files {
@@ -1272,7 +1218,7 @@ struct _configitem_listen {
 	char		*ip;
 	int		port;
 	int		options, clients;
-	aClient		*listener;
+	int		fd;
 };
 
 struct _configitem_vhost {
@@ -1298,9 +1244,6 @@ struct _configitem_link {
 	char		*ciphers;
 #elif defined(_WIN32)
 	void *ciphers_NOTUSED;
-#endif
-#ifdef ZIP_LINKS
-	int compression_level;
 #endif
 };
 
@@ -1340,13 +1283,11 @@ struct _iplist {
 /*	struct irc_netmask  *netmask; */
 };
 
-#ifdef FAST_BADWORD_REPLACE
 #define BADW_TYPE_INVALID 0x0
 #define BADW_TYPE_FAST    0x1
 #define BADW_TYPE_FAST_L  0x2
 #define BADW_TYPE_FAST_R  0x4
 #define BADW_TYPE_REGEX   0x8
-#endif
 
 #define BADWORD_REPLACE 1
 #define BADWORD_BLOCK 2
@@ -1355,9 +1296,7 @@ struct _configitem_badword {
 	ConfigItem      *prev, *next;
 	ConfigFlag	flag;
 	char		*word, *replace;
-#ifdef FAST_BADWORD_REPLACE
 	unsigned short	type;
-#endif
 	char		action;
 	regex_t 	expr;
 };
@@ -1405,6 +1344,7 @@ struct _configitem_log {
 	char *file;
 	long maxsize;
 	int  flags;
+	int  logfd;
 };
 
 struct _configitem_unknown {
@@ -1542,9 +1482,7 @@ struct ListOptions {
 	TS   topictimemax;
 };
 
-#ifdef EXTCMODE
 #define EXTCMODETABLESZ 32
-#endif /* EXTCMODE */
 
 /* this can be like ~60-90 bytes, therefore it's in a seperate struct */
 #define FLD_CTCP	0 /* c */
@@ -1576,21 +1514,12 @@ struct SChanFloodProt {
 /* mode structure for channels */
 struct SMode {
 	long mode;
-#ifdef EXTCMODE
 	Cmode_t extmode;
 	CmodeParam *extmodeparam;
-#endif
 	int  limit;
 	char key[KEYLEN + 1];
 	char link[LINKLEN + 1];
-#ifdef NEWCHFLOODPROT
 	ChanFloodProt *floodprot;
-#else
-	/* x:y */
-	unsigned short  msgs;		/* x */
-	unsigned short  per;		/* y */
-	unsigned char	 kmode;	/* mode  0 = kick  1 = ban */
-#endif
 };
 
 /* Used for notify-hash buckets... -Donwulff */
@@ -1804,13 +1733,6 @@ struct liststruct {
 #define IsSendable(x)		(DBufLength(&x->sendQ) < 2048)
 #define DoList(x)		((x)->user && (x)->user->lopt)
 
-/* String manipulation macros */
-
-/* strncopynt --> strncpyzt to avoid confusion, sematics changed
-   N must be now the number of bytes in the array --msa */
-#define	strncpyzt(x, y, N) do{(void)strncpy(x,y,N);x[N-1]='\0';}while(0)
-#define	StrEq(x,y)	(!strcmp((x),(y)))
-
 /* used in SetMode() in channel.c and m_umode() in s_msg.c */
 
 #define	MODE_NULL      0
@@ -1881,8 +1803,6 @@ struct _cmdoverride {
 	int			(*func)();
 };
 
-#ifdef THROTTLING
-
 struct ThrottlingBucket
 {
 	struct ThrottlingBucket *prev, *next;
@@ -1947,8 +1867,6 @@ struct	ThrottlingBucket	*find_throttling_bucket(struct IN_ADDR *in);
 void	add_throttling_bucket(struct IN_ADDR *in);
 void	del_throttling_bucket(struct ThrottlingBucket *bucket);
 int	throttle_can_connect(aClient *, struct IN_ADDR *in);
-
-#endif
 
 #define VERIFY_OPERCOUNT(clnt,tag) { if (IRCstats.operators < 0) verify_opercount(clnt,tag); } while(0)
 

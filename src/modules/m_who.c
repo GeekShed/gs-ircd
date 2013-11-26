@@ -54,7 +54,6 @@ DLLFUNC int m_who(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_WHO 	"WHO"
-#define TOK_WHO 	"\""
 
 ModuleHeader MOD_HEADER(m_who)
   = {
@@ -68,10 +67,7 @@ ModuleHeader MOD_HEADER(m_who)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_who)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_WHO, TOK_WHO, m_who, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_WHO, m_who, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -86,11 +82,6 @@ DLLFUNC int MOD_LOAD(m_who)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_who)(int module_unload)
 {
-	if (del_Command(MSG_WHO, TOK_WHO, m_who) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_who).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -137,6 +128,8 @@ struct {
 	char *user;
 	int want_ip;
 	char *ip;
+	int want_port;
+	int port;
 	int want_umode;
 	int umodes_dontwant;
 	int umodes_want;
@@ -215,15 +208,15 @@ static void who_sendhelp(aClient *sptr)
     "Flag a: user is away",
     "Flag c <channel>:       user is on <channel>,",
     "                        no wildcards accepted",
-    "Flag h <host>:          user has string <host> in his/her hostname,",
+    "Flag h <host>:          user has string <host> in their hostname,",
     "                        wildcards accepted",
     "Flag m <usermodes>:     user has <usermodes> set, only",
     "                        O/o/C/A/a/N/B are allowed",
-    "Flag n <nick>:          user has string <nick> in his/her nickname,",
+    "Flag n <nick>:          user has string <nick> in their nickname,",
     "                        wildcards accepted",
     "Flag s <server>:        user is on server <server>,",
     "                        wildcards not accepted",
-    "Flag u <user>:          user has string <user> in his/her username,",
+    "Flag u <user>:          user has string <user> in their username,",
     "                        wildcards accepted",
     "Behavior flags:",
     "Flag M: check for user in channels I am a member of",
@@ -238,18 +231,20 @@ static void who_sendhelp(aClient *sptr)
     "Flag a: user is away",
     "Flag c <channel>:       user is on <channel>,",
     "                        no wildcards accepted",
-    "Flag g <gcos/realname>: user has string <gcos> in his/her GCOS,",
+    "Flag g <gcos/realname>: user has string <gcos> in their GCOS,",
     "                        wildcards accepted",
-    "Flag h <host>:          user has string <host> in his/her hostname,",
+    "Flag h <host>:          user has string <host> in their hostname,",
     "                        wildcards accepted",
-    "Flag i <ip>:            user has string <ip> in his/her IP address,",
+    "Flag i <ip>:            user has string <ip> in their IP address,",
     "                        wildcards accepted",
+    "Flag p <port>:          user is connecting on port <port>,",
+    "                        local connections only",
     "Flag m <usermodes>:     user has <usermodes> set",
-    "Flag n <nick>:          user has string <nick> in his/her nickname,",
+    "Flag n <nick>:          user has string <nick> in their nickname,",
     "                        wildcards accepted",
     "Flag s <server>:        user is on server <server>,",
     "                        wildcards not accepted",
-    "Flag u <user>:          user has string <user> in his/her username,",
+    "Flag u <user>:          user has string <user> in their username,",
     "                        wildcards accepted",
     "Behavior flags:",
     "Flag M: check for user in channels I am a member of",
@@ -368,6 +363,14 @@ int i = 1;
 					if (*umodes == 0)
 						return -1;
 				}
+				i++;
+				break;
+			case 'p':
+				REQUIRE_PARAM()
+				if (!IsAnOper(sptr))
+					break; /* oper-only */
+				wfl.port = atoi(argv[i]);
+				SET_OPTION(wfl.want_port);
 				i++;
 				break;
 			case 'M':
@@ -490,6 +493,23 @@ char has_common_chan = 0;
 
 			if (((wfl.want_ip == WHO_WANT) && match(wfl.ip, ip)) ||
 			    ((wfl.want_ip == WHO_DONTWANT) && !match(wfl.ip, ip)))
+			{
+				return WHO_CANTSEE;
+			}
+		}
+
+		/* if they only want people connecting on a certain port */
+		if (wfl.want_port != WHO_DONTCARE)
+		{
+			int port;
+			
+			if (!MyClient(acptr))
+				return WHO_CANTSEE;
+
+			port = acptr->listener->port;
+
+			if (((wfl.want_port == WHO_WANT) && wfl.port != port) ||
+			    ((wfl.want_port == WHO_DONTWANT) && wfl.port == port))
 			{
 				return WHO_CANTSEE;
 			}
@@ -653,15 +673,6 @@ static void do_other_who(aClient *sptr, char *mask)
 {
 int oper = IsAnOper(sptr);
 
-	/* wildcard? */
-#ifndef NO_FDLIST
-	if (lifesux && !IsOper(sptr) && *mask == '*' && *(mask+1) == 0)
-	{
-		sendto_one(sptr, err_str(ERR_HTMDISABLED), me.name,
-                    sptr->name, "/WHO");
-		return;
-	}
-#endif		
 	if (strchr(mask, '*') || strchr(mask, '?'))
 	{
 		int i = 0;
@@ -669,7 +680,7 @@ int oper = IsAnOper(sptr);
 		aClient *acptr;
 		who_flags |= WF_WILDCARD;
 
-		for (acptr = client; acptr; acptr = acptr->next)
+		list_for_each_entry(acptr, &client_list, client_node)
 		{
 		int cansee;
 		char status[20];

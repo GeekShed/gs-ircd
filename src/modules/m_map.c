@@ -47,7 +47,6 @@
 DLLFUNC int m_map(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_MAP 	"MAP"	
-#define TOK_MAP 	"u"	
 
 ModuleHeader MOD_HEADER(m_map)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_map)
 
 DLLFUNC int MOD_INIT(m_map)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_MAP, TOK_MAP, m_map, MAXPARA, M_USER|M_ANNOUNCE);
+	CommandAdd(modinfo->handle, MSG_MAP, m_map, MAXPARA, M_USER|M_ANNOUNCE);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -85,7 +84,6 @@ static void dump_map(aClient *cptr, aClient *server, char *mask, int prompt_leng
 	char *p = &prompt[prompt_length];
 	int  cnt = 0;
 	aClient *acptr;
-	Link *lp;
 
 	*p = '\0';
 
@@ -95,9 +93,7 @@ static void dump_map(aClient *cptr, aClient *server, char *mask, int prompt_leng
 	else
 	{
 		sendto_one(cptr, rpl_str(RPL_MAP), me.name, cptr->name, prompt,
-		    length, server->name, server->serv->users,
-		    ((IsAnOper(cptr) && server->serv->numeric) ? (char *)my_itoa(server->serv->
-		    numeric) : ""));
+		    length, server->name, server->serv->users, server->id);
 		cnt = 0;
 	}
 
@@ -112,10 +108,8 @@ static void dump_map(aClient *cptr, aClient *server, char *mask, int prompt_leng
 
 	strcpy(p, "|-");
 
-
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
 		if (acptr->srvptr != server ||
  		    (IsULine(acptr) && !IsOper(cptr) && HIDE_ULINES))
 			continue;
@@ -123,19 +117,17 @@ static void dump_map(aClient *cptr, aClient *server, char *mask, int prompt_leng
 		cnt++;
 	}
 
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
 		if (IsULine(acptr) && HIDE_ULINES && !IsAnOper(cptr))
 			continue;
 		if (acptr->srvptr != server)
 			continue;
-		if (!acptr->flags & FLAGS_MAP)
+		if (!(acptr->flags & FLAGS_MAP))
 			continue;
 		if (--cnt == 0)
 			*p = '`';
 		dump_map(cptr, acptr, mask, prompt_length + 2, length - 2);
-
 	}
 
 	if (prompt_length > 0)
@@ -145,35 +137,30 @@ static void dump_map(aClient *cptr, aClient *server, char *mask, int prompt_leng
 void dump_flat_map(aClient *cptr, aClient *server, int length)
 {
 char buf[4];
-Link *lp;
 aClient *acptr;
 int cnt = 0, hide_ulines;
 
 	hide_ulines = (HIDE_ULINES && !IsOper(cptr)) ? 1 : 0;
 
 	sendto_one(cptr, rpl_str(RPL_MAP), me.name, cptr->name, "",
-	    length, server->name, server->serv->users,
-	    (server->serv->numeric ? (char *)my_itoa(server->serv->numeric) : ""));
+	    length, server->name, server->serv->users);
 
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
 		if ((IsULine(acptr) && hide_ulines) || (acptr == server))
 			continue;
 		cnt++;
 	}
 
 	strcpy(buf, "|-");
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
 		if ((IsULine(acptr) && hide_ulines) || (acptr == server))
 			continue;
 		if (--cnt == 0)
 			*buf = '`';
 		sendto_one(cptr, rpl_str(RPL_MAP), me.name, cptr->name, buf,
-		    length-2, acptr->name, acptr->serv->users,
-		    (acptr->serv->numeric ? my_itoa(acptr->serv->numeric) : ""));
+		    length-2, acptr->name, acptr->serv->users);
 	}
 }
 
@@ -186,16 +173,14 @@ int cnt = 0, hide_ulines;
 **/
 DLLFUNC CMD_FUNC(m_map)
 {
-	Link *lp;
 	aClient *acptr;
 	int  longest = strlen(me.name);
 
 
 	if (parc < 2)
 		parv[1] = "*";
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
 		if ((strlen(acptr->name) + acptr->hopcount * 2) > longest)
 			longest = strlen(acptr->name) + acptr->hopcount * 2;
 	}

@@ -51,9 +51,7 @@ DLLFUNC int m_svsmode(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 DLLFUNC int m_svs2mode(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSMODE 	"SVSMODE"	
-#define TOK_SVSMODE 	"n"	
 #define MSG_SVS2MODE    "SVS2MODE"
-#define TOK_SVS2MODE	"v"
 
 ModuleHeader MOD_HEADER(m_svsmode)
   = {
@@ -66,8 +64,8 @@ ModuleHeader MOD_HEADER(m_svsmode)
 
 DLLFUNC int MOD_INIT(m_svsmode)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSMODE, TOK_SVSMODE, m_svsmode, MAXPARA);
-	add_Command(MSG_SVS2MODE, TOK_SVS2MODE, m_svs2mode, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSMODE, m_svsmode, MAXPARA, 0);
+	CommandAdd(modinfo->handle, MSG_SVS2MODE, m_svs2mode, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -79,11 +77,6 @@ DLLFUNC int MOD_LOAD(m_svsmode)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svsmode)(int module_unload)
 {
-	if (del_Command(MSG_SVSMODE, TOK_SVSMODE, m_svsmode) < 0 || del_Command(MSG_SVS2MODE, TOK_SVS2MODE, m_svs2mode) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svsmode).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -207,23 +200,15 @@ int channel_svsmode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	time_t ts;
 	aClient *acptr;
 	char *m;
-	int what;
-	
+	int what = MODE_ADD;
 	int i = 4;
 
 	*parabuf = '\0';
 	modebuf[0] = 0;
 	if(!(chptr = find_channel(parv[1], NULL)))
 		return 0;
-/*	if (parc >= 4) {
-			return 0;
-		if (parc > 4) {
-			ts = TS2ts(parv[4]);
-			if (acptr->since != ts)
-				return 0;
-		}
-	}*/
-	ts = TS2ts(parv[parc-1]);
+
+	ts = atol(parv[parc-1]);
 	for(m = parv[2]; *m; m++) {
 		switch (*m) {
 			case '+':
@@ -384,7 +369,7 @@ int channel_svsmode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	if (*parabuf) {
 		sendto_channel_butserv(chptr, sptr, ":%s MODE %s %s %s", sptr->name, chptr->chname, 
 			modebuf, parabuf);
-		sendto_serv_butone(NULL, ":%s MODE %s %s %s", sptr->name, chptr->chname, modebuf, parabuf);
+		sendto_server(NULL, 0, 0, ":%s MODE %s %s %s", sptr->name, chptr->chname, modebuf, parabuf);
 
 		/* Activate this hook just like m_mode.c */
 		RunHook7(HOOKTYPE_REMOTE_CHANMODE, cptr, sptr, chptr, modebuf, parabuf, ts, 0);
@@ -409,8 +394,6 @@ int i;
 char *m;
 aClient *acptr;
 int  what, setflags;
-char *xmsg = show_change ? MSG_SVS2MODE : MSG_SVSMODE;
-char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 
 	if (!IsULine(sptr))
 		return 0;
@@ -458,24 +441,22 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 			case 'O': /* Locops are opers too! */
 				if (what == MODE_ADD)
 				{
-#ifndef NO_FDLIST
 					if (!IsAnOper(acptr) && MyClient(acptr))
-						addto_fdlist(acptr->slot, &oper_fdlist);
-#endif
+						list_add(&acptr->special_node, &oper_list);
+
 					acptr->umodes &= ~UMODE_OPER;
 				}
-#ifndef NO_FDLIST
+
 				if (what == MODE_DEL && (acptr->umodes & UMODE_LOCOP) && MyClient(acptr))
-					delfrom_fdlist(acptr->slot, &oper_fdlist);
-#endif
+					list_del(&acptr->special_node);
+
 				goto setmodex;					
 			case 'o':
 				if ((what == MODE_ADD) && !(acptr->umodes & UMODE_OPER))
 				{
-#ifndef NO_FDLIST
-					if (MyClient(acptr) && !IsLocOp(acptr))
-						addto_fdlist(acptr->slot, &oper_fdlist);
-#endif
+					if (!IsAnOper(acptr) && MyClient(acptr))
+						list_add(&acptr->special_node, &oper_list);
+
 					acptr->umodes &= ~UMODE_LOCOP; /* can't be both local and global */
 					IRCstats.operators++;
 				}
@@ -488,10 +469,9 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 					} else {
 						IRCstats.operators--;
 					}
-#ifndef NO_FDLIST
-					if (MyClient(acptr))
-						delfrom_fdlist(acptr->slot, &oper_fdlist);
-#endif
+
+					if (MyClient(acptr) && !list_empty(&acptr->special_node))
+						list_del(&acptr->special_node);
 				}
 				goto setmodex;
 			case 'H':
@@ -550,8 +530,8 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 					 * the idea behind it :P. -- Syzop
 					 */
 					if (MyClient(acptr) && !strcasecmp(acptr->user->virthost, acptr->user->cloakedhost))
-						sendto_serv_butone_token_opt(NULL, OPT_VHP, acptr->name,
-							MSG_SETHOST, TOK_SETHOST, "%s", acptr->user->virthost);
+						sendto_server(NULL, PROTO_VHP, 0, ":%s SETHOST :%s", acptr->name,
+							acptr->user->virthost);
 				}
 				goto setmodex;
 			case 'z':
@@ -576,11 +556,13 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 		} /*switch*/
 
 	if (parc > 3)
-		sendto_serv_butone_token(cptr, parv[0], xmsg, xtok,
-			"%s %s %s", parv[1], parv[2], parv[3]);
+		sendto_server(cptr, 0, 0, ":%s %s %s %s %s",
+		    parv[0], show_change ? "SVS2MODE" : "SVSMODE",
+		    parv[1], parv[2], parv[3]);
 	else
-		sendto_serv_butone_token(cptr, parv[0], xmsg, xtok,
-			"%s %s", parv[1], parv[2]);
+		sendto_server(cptr, 0, 0,  ":%s %s %s %s",
+		    parv[0], show_change ? "SVS2MODE" : "SVSMODE",
+		    parv[1], parv[2]);
 
 	/* Here we trigger the same hooks that m_mode does and, likewise,
 	   only if the old flags (setflags) are different than the newly-
@@ -661,7 +643,7 @@ void add_send_mode_param(aChannel *chptr, aClient *from, char what, char mode, c
 	if (send) {
 		sendto_channel_butserv(chptr, from, ":%s MODE %s %s %s",
 			from->name, chptr->chname, modebuf, parabuf);
-		sendto_serv_butone(NULL, ":%s MODE %s %s %s", from->name, chptr->chname, modebuf, parabuf);
+		sendto_server(NULL, 0, 0, ":%s MODE %s %s %s", from->name, chptr->chname, modebuf, parabuf);
 		send = 0;
 		*parabuf = 0;
 		modes = modebuf;

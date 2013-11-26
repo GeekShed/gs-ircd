@@ -35,7 +35,7 @@ static char *replies[] = {
 /* 003    RPL_CREATED */  ":%s 003 %s :This server was created %s",
 /* 004    RPL_MYINFO */   ":%s 004 %s %s %s %s %s",
 /* 005    RPL_ISUPPORT */ ":%s 005 %s %s :are supported by this server",
-/* 006    RPL_MAP */      ":%s 006 %s :%s%-*s(%ld)  %s",
+/* 006    RPL_MAP */      ":%s 006 %s :%s%-*s(%ld) %s",
 /* 007    RPL_MAPEND */   ":%s 007 %s :End of /MAP",
 /* 008    RPL_SNOMASK */  ":%s 008 %s :Server notice mask (%s)",
 /* 009 */ NULL, /* ircu */
@@ -71,7 +71,7 @@ static char *replies[] = {
 /* 039 */ NULL,
 /* 040 */ NULL,
 /* 041 */ NULL,
-/* 042 */ NULL, /* ircnet */
+/* 042    RPL_YOURID */	":%s 042 %s %s :your unique ID",
 /* 043 */ NULL, /* ircnet */
 /* 044 */ NULL,
 /* 045 */ NULL,
@@ -480,7 +480,7 @@ static char *replies[] = {
 #endif
 /* 430 */ NULL, /* austhex */
 /* 431    ERR_NONICKNAMEGIVEN */ ":%s 431 %s :No nickname given",
-/* 432    ERR_ERRONEUSNICKNAME */ ":%s 432 %s %s :Erroneous Nickname: %s",
+/* 432    ERR_ERRONEUSNICKNAME */ ":%s 432 %s %s :Nickname is unavailable: %s",
 /* 433    ERR_NICKNAMEINUSE */ ":%s 433 %s %s :Nickname is already in use.",
 /* 434    ERR_NORULES */ ":%s 434 %s :RULES File is missing",
 /* 435 */ NULL, /* bahamut */
@@ -496,7 +496,7 @@ static char *replies[] = {
 /* 445    ERR_SUMMONDISABLED */ ":%s 445 %s :SUMMON has been disabled",
 /* 446    ERR_USERSDISABLED */ ":%s 446 %s :USERS has been disabled",
 /* 447    ERR_NONICKCHANGE */ ":%s 447 %s :Can not change nickname while on %s (+N)",
-/* 448 */ NULL,
+/* 448 	ERR_FORBIDDENCHANNEL */ ":%s 448 %s %s :Channel is forbidden: %s",
 /* 449 */ NULL, /* ircu */
 /* 450 */ NULL,
 /* 451    ERR_NOTREGISTERED */ ":%s 451 %s :You have not registered",

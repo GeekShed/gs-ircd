@@ -55,25 +55,17 @@ aChannel *channel = NullChn;
 extern char backupbuf[];
 extern ircstats IRCstats;
 
-#ifndef NO_FDLIST
-extern int lifesux;
-#endif
-
 /* Some forward declarations */
-void add_invite(aClient *, aChannel *);
 char *clean_ban_mask(char *, int, aClient *);
-void channel_modes(aClient *, char *, char *, aChannel *);
-int check_channelmask(aClient *, aClient *, char *);
+void channel_modes(aClient *cptr, char *mbuf, char *pbuf, size_t mbuf_size, size_t pbuf_size, aChannel *chptr);
 
 void sub1_from_channel(aChannel *);
 
 void clean_channelname(char *);
 void del_invite(aClient *, aChannel *);
 
-#ifdef NEWCHFLOODPROT
 void chanfloodtimer_del(aChannel *chptr, char mflag, long mbit);
 void chanfloodtimer_stopchantimers(aChannel *chptr);
-#endif
 
 /*
  * some buffers for rebuilding channel/nick lists with ,'s
@@ -115,7 +107,7 @@ aCtab cFlagTab[] = {
 	{MODE_NOCTCP, 'C', 0, 0},	/* no CTCPs */
 	{MODE_AUDITORIUM, 'u', 0, 0},
 	{MODE_ONLYSECURE, 'z', 0, 0},
-	{MODE_NONICKCHANGE, 'N', 0, 0},
+	{MODE_NONICKCHANGE, 'N', 1, 0},
 	{0x0, 0x0, 0x0}
 };
 
@@ -144,20 +136,16 @@ void make_cmodestr(void)
 {
 	char *p = &cmodestring[0];
 	aCtab *tab = &cFlagTab[0];
-#ifdef EXTCMODE
 	int i;
-#endif
 	while (tab->mode != 0x0)
 	{
 		*p = tab->flag;
 		p++;
 		tab++;
 	}
-#ifdef EXTCMODE
 	for (i=0; i <= Channelmode_highest; i++)
 		if (Channelmode_Table[i].flag)
 			*p++ = Channelmode_Table[i].flag;
-#endif
 	*p = '\0';
 }
 
@@ -404,9 +392,9 @@ int add_listmode(Ban **list, aClient *cptr, aChannel *chptr, char *banid)
 	bzero((char *)ban, sizeof(Ban));
 	ban->next = *list;
 	ban->banstr = (char *)MyMalloc(strlen(banid) + 1);
-	(void)strcpy(ban->banstr, banid);
+	(void)strlcpy(ban->banstr, banid, strlen(banid)+1);
 	ban->who = (char *)MyMalloc(strlen(cptr->name) + 1);
-	(void)strcpy(ban->who, cptr->name);
+	(void)strlcpy(ban->who, cptr->name, strlen(cptr->name)+1);
 	ban->when = TStime();
 	*list = ban;
 	return 0;
@@ -834,15 +822,12 @@ int  can_send(aClient *cptr, aChannel *chptr, char *msgtext, int notice)
 		if (msgtext[0] == 1 && strncmp(&msgtext[1], "ACTION ", 7))
 			return (CANNOT_SEND_NOCTCP);
 
-#ifdef EXTCMODE
 	if (notice && (chptr->mode.extmode & EXTMODE_NONOTICE) &&
 	   (!lp || !(lp->flags & (CHFL_CHANOP | CHFL_CHANOWNER | CHFL_CHANPROT))))
 		return (CANNOT_SEND_NOTICE);
-#endif
-
 
 	/* Makes opers able to talk thru bans -Stskeeps suggested by The_Cat */
-	if (IsOper(cptr))
+	if (IsOper(cptr) && OPCanOverride(cptr))
 		return 0;
 
 	if ((!lp
@@ -855,25 +840,31 @@ int  can_send(aClient *cptr, aChannel *chptr, char *msgtext, int notice)
 }
 
 /* [just a helper for channel_modef_string()] */
-static inline char *chmodefstrhelper(char *buf, char t, char tdef, unsigned short l, unsigned char a, unsigned char r)
+static inline char *chmodefstrhelper(char *buf, size_t size, char t, char tdef, unsigned short l, unsigned char a, unsigned char r)
 {
 char *p;
 char tmpbuf[16], *p2 = tmpbuf;
 
-	ircsprintf(buf, "%hd", l);
+	ircsnprintf(buf, size, "%hd", l);
 	p = buf + strlen(buf);
+        size_t p_size = size - strlen(buf);
+        if (!p_size) return 0;
 	*p++ = t;
+        if (!--p_size) return 0;
 	if (a && ((a != tdef) || r))
 	{
 		*p++ = '#';
+                if (!--p_size) return 0;
 		*p++ = a;
+                if (!--p_size) return 0;
 		if (r)
 		{
-			sprintf(tmpbuf, "%hd", (short)r);
-			while ((*p = *p2++))
+			snprintf(tmpbuf, sizeof(tmpbuf), "%hd", (short)r);
+			while (p_size-- && (*p = *p2++))
 				p++;
 		}
 	}
+        if (!p_size--) return 0;
 	*p++ = ',';
 	return p;
 }
@@ -887,22 +878,26 @@ char *p = retbuf;
 
 	/* (alphabetized) */
 	if (x->l[FLD_CTCP])
-		p = chmodefstrhelper(p, 'c', 'C', x->l[FLD_CTCP], x->a[FLD_CTCP], x->r[FLD_CTCP]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 'c', 'C', x->l[FLD_CTCP], x->a[FLD_CTCP], x->r[FLD_CTCP]);
 	if (x->l[FLD_JOIN])
-		p = chmodefstrhelper(p, 'j', 'i', x->l[FLD_JOIN], x->a[FLD_JOIN], x->r[FLD_JOIN]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 'j', 'i', x->l[FLD_JOIN], x->a[FLD_JOIN], x->r[FLD_JOIN]);
 	if (x->l[FLD_KNOCK])
-		p = chmodefstrhelper(p, 'k', 'K', x->l[FLD_KNOCK], x->a[FLD_KNOCK], x->r[FLD_KNOCK]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 'k', 'K', x->l[FLD_KNOCK], x->a[FLD_KNOCK], x->r[FLD_KNOCK]);
 	if (x->l[FLD_MSG])
-		p = chmodefstrhelper(p, 'm', 'm', x->l[FLD_MSG], x->a[FLD_MSG], x->r[FLD_MSG]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 'm', 'm', x->l[FLD_MSG], x->a[FLD_MSG], x->r[FLD_MSG]);
 	if (x->l[FLD_NICK])
-		p = chmodefstrhelper(p, 'n', 'N', x->l[FLD_NICK], x->a[FLD_NICK], x->r[FLD_NICK]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 'n', 'N', x->l[FLD_NICK], x->a[FLD_NICK], x->r[FLD_NICK]);
 	if (x->l[FLD_TEXT])
-		p = chmodefstrhelper(p, 't', '\0', x->l[FLD_TEXT], x->a[FLD_TEXT], x->r[FLD_TEXT]);
+		p = chmodefstrhelper(p, sizeof(retbuf)-(p-retbuf), 't', '\0', x->l[FLD_TEXT], x->a[FLD_TEXT], x->r[FLD_TEXT]);
+
+        if (!p) return 0;
 
 	if (*(p - 1) == ',')
 		p--;
+
+	if (p>=retbuf) p=retbuf-2;
 	*p++ = ']';
-	ircsprintf(p, ":%hd", x->per);
+	ircsnprintf(p, sizeof(retbuf)-(p-retbuf), ":%hd", x->per);
 	return retbuf;
 }
 
@@ -910,104 +905,111 @@ char *p = retbuf;
  * write the "simple" list of channel modes for channel chptr onto buffer mbuf
  * with the parameters in pbuf.
  */
-void channel_modes(aClient *cptr, char *mbuf, char *pbuf, aChannel *chptr)
+void channel_modes(aClient *cptr, char *mbuf, char *pbuf, size_t mbuf_size, size_t pbuf_size, aChannel *chptr)
 {
 	aCtab *tab = &cFlagTab[0];
 	char bcbuf[1024];
 	int ismember;
-#ifdef EXTCMODE
 	int i;
-#endif
+
+	if (!(mbuf_size && pbuf_size)) return;
 
 	ismember = (IsMember(cptr, chptr) || IsServer(cptr) || IsULine(cptr)) ? 1 : 0;
 
 	*pbuf = '\0';
 
 	*mbuf++ = '+';
+	mbuf_size--;
 	/* Paramless first */
-	while (tab->mode != 0x0)
+	while (mbuf_size && tab->mode != 0x0)
 	{
 		if ((chptr->mode.mode & tab->mode))
-			if (!tab->parameters)
+			if (!tab->parameters) {
 				*mbuf++ = tab->flag;
+				mbuf_size--;
+			}
 		tab++;
 	}
-#ifdef EXTCMODE
 	for (i=0; i <= Channelmode_highest; i++)
 	{
+		if (!mbuf_size) break;
 		if (Channelmode_Table[i].flag && !Channelmode_Table[i].paracount &&
-		    (chptr->mode.extmode & Channelmode_Table[i].mode))
+		    (chptr->mode.extmode & Channelmode_Table[i].mode)) {
 			*mbuf++ = Channelmode_Table[i].flag;
+			mbuf_size--;
+		}
 	}
-#endif
 	if (chptr->mode.limit)
 	{
-		*mbuf++ = 'l';
-		if (ismember)
-			(void)ircsprintf(pbuf, "%d ", chptr->mode.limit);
+		if (mbuf_size) {
+			*mbuf++ = 'l';
+			mbuf_size--;
+		}
+		if (ismember) {
+			ircsnprintf(pbuf, pbuf_size, "%d ", chptr->mode.limit);
+			pbuf_size-=strlen(pbuf);
+			pbuf+=strlen(pbuf);
+		}
 	}
 	if (*chptr->mode.key)
 	{
-		*mbuf++ = 'k';
-		if (ismember)
-		{
-			/* FIXME: hope pbuf is long enough */
-			(void)snprintf(bcbuf, sizeof bcbuf, "%s ", chptr->mode.key);
-			(void)strcat(pbuf, bcbuf);
+		if (mbuf_size) {
+			*mbuf++ = 'k';
+			mbuf_size--;
+		}
+		if (ismember && pbuf_size) {
+			ircsnprintf(pbuf, pbuf_size, "%s ", chptr->mode.key);
+			pbuf_size-=strlen(pbuf);
+			pbuf+=strlen(pbuf);
 		}
 	}
 	if (*chptr->mode.link)
 	{
-		*mbuf++ = 'L';
-		if (ismember)
-		{
-			/* FIXME: is pbuf long enough?  */
-			(void)snprintf(bcbuf, sizeof bcbuf, "%s ", chptr->mode.link);
-			(void)strcat(pbuf, bcbuf);
+		if (mbuf_size) {
+			*mbuf++ = 'L';
+			mbuf_size--;
+		}
+		if (ismember && pbuf_size) {
+			ircsnprintf(pbuf, pbuf_size, "%s ", chptr->mode.link);
+			pbuf_size-=strlen(pbuf);
+			pbuf+=strlen(pbuf);
 		}
 	}
 	/* if we add more parameter modes, add a space to the strings here --Stskeeps */
-#ifdef NEWCHFLOODPROT
 	if (chptr->mode.floodprot)
-#else
-	if (chptr->mode.per)
-#endif
 	{
-		*mbuf++ = 'f';
-		if (ismember)
-		{
-#ifdef NEWCHFLOODPROT
-			ircsprintf(bcbuf, "%s ", channel_modef_string(chptr->mode.floodprot));
-#else
-			if (chptr->mode.kmode == 1)
-				ircsprintf(bcbuf, "*%i:%i ", chptr->mode.msgs, chptr->mode.per);
-			else
-				ircsprintf(bcbuf, "%i:%i ", chptr->mode.msgs, chptr->mode.per);
-#endif
-			(void)strcat(pbuf, bcbuf);
+		if (mbuf_size) {
+			*mbuf++ = 'f';
+			mbuf_size--;
+		}
+		if (ismember && pbuf_size) {
+			ircsnprintf(pbuf, pbuf_size, "%s ", channel_modef_string(chptr->mode.floodprot));
+			pbuf_size-=strlen(pbuf);
+			pbuf+=strlen(pbuf);
 		}
 	}
 
-#ifdef EXTCMODE
 	for (i=0; i <= Channelmode_highest; i++)
 	{
 		if (Channelmode_Table[i].flag && Channelmode_Table[i].paracount &&
-		    (chptr->mode.extmode & Channelmode_Table[i].mode))
-		{
-			*mbuf++ = Channelmode_Table[i].flag;
+		    (chptr->mode.extmode & Channelmode_Table[i].mode)) {
+			if (mbuf_size) {
+				*mbuf++ = Channelmode_Table[i].flag;
+				mbuf_size--;
+			}
 			if (ismember)
 			{
-				strcat(pbuf, Channelmode_Table[i].get_param(extcmode_get_struct(chptr->mode.extmodeparam, Channelmode_Table[i].flag)));
-				strcat(pbuf, " ");
+				ircsnprintf(pbuf, pbuf_size, "%s ", Channelmode_Table[i].get_param(extcmode_get_struct(chptr->mode.extmodeparam, Channelmode_Table[i].flag)));
+				pbuf_size-=strlen(pbuf);
+				pbuf+=strlen(pbuf);
 			}
 		}
 	}
-#endif
 
 	/* Remove the trailing space from the parameters -- codemastr */
-	if (*pbuf)
-		pbuf[strlen(pbuf)-1]=0;
+	if (*pbuf) pbuf[strlen(pbuf)-1]=0;
 
+	if (!mbuf_size) mbuf--;
 	*mbuf++ = '\0';
 	return;
 }
@@ -1027,12 +1029,11 @@ int  sendmodeto_one(aClient *cptr, char *from, char *name, char *mode, char *par
 {
 	if ((IsServer(cptr) && DoesOp(mode) && creationtime) ||
 	    IsULine(cptr))
-		sendto_one(cptr, ":%s %s %s %s %s %lu", from,
-		    (IsToken(cptr) ? TOK_MODE : MSG_MODE), name, mode,
-		    param, creationtime);
+		sendto_one(cptr, ":%s MODE %s %s %s %lu", from,
+		    name, mode, param, creationtime);
 	else
-		sendto_one(cptr, ":%s %s %s %s %s", from,
-		    (IsToken(cptr) ? TOK_MODE : MSG_MODE), name, mode, param);
+		sendto_one(cptr, ":%s MODE %s %s %s", from, name, mode, param);
+
 	return 0;
 }
 
@@ -1213,33 +1214,11 @@ void clean_channelname(char *cn)
 		 * or some such.
 		 *   --Wizzu
 		 */
-		if (*ch < 33 || *ch == ',' || *ch == 160)
+		if (*ch < 33 || *ch == ',' || *ch == ':' || *ch == 160)
 		{
 			*ch = '\0';
 			return;
 		}
-}
-
-/*
-** Return -1 if mask is present and doesnt match our server name.
-*/
-int check_channelmask(aClient *sptr, aClient *cptr, char *chname)
-{
-	char *s;
-
-	s = rindex(chname, ':');
-	if (!s)
-		return 0;
-
-	s++;
-	if (match(s, me.name) || (IsServer(cptr) && match(s, cptr->name)))
-	{
-		if (MyClient(sptr))
-			sendto_one(sptr, err_str(ERR_BADCHANMASK),
-			    me.name, sptr->name, chname);
-		return -1;
-	}
-	return 0;
 }
 
 /*
@@ -1266,7 +1245,7 @@ aChannel *get_channel(aClient *cptr, char *chname, int flag)
 	{
 		chptr = (aChannel *)MyMalloc(sizeof(aChannel) + len);
 		bzero((char *)chptr, sizeof(aChannel));
-		strncpyzt(chptr->chname, chname, len + 1);
+		strlcpy(chptr->chname, chname, len + 1);
 		if (channel)
 			channel->prevch = chptr;
 		chptr->topic = NULL;
@@ -1290,24 +1269,19 @@ aChannel *get_channel(aClient *cptr, char *chname, int flag)
  * Should U-lined clients have higher limits?   -Donwulff
  */
 
-void add_invite(aClient *cptr, aChannel *chptr)
+void add_invite(aClient *from, aClient *to, aChannel *chptr)
 {
 	Link *inv, *tmp;
 
-	del_invite(cptr, chptr);
+	del_invite(to, chptr);
 	/*
 	 * delete last link in chain if the list is max length
 	 */
-	if (list_length(cptr->user->invited) >= MAXCHANNELSPERUSER)
+	if (list_length(to->user->invited) >= MAXCHANNELSPERUSER)
 	{
-/*		This forgets the channel side of invitation     -Vesa
-		inv = cptr->user->invited;
-		cptr->user->invited = inv->next;
-		free_link(inv);
-*/
-		for (tmp = cptr->user->invited; tmp->next; tmp = tmp->next)
+		for (tmp = to->user->invited; tmp->next; tmp = tmp->next)
 			;
-		del_invite(cptr, tmp->value.chptr);
+		del_invite(to, tmp->value.chptr);
 
 	}
 	/* We get pissy over too many invites per channel as well now,
@@ -1324,7 +1298,7 @@ void add_invite(aClient *cptr, aChannel *chptr)
 	 * add client to the beginning of the channel invite list
 	 */
 	inv = make_link();
-	inv->value.cptr = cptr;
+	inv->value.cptr = to;
 	inv->next = chptr->invites;
 	chptr->invites = inv;
 	/*
@@ -1332,8 +1306,10 @@ void add_invite(aClient *cptr, aChannel *chptr)
 	 */
 	inv = make_link();
 	inv->value.chptr = chptr;
-	inv->next = cptr->user->invited;
-	cptr->user->invited = inv;
+	inv->next = to->user->invited;
+	to->user->invited = inv;
+
+	RunHook3(HOOKTYPE_INVITE, from, to, chptr);
 }
 
 /*
@@ -1368,14 +1344,20 @@ void sub1_from_channel(aChannel *chptr)
 {
 	Ban *ban;
 	Link *lp;
+	bool should_destroy = true;
 
-        /* if (--chptr->users <= 0) */
-	if (chptr->users == 0 || --chptr->users == 0)
+	--chptr->users;
+	if (chptr->users <= 0)
 	{
+		chptr->users = 0;
+
 		/*
 		 * Now, find all invite links from channel structure
 		 */
-		RunHook(HOOKTYPE_CHANNEL_DESTROY, chptr);
+		RunHook2(HOOKTYPE_CHANNEL_DESTROY, chptr, &should_destroy);
+		if (!should_destroy)
+			return;
+
 		while ((lp = chptr->invites))
 			del_invite(lp->value.cptr, chptr);
 
@@ -1403,16 +1385,15 @@ void sub1_from_channel(aChannel *chptr)
 			MyFree(ban->who);
 			free_ban(ban);
 		}
-#ifdef EXTCMODE
+
 		/* free extcmode params */
 		extcmode_free_paramlist(chptr->mode.extmodeparam);
 		chptr->mode.extmodeparam = NULL;
-#endif
-#ifdef NEWCHFLOODPROT
+
 		chanfloodtimer_stopchantimers(chptr);
 		if (chptr->mode.floodprot)
 			MyFree(chptr->mode.floodprot);
-#endif
+
 #ifdef JOINTHROTTLE
 		cmodej_delchannelentries(chptr);
 #endif
@@ -1452,19 +1433,12 @@ int  check_for_chan_flood(aClient *cptr, aClient *sptr, aChannel *chptr)
 
 	lp2 = (MembershipL *) lp;
 
-#ifdef NEWCHFLOODPROT
 	if (!chptr->mode.floodprot || !chptr->mode.floodprot->l[FLD_TEXT])
 		return 0;
 	c_limit = chptr->mode.floodprot->l[FLD_TEXT];
 	t_limit = chptr->mode.floodprot->per;
 	banthem = (chptr->mode.floodprot->a[FLD_TEXT] == 'b') ? 1 : 0;
-#else
-	if ((chptr->mode.msgs < 1) || (chptr->mode.per < 1))
-		return 0;
-	c_limit = chptr->mode.msgs;
-	t_limit = chptr->mode.per;
-	banthem = chptr->mode.kmode;
-#endif
+
 	/* if current - firstmsgtime >= mode.per, then reset,
 	 * if nummsg > mode.msgs then kick/ban
 	 */
@@ -1485,14 +1459,14 @@ int  check_for_chan_flood(aClient *cptr, aClient *sptr, aChannel *chptr)
 	if ((lp2->flood.nmsg) > c_limit)
 	{
 		char comment[1024], mask[1024];
-		ircsprintf(comment,
+		ircsnprintf(comment, sizeof(comment),
 		    "Flooding (Limit is %i lines per %i seconds)",
 		    c_limit, t_limit);
 		if (banthem)
 		{		/* ban. */
-			ircsprintf(mask, "*!*@%s", GetHost(sptr));
+			ircsnprintf(mask, sizeof(mask), "*!*@%s", GetHost(sptr));
 			add_listmode(&chptr->banlist, &me, chptr, mask);
-			sendto_serv_butone(&me, ":%s MODE %s +b %s 0",
+			sendto_server(&me, 0, 0, ":%s MODE %s +b %s 0",
 			    me.name, chptr->chname, mask);
 			sendto_channel_butserv(chptr, &me,
 			    ":%s MODE %s +b %s", me.name, chptr->chname, mask);
@@ -1500,10 +1474,8 @@ int  check_for_chan_flood(aClient *cptr, aClient *sptr, aChannel *chptr)
 		sendto_channel_butserv(chptr, &me,
 		    ":%s KICK %s %s :%s", me.name,
 		    chptr->chname, sptr->name, comment);
-		sendto_serv_butone_token(cptr, me.name,
-			MSG_KICK, TOK_KICK, 
-			"%s %s :%s",
-		   chptr->chname, sptr->name, comment);
+		sendto_server(cptr, 0, 0, ":%s KICK %s %s :%s",
+		   me.name, chptr->chname, sptr->name, comment);
 		remove_user_from_channel(sptr, chptr);
 		return 1;
 	}
@@ -1517,8 +1489,7 @@ void send_user_joins(aClient *cptr, aClient *user)
 	int  cnt = 0, len = 0, clen;
 	char *mask;
 
-	snprintf(buf, sizeof buf, ":%s %s ", user->name,	
-	    (IsToken(cptr) ? TOK_JOIN : MSG_JOIN));
+	snprintf(buf, sizeof buf, ":%s JOIN ", user->name);
 	len = strlen(buf);
 
 	for (lp = user->user->channel; lp; lp = lp->next)
@@ -1537,8 +1508,7 @@ void send_user_joins(aClient *cptr, aClient *user)
 				buf[len - 1] = '\0';
 				sendto_one(cptr, "%s", buf);
 			}
-			snprintf(buf, sizeof buf, ":%s %s ", user->name,
-			    (IsToken(cptr) ? TOK_JOIN : MSG_JOIN));
+			snprintf(buf, sizeof buf, ":%s JOIN ", user->name);
 			len = strlen(buf);
 			cnt = 0;
 		}
@@ -1558,44 +1528,24 @@ void send_user_joins(aClient *cptr, aClient *user)
 }
 
 /*
- * rejoin_doparts:
- * sends a PART to all channels (to local users only)
+ * rejoin_doquits:
+ * sends a QUIT to all common channels (to local users only)
  */
-void rejoin_doparts(aClient *sptr, char did_parts[])
+void rejoin_doquits(aClient *sptr)
 {
 	Membership *tmp;
 	aChannel *chptr;
-	char *comment = "Rejoining because of user@host change";
+	char *comment = "Changing host";
 	int i = 0;
 
-	for (tmp = sptr->user->channel; tmp; tmp = tmp->next)
-	{
-		chptr = tmp->chptr;
-		if (!chptr)
-			continue; /* Possible? */
-
-		/* If the user is banned, don't do it */
-		if (is_banned(sptr, chptr, BANCHK_JOIN))
-		{
-			did_parts[i++] = 0;
-			continue;
-		}
-		did_parts[i++] = 1;
-
-		if ((chptr->mode.mode & MODE_AUDITORIUM) &&
-		    !(tmp->flags & (CHFL_CHANOWNER|CHFL_CHANPROT|CHFL_CHANOP)))
-		{
-			sendto_chanops_butone(sptr, chptr, ":%s!%s@%s PART %s :%s", sptr->name, sptr->user->username, GetHost(sptr), chptr->chname, comment);
-		} else
-			sendto_channel_butserv_butone(chptr, sptr, sptr, ":%s PART %s :%s", sptr->name, chptr->chname, comment);
-	}
+	sendto_common_channels(sptr, ":%s!%s@%s QUIT :%s", sptr->name, sptr->user->username, GetHost(sptr), comment);
 }
 
 /*
  * rejoin_dojoinandmode:
  * sends a JOIN and a MODE (if needed) to restore qaohv modes (to local users only)
  */
-void rejoin_dojoinandmode(aClient *sptr, char did_parts[])
+void rejoin_dojoinandmode(aClient *sptr)
 {
 	Membership *tmp;
 	aChannel *chptr;
@@ -1608,10 +1558,6 @@ void rejoin_dojoinandmode(aClient *sptr, char did_parts[])
 		chptr = tmp->chptr;
 		if (!chptr)
 			continue; /* Is it possible? */
-
-		/* If the user is banned, don't do it */
-		if (!did_parts[j++])
-			continue;
 
 		if ((chptr->mode.mode & MODE_AUDITORIUM) && 
 		    !(flags & (CHFL_CHANOWNER|CHFL_CHANPROT|CHFL_CHANOP)))
@@ -1645,14 +1591,11 @@ void rejoin_dojoinandmode(aClient *sptr, char did_parts[])
 					if (i < n - 1)
 						strcat(parabuf, " ");
 				}
-				sendto_channel_butserv_butone(chptr, &me, sptr, ":%s MODE %s +%s %s",
-					me.name, chptr->chname, flagbuf, parabuf);
 			}
 		}
 	}
 }
 
-#ifdef NEWCHFLOODPROT
 MODVAR RemoveFld *removefld_list = NULL;
 
 RemoveFld *chanfloodtimer_find(aChannel *chptr, char mflag)
@@ -1753,7 +1696,7 @@ long mode;
 			mode = get_chanbitbychar(e->m);
 			if (e->chptr->mode.mode & mode)
 			{
-				sendto_serv_butone(&me, ":%s MODE %s -%c 0", me.name, e->chptr->chname, e->m);
+				sendto_server(&me, 0, 0, ":%s MODE %s -%c 0", me.name, e->chptr->chname, e->m);
 				sendto_channel_butserv(e->chptr, &me, ":%s MODE %s -%c", me.name, e->chptr->chname, e->m);
 				e->chptr->mode.mode &= ~mode;
 			}
@@ -1846,13 +1789,13 @@ char m;
 	if (!(chptr->mode.mode & modeflag))
 	{
 		char comment[1024], target[CHANNELLEN + 8];
-		ircsprintf(comment, "*** Channel %sflood detected (limit is %d per %d seconds), setting mode +%c",
+		ircsnprintf(comment, sizeof(comment), "*** Channel %sflood detected (limit is %d per %d seconds), setting mode +%c",
 			text, chptr->mode.floodprot->l[what], chptr->mode.floodprot->per, m);
-		ircsprintf(target, "%%%s", chptr->chname);
-		sendto_channelprefix_butone_tok(NULL, &me, chptr,
+		ircsnprintf(target, sizeof(target), "%%%s", chptr->chname);
+		sendto_channelprefix_butone(NULL, &me, chptr,
 			PREFIX_HALFOP|PREFIX_OP|PREFIX_ADMIN|PREFIX_OWNER,
-			MSG_NOTICE, TOK_NOTICE, target, comment, 0);
-		sendto_serv_butone(&me, ":%s MODE %s +%c 0", me.name, chptr->chname, m);
+			":%s NOTICE %s :%s", me.name, target, comment);
+		sendto_server(&me, 0, 0, ":%s MODE %s +%c 0", me.name, chptr->chname, m);
 		sendto_channel_butserv(chptr, &me, ":%s MODE %s +%c", me.name, chptr->chname, m);
 		chptr->mode.mode |= modeflag;
 		if (chptr->mode.floodprot->r[what]) /* Add remove-chanmode timer... */
@@ -1864,7 +1807,6 @@ char m;
 		}
 	}
 }
-#endif
 
 /* set_channel_mlock()
  *
@@ -1880,8 +1822,8 @@ void set_channel_mlock(aClient *cptr, aClient *sptr, aChannel *chptr, const char
 
 	if (propagate)
 	{
-		sendto_serv_butone_token(cptr, cptr->name, MSG_MLOCK, TOK_MLOCK, "%B %s :%s",
-					 chptr->creationtime, chptr->chname,
-					 BadPtr(chptr->mode_lock) ? "" : chptr->mode_lock);
+		sendto_server(cptr,0, 0, ":%s MLOCK %lu %s :%s",
+			      cptr->name, chptr->creationtime, chptr->chname,
+			      BadPtr(chptr->mode_lock) ? "" : chptr->mode_lock);
 	}
 }

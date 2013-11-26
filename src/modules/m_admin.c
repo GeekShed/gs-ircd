@@ -47,7 +47,6 @@
 DLLFUNC int m_admin(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_ADMIN 	"ADMIN"	
-#define TOK_ADMIN 	"@"	
 
 ModuleHeader MOD_HEADER(m_admin)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_admin)
 
 DLLFUNC int MOD_INIT(m_admin)(ModuleInfo *modinfo)
 {
-	add_CommandX(MSG_ADMIN, TOK_ADMIN, m_admin, MAXPARA, M_UNREGISTERED|M_USER|M_SHUN|M_VIRUS);
+	CommandAdd(modinfo->handle, MSG_ADMIN, m_admin, MAXPARA, M_UNREGISTERED|M_USER|M_SHUN|M_VIRUS);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_admin)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_admin)(int module_unload)
 {
-	if (del_Command(MSG_ADMIN, TOK_ADMIN, m_admin) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_admin).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -92,8 +86,7 @@ DLLFUNC CMD_FUNC(m_admin)
 
 	   * Only allow remote ADMINs if registered -- Barubary */
 	if (IsPerson(sptr) || IsServer(cptr))
-		if (hunt_server_token(cptr, sptr, MSG_ADMIN, TOK_ADMIN, ":%s", 1, parc,
-		    parv) != HUNTED_ISME)
+		if (hunt_server(cptr, sptr, ":%s ADMIN :%s", 1, parc, parv) != HUNTED_ISME)
 			return 0;
 
 	if (!conf_admin_tail)

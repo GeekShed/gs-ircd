@@ -47,7 +47,6 @@
 DLLFUNC int m_rules(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_RULES 	"RULES"	
-#define TOK_RULES 	"t"	
 
 ModuleHeader MOD_HEADER(m_rules)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_rules)
 
 DLLFUNC int MOD_INIT(m_rules)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_RULES, TOK_RULES, m_rules, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_RULES, m_rules, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_rules)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_rules)(int module_unload)
 {
-	if (del_Command(MSG_RULES, TOK_RULES, m_rules) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_rules).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -95,8 +89,7 @@ DLLFUNC CMD_FUNC(m_rules)
 	if (IsServer(sptr))
 		return 0;
 		
-	if (hunt_server_token(cptr, sptr, MSG_RULES, TOK_RULES, ":%s", 1, parc,
-	    parv) != HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s RULES :%s", 1, parc, parv) != HUNTED_ISME)
 		return 0;
 #ifndef TLINE_Remote
 	if (!MyConnect(sptr))

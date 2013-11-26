@@ -47,7 +47,6 @@
 DLLFUNC int m_close(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_CLOSE 	"CLOSE"	
-#define TOK_CLOSE 	"Q"	
 
 ModuleHeader MOD_HEADER(m_close)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_close)
 
 DLLFUNC int MOD_INIT(m_close)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_CLOSE, TOK_CLOSE, m_close, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_CLOSE, m_close, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_close)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_close)(int module_unload)
 {
-	if (del_Command(MSG_CLOSE, TOK_CLOSE, m_close) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_close).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -85,32 +79,28 @@ DLLFUNC int MOD_UNLOAD(m_close)(int module_unload)
 */
 DLLFUNC CMD_FUNC(m_close)
 {
-	aClient *acptr;
+	aClient *acptr, *acptr2;
 	int  i;
 	int  closed = 0;
 
-
-	if (!MyOper(sptr))
+	if (!IsAnOper(sptr))
 	{
 		sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
 		return 0;
 	}
 
-	for (i = LastSlot; i >= 0; --i)
+	list_for_each_entry_safe(acptr, acptr2, &unknown_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
-		if (!IsUnknown(acptr) && !IsConnecting(acptr) &&
-		    !IsHandshake(acptr))
-			continue;
 		sendto_one(sptr, rpl_str(RPL_CLOSING), me.name, parv[0],
 		    get_client_name(acptr, TRUE), acptr->status);
 		(void)exit_client(acptr, acptr, acptr, "Oper Closing");
 		closed++;
 	}
+
 	sendto_one(sptr, rpl_str(RPL_CLOSEEND), me.name, parv[0], closed);
 	sendto_realops("%s!%s@%s closed %d unknown connections", sptr->name,
 	    sptr->user->username, GetHost(sptr), closed);
 	IRCstats.unknown = 0;
+
 	return 0;
 }

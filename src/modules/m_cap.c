@@ -44,13 +44,13 @@
 #ifdef _WIN32
 #include "version.h"
 #endif
+#include "m_cap.h"
 
 typedef int (*bqcmp)(const void *, const void *);
 
 DLLFUNC int m_cap(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_CAP 	"CAP"
-#define TOK_CAP 	"CA"
 
 ModuleHeader MOD_HEADER(m_cap)
   = {
@@ -61,39 +61,49 @@ ModuleHeader MOD_HEADER(m_cap)
 	NULL 
     };
 
-struct clicap {
-	const char *name;
-	int cap;
-	int flags;
+static ClientCapability cap_account_notify = {
+	.name = "account-notify",
+	.cap = PROTO_ACCOUNT_NOTIFY,
 };
 
-#define CLICAP_FLAGS_NONE		0x0
-#define CLICAP_FLAGS_STICKY		0x1
-#define CLICAP_FLAGS_CLIACK		0x2
-
-static struct clicap clicap_table[] = {
-	{"account-notify", PROTO_ACCOUNT_NOTIFY, CLICAP_FLAGS_NONE},
-	{"away-notify", PROTO_AWAY_NOTIFY, CLICAP_FLAGS_NONE},
-	{"multi-prefix", PROTO_NAMESX, CLICAP_FLAGS_NONE},
-	{"sasl", PROTO_SASL, CLICAP_FLAGS_NONE},
-#ifdef USE_SSL
-	{"tls", PROTO_STARTTLS, CLICAP_FLAGS_NONE},
-#endif
-	{"userhost-in-names", PROTO_UHNAMES, CLICAP_FLAGS_NONE},
+static ClientCapability cap_away_notify = {
+	.name = "away-notify",
+	.cap = PROTO_AWAY_NOTIFY,
 };
 
-#define CLICAP_TABLE_SIZE (sizeof(clicap_table) / sizeof(struct clicap))
+static ClientCapability cap_multi_prefix = {
+	.name = "multi-prefix",
+	.cap = PROTO_NAMESX,
+};
 
-static int clicap_compare(const char *name, struct clicap *cap)
+static ClientCapability cap_uhnames = {
+	.name = "userhost-in-names",
+	.cap = PROTO_UHNAMES,
+};
+
+static struct list_head *clicap_build_list(void)
 {
-	return strcmp(name, cap->name);
+	static struct list_head clicap_list;
+
+	INIT_LIST_HEAD(&clicap_list);
+
+	/* add builtins */
+	clicap_append(&clicap_list, &cap_account_notify);
+	clicap_append(&clicap_list, &cap_away_notify);
+	clicap_append(&clicap_list, &cap_multi_prefix);
+	clicap_append(&clicap_list, &cap_uhnames);
+
+	RunHook(HOOKTYPE_CAPLIST, &clicap_list);
+
+	return &clicap_list;
 }
 
-static struct clicap *clicap_find(const char *data, int *negate, int *finished)
+static ClientCapability *clicap_find(const char *data, int *negate, int *finished)
 {
+	struct list_head *clicap_list = clicap_build_list();
 	static char buf[BUFSIZE];
 	static char *p;
-	struct clicap *cap;
+	ClientCapability *cap;
 	char *s;
 
 	*negate = 0;
@@ -130,23 +140,26 @@ static struct clicap *clicap_find(const char *data, int *negate, int *finished)
 	if((s = strchr(p, ' ')))
 		*s++ = '\0';
 
-	if (!strcmp(p, "sasl") && (!SASL_SERVER || !find_server(SASL_SERVER, NULL)))
-		return NULL; /* hack: if SASL is disabled or server not online, then pretend it does not exist. -- Syzop */
-
-	if((cap = bsearch(p, clicap_table, CLICAP_TABLE_SIZE,
-			  sizeof(struct clicap), (bqcmp) clicap_compare)))
+	list_for_each_entry(cap, clicap_list, caplist_node)
 	{
-		if(s)
-			p = s;
-		else
-			*finished = 1;
+		if (!stricmp(cap->name, p))
+		{
+			if (s)
+				p = s;
+			else
+				*finished = 1;
+
+			return cap;
+		}
 	}
 
-	return cap;
+	return NULL;
 }
 
 static void clicap_generate(aClient *sptr, const char *subcmd, int flags, int clear)
 {
+	struct list_head *clicap_list = clicap_build_list();
+	ClientCapability *cap;
 	char buf[BUFSIZE];
 	char capbuf[BUFSIZE];
 	char *p;
@@ -165,21 +178,18 @@ static void clicap_generate(aClient *sptr, const char *subcmd, int flags, int cl
 		return;
 	}
 
-	for (i = 0; i < CLICAP_TABLE_SIZE; i++)
+	list_for_each_entry(cap, clicap_list, caplist_node)
 	{
-		if ((clicap_table[i].cap == PROTO_SASL) && (!SASL_SERVER || !find_server(SASL_SERVER, NULL)))
-			continue; /* if SASL is disabled or server not online, then pretend it does not exist. -- Syzop */
-
 		if (flags)
 		{
-			if (!CHECKPROTO(sptr, clicap_table[i].cap))
+			if (!CHECKPROTO(sptr, cap->cap))
 				continue;
-			else if (clear && clicap_table[i].flags & CLICAP_FLAGS_STICKY)
+			else if (clear && cap->flags & CLICAP_FLAGS_STICKY)
 				continue;
 		}
 
 		/* \r\n\0, possible "-~=", space, " *" */
-		if (buflen + strlen(clicap_table[i].name) >= BUFSIZE - 10)
+		if (buflen + strlen(cap->name) >= BUFSIZE - 10)
 		{
 			if (buflen != mlen)
 				*(p - 1) = '\0';
@@ -196,8 +206,7 @@ static void clicap_generate(aClient *sptr, const char *subcmd, int flags, int cl
 			*p++ = '-';
 			buflen++;
 
-			if (clicap_table[i].flags & CLICAP_FLAGS_CLIACK &&
-			    CHECKPROTO(sptr, clicap_table[i].cap))
+			if (cap->flags & CLICAP_FLAGS_CLIACK && CHECKPROTO(sptr, cap->cap))
 			{
 				*p++ = '~';
 				buflen++;
@@ -205,21 +214,21 @@ static void clicap_generate(aClient *sptr, const char *subcmd, int flags, int cl
 		}
 		else
 		{
-			if (clicap_table[i].flags & CLICAP_FLAGS_STICKY)
+			if (cap->flags & CLICAP_FLAGS_STICKY)
 			{
 				*p++ = '=';
 				buflen++;
 			}
 
-			if (clicap_table[i].flags & CLICAP_FLAGS_CLIACK &&
-			    !CHECKPROTO(sptr, clicap_table[i].cap))
+			if (cap->flags & CLICAP_FLAGS_CLIACK &&
+			    !CHECKPROTO(sptr, cap->cap))
 			{
 				*p++ = '~';
 				buflen++;
 			}
 		}
 
-		curlen = snprintf(p, (capbuf + BUFSIZE) - p, "%s ", clicap_table[i].name);
+		curlen = snprintf(p, (capbuf + BUFSIZE) - p, "%s ", cap->name);
 		p += curlen;
 		buflen += curlen;
 	}
@@ -232,14 +241,14 @@ static void clicap_generate(aClient *sptr, const char *subcmd, int flags, int cl
 	sendto_one(sptr, "%s :%s", buf, capbuf);
 }
 
-static int cap_ack(aClient *sptr, const char *arg)
+static void cap_ack(aClient *sptr, const char *arg)
 {
-	struct clicap *cap;
+	ClientCapability *cap;
 	int capadd = 0, capdel = 0;
 	int finished = 0, negate;
 
 	if (BadPtr(arg))
-		return 0;
+		return;
 
 	for(cap = clicap_find(arg, &negate, &finished); cap;
 	    cap = clicap_find(NULL, &negate, &finished))
@@ -262,51 +271,44 @@ static int cap_ack(aClient *sptr, const char *arg)
 
 	sptr->proto |= capadd;
 	sptr->proto &= ~capdel;
-        return 0;
 }
 
-static int cap_clear(aClient *sptr, const char *arg)
+static void cap_clear(aClient *sptr, const char *arg)
 {
         clicap_generate(sptr, "ACK", sptr->proto ? sptr->proto : -1, 1);
 
      	sptr->proto = 0;
-     	return 0;
 }
 
-static int cap_end(aClient *sptr, const char *arg)
+static void cap_end(aClient *sptr, const char *arg)
 {
 	if (IsRegisteredUser(sptr))
-		return 0;
+		return;
 
 	sptr->proto &= ~PROTO_CLICAP;
 
-	if (sptr->name[0] && sptr->user != NULL)
-		return register_user(sptr, sptr, sptr->name, sptr->user->username, NULL, NULL, NULL);
-        
-        return 0;
+	if (sptr->name[0] && sptr->user != NULL && sptr->nospoof == 0)
+		register_user(sptr, sptr, sptr->name, sptr->user->username, NULL, NULL, NULL);
 }
 
-static int cap_list(aClient *sptr, const char *arg)
+static void cap_list(aClient *sptr, const char *arg)
 {
         clicap_generate(sptr, "LIST", sptr->proto ? sptr->proto : -1, 0);
-        return 0;
 }
 
-static int cap_ls(aClient *sptr, const char *arg)
+static void cap_ls(aClient *sptr, const char *arg)
 {
 	if (!IsRegisteredUser(sptr))
 		sptr->proto |= PROTO_CLICAP;
 
        	clicap_generate(sptr, "LS", 0, 0);
-
-       	return 0;
 }
 
-static int cap_req(aClient *sptr, const char *arg)
+static void cap_req(aClient *sptr, const char *arg)
 {
 	char buf[BUFSIZE];
 	char pbuf[2][BUFSIZE];
-	struct clicap *cap;
+	ClientCapability *cap;
 	int buflen, plen;
 	int i = 0;
 	int capadd = 0, capdel = 0;
@@ -316,7 +318,7 @@ static int cap_req(aClient *sptr, const char *arg)
 		sptr->proto |= PROTO_CLICAP;
 
 	if (BadPtr(arg))
-		return 0;
+		return;
 
 	buflen = snprintf(buf, sizeof(buf), ":%s CAP %s ACK",
 			  me.name, BadPtr(sptr->name) ? "*" : sptr->name);
@@ -376,7 +378,7 @@ static int cap_req(aClient *sptr, const char *arg)
 	if (!finished)
 	{
 		sendto_one(sptr, ":%s CAP %s NAK :%s", me.name, BadPtr(sptr->name) ? "*" : sptr->name, arg);
-		return 0;
+		return;
 	}
 
 	if (i)
@@ -389,12 +391,11 @@ static int cap_req(aClient *sptr, const char *arg)
 
 	sptr->proto |= capadd;
 	sptr->proto &= ~capdel;
-	return 0;
 }
 
 struct clicap_cmd {
 	const char *cmd;
-	int (*func)(struct Client *source_p, const char *arg);
+	void (*func)(struct Client *source_p, const char *arg);
 };
 
 static struct clicap_cmd clicap_cmdtable[] = {
@@ -445,14 +446,15 @@ DLLFUNC int m_cap(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		return 0;
 	}
 
-	return (cmd->func)(sptr, parv[2]);
+	(cmd->func)(sptr, parv[2]);
+	return 0;
 }
 
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_cap)(ModuleInfo *modinfo)
 {
 	MARK_AS_OFFICIAL_MODULE(modinfo);
-	CommandAdd(modinfo->handle, MSG_CAP, TOK_CAP, m_cap, MAXPARA, M_UNREGISTERED|M_USER);
+	CommandAdd(modinfo->handle, MSG_CAP, m_cap, MAXPARA, M_UNREGISTERED|M_USER);
 
 	return MOD_SUCCESS;
 }

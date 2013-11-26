@@ -47,7 +47,6 @@
 DLLFUNC int m_sapart(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SAPART 	"SAPART"	
-#define TOK_SAPART 	"AY"	
 
 ModuleHeader MOD_HEADER(m_sapart)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_sapart)
 
 DLLFUNC int MOD_INIT(m_sapart)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SAPART, TOK_SAPART, m_sapart, 3);
+	CommandAdd(modinfo->handle, MSG_SAPART, m_sapart, 3, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_sapart)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_sapart)(int module_unload)
 {
-	if (del_Command(MSG_SAPART, TOK_SAPART, m_sapart) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_sapart).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -161,13 +155,12 @@ DLLFUNC CMD_FUNC(m_sapart)
 		parv[2] = comment ? commentx : NULL; // comment
 		if (comment)
 		{
-			sendto_one(acptr,
-			    ":%s %s %s :*** You were forced to part %s (%s)", me.name,
-			    IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name, parv[1], 
-			    commentx);
+			sendnotice(acptr,
+			    "*** You were forced to part %s (%s)",
+			    parv[1], commentx);
 			sendto_realops("%s used SAPART to make %s part %s (%s)", sptr->name, parv[0],
 				parv[1], comment);
-			sendto_serv_butone(&me, ":%s GLOBOPS :%s used SAPART to make %s part %s (%s)",
+			sendto_server(&me, 0, 0, ":%s GLOBOPS :%s used SAPART to make %s part %s (%s)",
 				me.name, sptr->name, parv[0], parv[1], comment);
 			/* Logging function added by XeRXeS */
 			ircd_log(LOG_SACMDS,"SAPART: %s used SAPART to make %s part %s (%s)",
@@ -175,12 +168,11 @@ DLLFUNC CMD_FUNC(m_sapart)
 		}
 		else
 		{
-			sendto_one(acptr,
-			    ":%s %s %s :*** You were forced to part %s", me.name,
-			    IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name, parv[1]);
+			sendnotice(acptr,
+			    "*** You were forced to part %s", parv[1]);
 			sendto_realops("%s used SAPART to make %s part %s", sptr->name, parv[0],
 				parv[1]);
-			sendto_serv_butone(&me, ":%s GLOBOPS :%s used SAPART to make %s part %s",
+			sendto_server(&me, 0, 0, ":%s GLOBOPS :%s used SAPART to make %s part %s",
 				me.name, sptr->name, parv[0], parv[1]);
 			/* Logging function added by XeRXeS */
 			ircd_log(LOG_SACMDS,"SAPART: %s used SAPART to make %s part %s",

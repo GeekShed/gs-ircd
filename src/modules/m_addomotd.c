@@ -47,7 +47,6 @@
 DLLFUNC int m_addomotd(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_ADDOMOTD 	"ADDOMOTD"	
-#define TOK_ADDOMOTD 	"AR"	
 
 ModuleHeader MOD_HEADER(m_addomotd)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_addomotd)
 
 DLLFUNC int MOD_INIT(m_addomotd)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_ADDOMOTD, TOK_ADDOMOTD, m_addomotd, 1);
+	CommandAdd(modinfo->handle, MSG_ADDOMOTD, m_addomotd, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_addomotd)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_addomotd)(int module_unload)
 {
-	if (del_Command(MSG_ADDOMOTD, TOK_ADDOMOTD, m_addomotd) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_addomotd).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -111,8 +105,7 @@ DLLFUNC CMD_FUNC(m_addomotd)
 	{
 		return 0;
 	}
-	sendto_one(sptr, ":%s %s %s :*** Wrote (%s) to OperMotd",
-	    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", parv[0], text);
+	sendnotice(sptr, "*** Wrote (%s) to OperMotd", text);
 	/*      for (i=1 ; i<parc ; i++)
 	   {
 	   if (i!=parc-1)

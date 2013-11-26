@@ -47,7 +47,6 @@ DLLFUNC int m_tsctl(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_TSCTL       "TSCTL"
-#define TOK_TSCTL       "AW"
 
 ModuleHeader MOD_HEADER(m_tsctl)
   = {
@@ -64,7 +63,7 @@ DLLFUNC int MOD_INIT(m_tsctl)(ModuleInfo *modinfo)
 	/*
 	 * We call our add_Command crap here
 	*/
-	add_Command(MSG_TSCTL, TOK_TSCTL, m_tsctl, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_TSCTL, m_tsctl, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,11 +77,6 @@ DLLFUNC int MOD_LOAD(m_tsctl)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_tsctl)(int module_unload)
 {
-	if (del_Command(MSG_TSCTL, TOK_TSCTL, m_tsctl) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_tsctl).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -117,7 +111,13 @@ DLLFUNC int m_tsctl(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 		if (stricmp(parv[1], "offset") == 0)
 		{
-			if (!parv[3])
+			if (!OPCanTSCtl(sptr))
+                        {
+			    sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
+			    return 0;
+			}
+
+			if (!parv[2] || !parv[3])
 			{
 				sendto_one(sptr,
 				    ":%s NOTICE %s :*** TSCTL OFFSET: /tsctl offset <+|-> <time>",
@@ -150,7 +150,7 @@ DLLFUNC int m_tsctl(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				  sendto_ops
 				      ("TS Control - %s set TStime() to be diffed +%li",
 				      sptr->name, timediff);
-				  sendto_serv_butone(&me,
+				  sendto_server(&me, 0, 0,
 				      ":%s GLOBOPS :TS Control - %s set TStime to be diffed +%li",
 				      me.name, sptr->name, timediff);
 				  break;
@@ -162,7 +162,7 @@ DLLFUNC int m_tsctl(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				  sendto_ops
 				      ("TS Control - %s set TStime() to be diffed -%li",
 				      sptr->name, timediff);
-				  sendto_serv_butone(&me,
+				  sendto_server(&me, 0, 0,
 				      ":%s GLOBOPS :TS Control - %s set TStime to be diffed -%li",
 				      me.name, sptr->name, timediff);
 				  break;
@@ -183,35 +183,46 @@ DLLFUNC int m_tsctl(aClient *cptr, aClient *sptr, int parc, char *parv[])
 			    ":%s NOTICE %s :*** Server=%s TStime=%li time()=%li TSoffset=%li",
 			    me.name, sptr->name, me.name, TStime(), time(NULL),
 			    TSoffset);
-			sendto_serv_butone(cptr, ":%s TSCTL alltime",
+			sendto_server(cptr, 0, 0, ":%s TSCTL alltime",
 			    sptr->name);
 			return 0;
 
 		}
 		if (stricmp(parv[1], "svstime") == 0)
 		{
-			if (!parv[2] || *parv[2] == '\0')
-			{
-				return 0;
-			}
 			if (!IsULine(sptr))
 			{
+				if (MyClient(sptr)) sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
+				return 0;
+			}
+
+			if (!parv[2] || *parv[2] == '\0')
+			{
+				if (MyClient(sptr)) sendto_one(sptr, err_str(ERR_NEEDMOREPARAMS), me.name, parv[0], "TSCTL");
 				return 0;
 			}
 
 			timediff = atol(parv[2]);
 			timediff = timediff - time(NULL);
-		    ircd_log(LOG_ERROR, "TSCTL: U:line %s set time to be %li (timediff: %li, was %li)",
-				sptr->name, atol(parv[2]), timediff, TSoffset);
+			ircd_log(LOG_ERROR, "TSCTL: U:line %s set time to be %li (timediff: %li, was %li)",
+				 sptr->name, atol(parv[2]), timediff, TSoffset);
 			TSoffset = timediff;
 			sendto_ops
 			    ("TS Control - U:line set time to be %li (timediff: %li)",
 			    atol(parv[2]), timediff);
-			sendto_serv_butone(cptr, ":%s TSCTL svstime %li",
+			sendto_server(cptr, 0, 0, ":%s TSCTL svstime %li",
 			    sptr->name, atol(parv[2]));
 			return 0;
 		}
+		
+		//default: no command was recognized
+		sendto_one(sptr, "Invalid syntax for /TSCTL\n");
+                return 0;
 	}
+
+	//default: no parameter was entered
+	sendto_one(sptr, err_str(ERR_NEEDMOREPARAMS), me.name, parv[0], "TSCTL");
+
 	return 0;
 }
 

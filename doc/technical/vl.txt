@@ -2,6 +2,7 @@ VL Information (c) 2002 codemastr (Dominick Meglio) [codemastr@unrealircd.com]
 
 Protocol       Version
 ------------------------------------------------------------------------------------------------
+2312           3.4-alpha*
 2311           3.2.10
 2310           3.2.9
 2309           3.2.6, 3.2.7, 3.2.8
@@ -34,6 +35,5 @@ P              Uses poll()
 e              SSL supported
 O              OperOverride enabled
 o              OperOverride without verify
-Z              Zip links supported
 3              3rd party modules (were) loaded or unreal is any other way 'tainted' (eg: bad libs)
 E              Extended channel modes supported

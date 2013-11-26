@@ -47,7 +47,6 @@
 DLLFUNC int m_links(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_LINKS 	"LINKS"	
-#define TOK_LINKS 	"0"	
 
 ModuleHeader MOD_HEADER(m_links)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_links)
 
 DLLFUNC int MOD_INIT(m_links)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_LINKS, TOK_LINKS, m_links, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_LINKS, m_links, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_links)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_links)(int module_unload)
 {
-	if (del_Command(MSG_LINKS, TOK_LINKS, m_links) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_links).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -90,14 +84,11 @@ DLLFUNC int MOD_UNLOAD(m_links)(int module_unload)
 */
 DLLFUNC CMD_FUNC(m_links)
 {
-	Link *lp;
 	aClient *acptr;
 	int flat = (FLAT_MAP && !IsAnOper(sptr)) ? 1 : 0;
 
-	for (lp = Servers; lp; lp = lp->next)
+	list_for_each_entry(acptr, &global_server_list, client_node)
 	{
-		acptr = lp->value.cptr;
-
 		/* Some checks */
 		if (HIDE_ULINES && IsULine(acptr) && !IsAnOper(sptr))
 			continue;

@@ -39,6 +39,7 @@ extern HWND hwIRCDWnd;
 #define SAFE_SSL_ACCEPT 3
 #define SAFE_SSL_CONNECT 4
 
+extern void start_of_normal_client_handshake(aClient *acptr);
 static int fatal_ssl_error(int ssl_error, int where, int my_errno, aClient *sptr);
 
 /* The SSL structures */
@@ -135,7 +136,7 @@ int  ssl_pem_passwd_cb(char *buf, int size, int rwflag, void *password)
 #endif
 	if (before)
 	{
-		strncpyzt(buf, (char *)beforebuf, size);
+		strlcpy(buf, (char *)beforebuf, size);
 		return (strlen(buf));
 	}
 #ifndef _WIN32
@@ -148,8 +149,8 @@ int  ssl_pem_passwd_cb(char *buf, int size, int rwflag, void *password)
 #endif
 	if (pass)
 	{
-		strncpyzt(buf, (char *)pass, size);
-		strncpyzt(beforebuf, (char *)pass, sizeof(beforebuf));
+		strlcpy(buf, (char *)pass, size);
+		strlcpy(beforebuf, (char *)pass, sizeof(beforebuf));
 		before = 1;
 		SSLKeyPasswd = beforebuf;
 		return (strlen(buf));
@@ -183,10 +184,37 @@ va_list vl;
 static char buf[2048];
 
 	va_start(vl, fmt);
-	ircvsprintf(buf, fmt, vl);
+	ircvsnprintf(buf, sizeof(buf), fmt, vl);
 	va_end(vl);
 	sendto_realops("[SSL rehash] %s", buf);
 	ircd_log(LOG_ERROR, "%s", buf);
+}
+
+static void setup_dh_params(SSL_CTX *ctx)
+{
+	DH *dh;
+	BIO *bio;
+
+	if (iConf.x_dh_pem == NULL)
+		return;
+
+	bio = BIO_new_file(iConf.x_dh_pem, "r");
+	if (bio == NULL)
+	{
+		mylog("Failed to load DH parameters %s", iConf.x_dh_pem);
+		return;
+	}
+
+	dh = PEM_read_bio_DHparams(bio, NULL, NULL, NULL);
+	if (dh == NULL)
+	{
+		mylog("Failed to use DH parameters %s",	iConf.x_dh_pem);
+		BIO_free(bio);
+		return;
+	}
+
+	BIO_free(bio);
+	SSL_CTX_set_tmp_dh(ctx, dh);
 }
 
 SSL_CTX *init_ctx_server(void)
@@ -204,6 +232,8 @@ SSL_CTX *ctx_server;
 	SSL_CTX_set_verify(ctx_server, SSL_VERIFY_PEER|SSL_VERIFY_CLIENT_ONCE
 			| (iConf.ssl_options & SSLFLAG_FAILIFNOCERT ? SSL_VERIFY_FAIL_IF_NO_PEER_CERT : 0), ssl_verify_callback);
 	SSL_CTX_set_session_cache_mode(ctx_server, SSL_SESS_CACHE_OFF);
+
+	setup_dh_params(ctx_server);
 
 	if (SSL_CTX_use_certificate_chain_file(ctx_server, SSL_SERVER_CERT_PEM) <= 0)
 	{
@@ -256,6 +286,9 @@ SSL_CTX *ctx_client;
 	}
 	SSL_CTX_set_default_passwd_cb(ctx_client, ssl_pem_passwd_cb);
 	SSL_CTX_set_session_cache_mode(ctx_client, SSL_SESS_CACHE_OFF);
+
+	setup_dh_params(ctx_client);
+
 	if (SSL_CTX_use_certificate_file(ctx_client, SSL_SERVER_CERT_PEM, SSL_FILETYPE_PEM) <= 0)
 	{
 		mylog("Failed to load SSL certificate %s (client)", SSL_SERVER_CERT_PEM);
@@ -448,78 +481,15 @@ char	*ssl_get_cipher(SSL *ssl)
 	return (buf);
 }
 
-int ircd_SSL_read(aClient *acptr, void *buf, int sz)
+void ircd_SSL_client_handshake(int fd, int revents, void *data)
 {
-	int len, ssl_err, ssl_errno;
-    len = SSL_read((SSL *)acptr->ssl, buf, sz);
-    if (len <= 0)
-    {
-       switch(ssl_err = SSL_get_error((SSL *)acptr->ssl, len)) {
-           case SSL_ERROR_SYSCALL:
-               if (ERRNO == P_EWOULDBLOCK || ERRNO == P_EAGAIN ||
-                       ERRNO == P_EINTR) {
-           case SSL_ERROR_WANT_READ:
-                   SET_ERRNO(P_EWOULDBLOCK);
-		   Debug((DEBUG_ERROR, "ircd_SSL_read: returning EWOULDBLOCK and 0 for %s - %s", acptr->name,
-			ssl_err == SSL_ERROR_WANT_READ ? "SSL_ERROR_WANT_READ" : "SSL_ERROR_SYSCALL"		   
-		   ));
-                   return -1;
-               }
-           case SSL_ERROR_SSL:
-               if(ERRNO == EAGAIN)
-                   return -1;
-           default:
-		   ssl_errno = ERRNO;
-           	Debug((DEBUG_ERROR, "ircd_SSL_read: returning fatal_ssl_error for %s",
-           	 acptr->name));
-		return fatal_ssl_error(ssl_err, SAFE_SSL_READ, ssl_errno, acptr);
-       }
-    }
-    Debug((DEBUG_ERROR, "ircd_SSL_read for %s (%p, %i): success", acptr->name, buf, sz));
-    return len;
-}
-int ircd_SSL_write(aClient *acptr, const void *buf, int sz)
-{
-	int len, ssl_err, ssl_errno;
+	aClient *acptr = data;
 
-    len = SSL_write((SSL *)acptr->ssl, buf, sz);
-    if (len <= 0)
-    {
-       switch(ssl_err = SSL_get_error((SSL *)acptr->ssl, len)) {
-           case SSL_ERROR_SYSCALL:
-               if (ERRNO == P_EWOULDBLOCK || ERRNO == P_EAGAIN ||
-                       ERRNO == P_EINTR)
-		{
-			SET_ERRNO(P_EWOULDBLOCK);
-			return -1;
-		}
-		return -1;
-          case SSL_ERROR_WANT_WRITE:
-                   SET_ERRNO(P_EWOULDBLOCK);
-                   return -1;
-          case SSL_ERROR_WANT_READ:
-                   SET_ERRNO(P_EWOULDBLOCK); /* is this correct? next write will block if not read, so sounds right... */
-                   return -1;
-           case SSL_ERROR_SSL:
-               if(ERRNO == EAGAIN)
-                   return -1;
-           default:
-		   ssl_errno = ERRNO;
-		Debug((DEBUG_ERROR, "ircd_SSL_write: returning fatal_ssl_error for %s", acptr->name));
-		return fatal_ssl_error(ssl_err, SAFE_SSL_WRITE, ssl_errno, acptr);
-       }
-    }
-    Debug((DEBUG_ERROR, "ircd_SSL_write for %s (%p, %i): success", acptr->name, buf, sz));
-    return len;
-}
-
-int ircd_SSL_client_handshake(aClient *acptr)
-{
 	acptr->ssl = SSL_new(ctx_client);
 	if (!acptr->ssl)
 	{
 		sendto_realops("Failed to SSL_new(ctx_client)");
-		return FALSE;
+		return;
 	}
 	SSL_set_fd(acptr->ssl, acptr->fd);
 	SSL_set_connect_state(acptr->ssl);
@@ -544,26 +514,32 @@ int ircd_SSL_client_handshake(aClient *acptr)
 			sendto_realops("SSL cipher selecting for %s was unsuccesful (%s)",
 				acptr->serv->conf->servername, 
 				acptr->serv->conf->ciphers);
-			return -2;
+			return;
 		}
 	}
 	acptr->flags |= FLAGS_SSL;
-	switch (ircd_SSL_connect(acptr))
+	switch (ircd_SSL_connect(acptr, fd))
 	{
-		case -1: 
-			return -1;
+		case -1:
+			fd_close(fd);
+			return;
 		case 0: 
 			Debug((DEBUG_DEBUG, "SetSSLConnectHandshake(%s)", get_client_name(acptr, TRUE)));
 			SetSSLConnectHandshake(acptr);
-			return 0;
-		case 1: 
+			return;
+		case 1:
 			Debug((DEBUG_DEBUG, "SSL_init_finished should finish this job (%s)", get_client_name(acptr, TRUE)));
-			/* SSL_init_finished in s_bsd will finish the job */
-			return 1;
+			return;
 		default:
-			return -1;		
+			return;
 	}
 
+}
+
+static void ircd_SSL_accept_retry(int fd, int revents, void *data)
+{
+	aClient *acptr = data;
+	ircd_SSL_accept(acptr, fd);
 }
 
 int ircd_SSL_accept(aClient *acptr, int fd) {
@@ -575,11 +551,15 @@ int ircd_SSL_accept(aClient *acptr, int fd) {
 	    case SSL_ERROR_SYSCALL:
 		if (ERRNO == P_EINTR || ERRNO == P_EWOULDBLOCK
 			|| ERRNO == P_EAGAIN)
-	    case SSL_ERROR_WANT_READ:
-	    case SSL_ERROR_WANT_WRITE:
-		Debug((DEBUG_DEBUG, "ircd_SSL_accept(%s), - %s", get_client_name(acptr, TRUE), ssl_error_str(ssl_err, ERRNO)));
-		    /* handshake will be completed later . . */
 		    return 1;
+	    case SSL_ERROR_WANT_READ:
+		fd_setselect(fd, FD_SELECT_READ, ircd_SSL_accept_retry, acptr);
+		fd_setselect(fd, FD_SELECT_WRITE, NULL, acptr);
+		return 1;
+	    case SSL_ERROR_WANT_WRITE:
+		fd_setselect(fd, FD_SELECT_READ, NULL, acptr);
+		fd_setselect(fd, FD_SELECT_WRITE, ircd_SSL_accept_retry, acptr);
+		return 1;
 	    default:
 		return fatal_ssl_error(ssl_err, SAFE_SSL_ACCEPT, ERRNO, acptr);
 		
@@ -587,31 +567,45 @@ int ircd_SSL_accept(aClient *acptr, int fd) {
 	/* NOTREACHED */
 	return -1;
     }
+
+    start_of_normal_client_handshake(acptr);
+
     return 1;
 }
 
-int ircd_SSL_connect(aClient *acptr) {
+static void ircd_SSL_connect_retry(int fd, int revents, void *data)
+{
+	aClient *acptr = data;
+	ircd_SSL_connect(acptr, fd);
+}
+
+int ircd_SSL_connect(aClient *acptr, int fd) {
 
     int ssl_err;
     if((ssl_err = SSL_connect((SSL *)acptr->ssl)) <= 0) {
-	switch(ssl_err = SSL_get_error((SSL *)acptr->ssl, ssl_err)) {
+	ssl_err = SSL_get_error((SSL *)acptr->ssl, ssl_err);
+	switch(ssl_err) {
 	    case SSL_ERROR_SYSCALL:
 		if (ERRNO == P_EINTR || ERRNO == P_EWOULDBLOCK
 			|| ERRNO == P_EAGAIN)
 	    case SSL_ERROR_WANT_READ:
+		fd_setselect(fd, FD_SELECT_READ, ircd_SSL_connect_retry, acptr);
+		fd_setselect(fd, FD_SELECT_WRITE, NULL, acptr);
+		return 0;
 	    case SSL_ERROR_WANT_WRITE:
-	    	 {
-		    Debug((DEBUG_DEBUG, "ircd_SSL_connect(%s), - %s", get_client_name(acptr, TRUE), ssl_error_str(ssl_err, ERRNO)));
-		    /* handshake will be completed later . . */
-		    return 0;
-	         }
+		fd_setselect(fd, FD_SELECT_READ, NULL, acptr);
+		fd_setselect(fd, FD_SELECT_WRITE, ircd_SSL_connect_retry, acptr);
+		return 0;
 	    default:
 		return fatal_ssl_error(ssl_err, SAFE_SSL_CONNECT, ERRNO, acptr);
-		
 	}
 	/* NOTREACHED */
 	return -1;
     }
+
+    fd_setselect(fd, FD_SELECT_READ | FD_SELECT_WRITE, NULL, acptr);
+    completed_connection(fd, FD_SELECT_READ | FD_SELECT_WRITE, acptr);
+
     return 1;
 }
 
@@ -683,9 +677,9 @@ static int fatal_ssl_error(int ssl_error, int where, int my_errno, aClient *sptr
 		 * and not writing (since otherwise deliver_it will take care of the error), THEN
 		 * send a closing link error...
 		 */
-		sendto_locfailops("Lost connection to %s: %s: %s", get_client_name(sptr, FALSE), ssl_func, ssl_errstr);
-		sendto_serv_butone(&me, ":%s GLOBOPS :Lost connection to server %s: %s: %s",
-		  me.name, get_client_name(sptr, FALSE), ssl_func, ssl_errstr);
+		sendto_locfailops("Lost connection to %s: %s: %d (%s)", get_client_name(sptr, FALSE), ssl_func, ssl_error, ssl_errstr);
+		sendto_server(&me, 0, 0, ":%s GLOBOPS :Lost connection to server %s: %s: %d (%s)",
+		  me.name, get_client_name(sptr, FALSE), ssl_func, ssl_error, ssl_errstr);
 		/* sendto_failops_whoare_opers("Closing link: %s: %s - %s", ssl_func, ssl_errstr, get_client_name(sptr, FALSE)); */
 	}
 	

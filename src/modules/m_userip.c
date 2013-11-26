@@ -59,7 +59,7 @@ ModuleHeader MOD_HEADER(m_userip)
 
 DLLFUNC int MOD_INIT(m_userip)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_USERIP, NULL, m_userip, 1, M_USER|M_ANNOUNCE);
+	CommandAdd(modinfo->handle, MSG_USERIP, m_userip, 1, M_USER|M_ANNOUNCE);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -104,7 +104,7 @@ DLLFUNC CMD_FUNC(m_userip)
 	/* The idea is to build up the response string out of pieces
 	 * none of this strlen() nonsense.
 	 * 5 * (NICKLEN*2+CHANNELLEN+USERLEN+HOSTLEN+30) is still << sizeof(buf)
-	 * and our ircsprintf() truncates it to fit anyway. There is
+	 * and our ircsnprintf() truncates it to fit anyway. There is
 	 * no danger of an overflow here. -Dianora
 	 */
 	response[0][0] = response[1][0] = response[2][0] =
@@ -127,7 +127,7 @@ DLLFUNC CMD_FUNC(m_userip)
 				ip = ipbuf;
 			}
 
-			ircsprintf(response[i], "%s%s=%c%s@%s",
+			ircsnprintf(response[i], NICKLEN * 2 + CHANNELLEN + USERLEN + HOSTLEN + 30, "%s%s=%c%s@%s",
 			    acptr->name,
 			    (IsAnOper(acptr) && (!IsHideOper(acptr) || sptr == acptr || IsAnOper(sptr)))
 				? "*" : "",

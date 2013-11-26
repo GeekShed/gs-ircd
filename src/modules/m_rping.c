@@ -50,9 +50,7 @@ DLLFUNC char *militime(char *sec, char *usec);
 
 /* Place includes here */
 #define MSG_RPING       "RPING"
-#define TOK_RPING       "AM"
 #define MSG_RPONG       "RPONG"
-#define TOK_RPONG       "AN"
 
 ModuleHeader MOD_HEADER(m_rping)
   = {
@@ -66,11 +64,8 @@ ModuleHeader MOD_HEADER(m_rping)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_rping)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_RPING, TOK_RPING, m_rping, MAXPARA);
-	add_Command(MSG_RPONG, TOK_RPONG, m_rpong, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_RPING, m_rping, MAXPARA, 0);
+	CommandAdd(modinfo->handle, MSG_RPONG, m_rpong, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -85,16 +80,6 @@ DLLFUNC int MOD_LOAD(m_rping)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_rping)(int module_unload)
 {
-	if (del_Command(MSG_RPING, TOK_RPING, m_rping) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_rping).name);
-	}
-	if (del_Command(MSG_RPONG, TOK_RPONG, m_rpong) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_rping).name);
-	}
 	return MOD_SUCCESS;	
 }
 
@@ -147,8 +132,7 @@ DLLFUNC int  m_rping(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 	if (IsAnOper(sptr))
 	{
-		if (hunt_server_token(cptr, sptr, MSG_RPING, TOK_RPING, "%s %s :%s", 2, parc,
-		    parv) != HUNTED_ISME)
+		if (hunt_server(cptr, sptr, ":%s RPING %s %s :%s", 2, parc, parv) != HUNTED_ISME)
 			return 0;
 		if (!(acptr = (aClient *)find_match_server(parv[1])) || !IsServer(acptr))
 		{
@@ -162,8 +146,7 @@ DLLFUNC int  m_rping(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	}
 	else
 	{
-		if (hunt_server_token(cptr, sptr, MSG_RPING, TOK_RPING, "%s %s %s %s :%s", 1,
-		    parc, parv) != HUNTED_ISME)
+		if (hunt_server(cptr, sptr, ":%s RPING %s %s %s %s :%s", 1, parc, parv) != HUNTED_ISME)
 			return 0;
 		sendto_one(cptr, ":%s RPONG %s %s %s %s :%s", me.name, parv[0],
 		    parv[2], parv[3], parv[4], parv[5]);
@@ -245,7 +228,7 @@ DLLFUNC char *militime(char *sec, char *usec)
 	_ftime(&tv);
 #endif
 	if (sec && usec)
-		ircsprintf(timebuf, "%ld",
+		ircsnprintf(timebuf, sizeof(timebuf), "%ld",
 #ifndef _WIN32
 		    (tv.tv_sec - atoi(sec)) * 1000 + (tv.tv_usec - atoi(usec)) / 1000);
 #else
@@ -253,9 +236,9 @@ DLLFUNC char *militime(char *sec, char *usec)
 #endif
 	else
 #ifndef _WIN32
-		ircsprintf(timebuf, "%ld %ld", tv.tv_sec, tv.tv_usec);
+		ircsnprintf(timebuf, sizeof(timebuf), "%ld %ld", tv.tv_sec, tv.tv_usec);
 #else
-		ircsprintf(timebuf, "%ld %ld", tv.time, tv.millitm * 1000);
+		ircsnprintf(timebuf, sizeof(timebuf), "%ld %ld", tv.time, tv.millitm * 1000);
 #endif
 	return timebuf;
 }

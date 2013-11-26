@@ -47,7 +47,6 @@
 DLLFUNC int m_silence(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SILENCE 	"SILENCE"	
-#define TOK_SILENCE 	"U"	
 
 ModuleHeader MOD_HEADER(m_silence)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_silence)
 
 DLLFUNC int MOD_INIT(m_silence)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SILENCE, TOK_SILENCE, m_silence, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SILENCE, m_silence, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_silence)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_silence)(int module_unload)
 {
-	if (del_Command(MSG_SILENCE, TOK_SILENCE, m_silence) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_silence).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -132,7 +126,7 @@ DLLFUNC CMD_FUNC(m_silence)
 			sendto_prefix_one(sptr, sptr, ":%s SILENCE %c%s",
 			    parv[0], c, cp);
 			if (c == '-')
-				sendto_serv_butone(NULL, ":%s SILENCE * -%s",
+				sendto_server(NULL, 0, 0, ":%s SILENCE * -%s",
 				    sptr->name, cp);
 		}
 	}
@@ -147,7 +141,7 @@ DLLFUNC CMD_FUNC(m_silence)
 		if (c == '-')
 		{
 			if (!del_silence(sptr, parv[2] + 1))
-				sendto_serv_butone(cptr, ":%s SILENCE %s :%s",
+				sendto_server(cptr, 0, 0, ":%s SILENCE %s :%s",
 				    parv[0], parv[1], parv[2]);
 		}
 		else

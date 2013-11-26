@@ -41,13 +41,14 @@
 #ifdef	PARAMH
 #include <sys/param.h>
 #endif
+#include <stdbool.h>
 
 #if !defined(IN_ADDR)
 #include "sys.h"
 #endif
 
 #include "ircsprintf.h"
-
+#include "list.h"
 
 #ifdef DEVELOP_CVS
 #define ID_Copyright(x) static char id_copyright[] = x
@@ -239,17 +240,10 @@ extern struct SLink *find_user_link( /* struct SLink *, struct Client * */ );
 
 /* IRCu/Hybrid/Unreal way now :) -Stskeeps */
 
-#ifdef EXTCMODE
- #define EXPAR1	extchmstr[0]
- #define EXPAR2	extchmstr[1]
- #define EXPAR3	extchmstr[2]
- #define EXPAR4	extchmstr[3]
-#else
- #define EXPAR1 ""
- #define EXPAR2 ""
- #define EXPAR3 ""
- #define EXPAR4 ""
-#endif /* EXTCMODE */
+#define EXPAR1	extchmstr[0]
+#define EXPAR2	extchmstr[1]
+#define EXPAR3	extchmstr[2]
+#define EXPAR4	extchmstr[3]
 
 #ifdef PREFIX_AQ
 #define CHPFIX        "(qaohv)~&@%+"
@@ -269,15 +263,12 @@ extern struct SLink *find_user_link( /* struct SLink *, struct Client * */ );
  * Also take MAXPARA into account !
  */
 #define PROTOCTL_SERVER "NOQUIT" \
-                        " TOKEN" \
                         " NICKv2" \
                         " SJOIN" \
                         " SJOIN2" \
                         " UMODE2" \
                         " VL" \
                         " SJ3" \
-                        " NS" \
-                        " SJB64" \
                         " TKLEXT" \
                         " NICKIP" \
                         " ESVID"

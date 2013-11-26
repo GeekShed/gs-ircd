@@ -47,7 +47,6 @@
 DLLFUNC int m_knock(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_KNOCK 	"KNOCK"	
-#define TOK_KNOCK 	"AI"	
 
 ModuleHeader MOD_HEADER(m_knock)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_knock)
 
 DLLFUNC int MOD_INIT(m_knock)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_KNOCK, TOK_KNOCK, m_knock, 2, M_USER|M_ANNOUNCE);
+	CommandAdd(modinfo->handle, MSG_KNOCK, m_knock, 2, M_USER|M_ANNOUNCE);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -89,8 +88,7 @@ DLLFUNC int MOD_UNLOAD(m_knock)(int module_unload)
 CMD_FUNC(m_knock)
 {
 	aChannel *chptr;
-	char buf[1024], chbuf[CHANNELLEN + 8];	
-	
+
 	if (IsServer(sptr))
 		return 0;
 
@@ -104,8 +102,6 @@ CMD_FUNC(m_knock)
 	if (MyConnect(sptr))
 		clean_channelname(parv[1]);
 
-	if (check_channelmask(sptr, cptr, parv[1]))
-		return 0;
 	/* bugfix for /knock PRv Please? */
 	if (*parv[1] != '#')
 	{
@@ -164,20 +160,16 @@ CMD_FUNC(m_knock)
 		return 0;
 	}
 
-	ircsprintf(chbuf, "@%s", chptr->chname);
-	ircsprintf(buf, "[Knock] by %s!%s@%s (%s)",
+	sendto_channelprefix_butone(NULL, &me, chptr, PREFIX_OP|PREFIX_ADMIN|PREFIX_OWNER,
+		":%s NOTICE @%s :[Knock] by %s!%s@%s (%s)", me.name, chptr->chname,
 		sptr->name, sptr->user->username, GetHost(sptr),
 		parv[2] ? parv[2] : "no reason specified");
-	sendto_channelprefix_butone_tok(NULL, &me, chptr, PREFIX_OP|PREFIX_ADMIN|PREFIX_OWNER,
-		MSG_NOTICE, TOK_NOTICE, chbuf, buf, 0);
 
-	sendto_one(sptr, ":%s %s %s :Knocked on %s", me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE",
-	    sptr->name, chptr->chname);
+	sendnotice(sptr, "Knocked on %s", chptr->chname);
 
-#ifdef NEWCHFLOODPROT
 	if (chptr->mode.floodprot && !IsULine(sptr) &&
 	    do_chanflood(chptr->mode.floodprot, FLD_KNOCK) && MyClient(sptr))
 		do_chanflood_action(chptr, FLD_KNOCK, "knock");
-#endif
+
 	return 0;
 }

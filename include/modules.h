@@ -128,7 +128,6 @@ typedef struct {
         Module *owner;
 } Snomask;
 
-#ifdef EXTCMODE
 #define EXCHK_ACCESS		0 /* Check access */
 #define EXCHK_ACCESS_ERR	1 /* Check access and send error if needed */
 #define EXCHK_PARAM			2 /* Check parameter and send error if needed */
@@ -251,7 +250,6 @@ typedef struct {
 	int		(*sjoin_check)(aChannel *, CmodeParam *, CmodeParam *);
 	char		local;
 } CmodeInfo;
-#endif
 
 /*** Extended bans ***/
 
@@ -319,7 +317,7 @@ typedef struct {
 
 typedef struct _command {
 	struct _command *prev, *next;
-	aCommand *cmd, *tok;
+	aCommand *cmd;
 } Command;
 
 typedef struct _versionflag {
@@ -599,7 +597,7 @@ extern Callback	*CallbackDel(Callback *cb);
 extern Efunction	*EfunctionAddMain(Module *module, int eftype, int (*intfunc)(), void (*voidfunc)(), void *(*pvoidfunc)(), char *(*pcharfunc)());
 extern Efunction	*EfunctionDel(Efunction *cb);
 
-Command *CommandAdd(Module *module, char *cmd, char *tok, int (*func)(), unsigned char params, int flags);
+Command *CommandAdd(Module *module, char *cmd, int (*func)(), unsigned char params, int flags);
 void CommandDel(Command *command);
 int CommandExists(char *name);
 Cmdoverride *CmdoverrideAdd(Module *module, char *cmd, iFP function);
@@ -661,6 +659,8 @@ int CallCmdoverride(Cmdoverride *ovr, aClient *cptr, aClient *sptr, int parc, ch
 #define HOOKTYPE_PACKET 51
 #define HOOKTYPE_HANDSHAKE 52
 #define HOOKTYPE_AWAY 53
+#define HOOKTYPE_CAPLIST 54
+#define HOOKTYPE_INVITE 55
 
 /* Hook return values */
 #define HOOK_CONTINUE 0
@@ -745,7 +745,7 @@ int CallCmdoverride(Cmdoverride *ovr, aClient *cptr, aClient *sptr, int parc, ch
  #define MOD_UNLOAD(name) name##_Unload
 #endif
 
-#define CLOAK_KEYCRC	RCallbacks[CALLBACKTYPE_CLOAKKEYCSUM]->func.pcharfunc()
+#define CLOAK_KEYCRC	RCallbacks[CALLBACKTYPE_CLOAKKEYCSUM] != NULL ? RCallbacks[CALLBACKTYPE_CLOAKKEYCSUM]->func.pcharfunc() : "nil"
 
 #ifdef DYNAMIC_LINKING
  #include "modversion.h"

@@ -49,7 +49,6 @@ DLLFUNC int m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_WHOIS       "WHOIS" /* WHOI */
-#define TOK_WHOIS       "#"     /* 35 */
 
 ModuleHeader MOD_HEADER(m_whois)
   = {
@@ -63,10 +62,7 @@ ModuleHeader MOD_HEADER(m_whois)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_whois)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_WHOIS, TOK_WHOIS, m_whois, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_WHOIS, m_whois, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -80,11 +76,6 @@ DLLFUNC int MOD_LOAD(m_whois)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_whois)(int module_unload)
 {
-	if (del_Command(MSG_WHOIS, TOK_WHOIS, m_whois) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_whois).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -117,8 +108,7 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 	if (parc > 2)
 	{
-		if (hunt_server_token(cptr, sptr, MSG_WHOIS, TOK_WHOIS, "%s :%s", 1, parc,
-		    parv) != HUNTED_ISME)
+		if (hunt_server(cptr, sptr, ":%s WHOIS %s :%s", 1, parc, parv) != HUNTED_ISME)
 			return 0;
 		parv[1] = parv[2];
 	}
@@ -170,9 +160,9 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 			if (IsWhois(acptr) && (sptr != acptr))
 			{
-				sendto_one(acptr,
-				    ":%s %s %s :*** %s (%s@%s) did a /whois on you.",
-				    me.name, IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name, sptr->name,
+				sendnotice(acptr,
+				    "*** %s (%s@%s) did a /whois on you.",
+				    sptr->name,
 				    sptr->user->username, sptr->user->realhost);
 			}
 			sendto_one(sptr, rpl_str(RPL_WHOISUSER), me.name,
@@ -181,7 +171,7 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 			    IsHidden(acptr) ? user->virthost : user->realhost,
 			    acptr->info);
 
-			if (IsOper(sptr))
+			if (IsOper(sptr) || acptr == sptr)
 			{
 				char sno[512];
 				strcpy(sno, get_sno_str(acptr));
@@ -244,20 +234,37 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 						&& IsAnOper(sptr))
 						*(buf + len++) = '!';
 					access = get_access(acptr, chptr);
+					if (!SupportNAMESX(sptr))
+					{
 #ifdef PREFIX_AQ
-					if (access & CHFL_CHANOWNER)
-						*(buf + len++) = '~';
-					else if (access & CHFL_CHANPROT)
-
-						*(buf + len++) = '&';
-					else
+						if (access & CHFL_CHANOWNER)
+							*(buf + len++) = '~';
+						else if (access & CHFL_CHANPROT)
+							*(buf + len++) = '&';
+						else
 #endif
-					if (access & CHFL_CHANOP)
-						*(buf + len++) = '@';
-					else if (access & CHFL_HALFOP)
-						*(buf + len++) = '%';
-					else if (access & CHFL_VOICE)
-						*(buf + len++) = '+';
+						if (access & CHFL_CHANOP)
+							*(buf + len++) = '@';
+						else if (access & CHFL_HALFOP)
+							*(buf + len++) = '%';
+						else if (access & CHFL_VOICE)
+							*(buf + len++) = '+';
+					}
+					else
+					{
+#ifdef PREFIX_AQ
+						if (access & CHFL_CHANOWNER)
+							*(buf + len++) = '~';
+						if (access & CHFL_CHANPROT)
+							*(buf + len++) = '&';
+#endif
+						if (access & CHFL_CHANOP)
+							*(buf + len++) = '@';
+						if (access & CHFL_HALFOP)
+							*(buf + len++) = '%';
+						if (access & CHFL_VOICE)
+							*(buf + len++) = '+';
+					}
 					if (len)
 						*(buf + len) = '\0';
 					(void)strcpy(buf + len, chptr->chname);
@@ -301,9 +308,16 @@ DLLFUNC int  m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				else
 					strlcat(buf, "a Local IRC Operator", sizeof buf);
 				if (buf[0])
-					sendto_one(sptr,
-					    rpl_str(RPL_WHOISOPERATOR), me.name,
-					    parv[0], name, buf);
+				{
+					if (IsOper(sptr) && MyClient(acptr))
+						sendto_one(sptr,
+						    ":%s 313 %s %s :is %s (%s)", me.name,
+						    parv[0], name, buf, acptr->user->operlogin);
+					else
+						sendto_one(sptr,
+						    rpl_str(RPL_WHOISOPERATOR), me.name,
+						    parv[0], name, buf);
+				}
 			}
 
 			if (IsHelpOp(acptr) && !hideoper && !user->away)

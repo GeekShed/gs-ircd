@@ -46,7 +46,6 @@ DLLFUNC int m_time(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_TIME	"TIME"
-#define TOK_TIME	">"
 
 ModuleHeader MOD_HEADER(m_time)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_time)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_time)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_TIME, TOK_TIME, m_time, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_TIME, m_time, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -79,11 +75,6 @@ DLLFUNC int MOD_LOAD(m_time)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_time)(int module_unload)
 {
-	if (del_Command(MSG_TIME, TOK_TIME, m_time) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_time).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -94,8 +85,7 @@ DLLFUNC int MOD_UNLOAD(m_time)(int module_unload)
 */
 CMD_FUNC(m_time)
 {
-	if (hunt_server_token(cptr, sptr, MSG_TIME, TOK_TIME, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s TIME :%s", 1, parc, parv) == HUNTED_ISME)
 		sendto_one(sptr, rpl_str(RPL_TIME), me.name, parv[0], me.name,
 		    date((long)0));
 	return 0;

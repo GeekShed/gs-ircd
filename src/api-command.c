@@ -35,35 +35,23 @@ int CommandExists(char *name)
 		if (!stricmp(p->cmd, name))
 			return 1;
 	}
-	for (p = TokenHash[*name]; p; p = p->next)
-	{
-		if (!strcmp(p->cmd, name))
-			return 1;
-	}
+
 	return 0;
 }
 
-Command *CommandAdd(Module *module, char *cmd, char *tok, int (*func)(), unsigned char params, int flags) {
+Command *CommandAdd(Module *module, char *cmd, int (*func)(), unsigned char params, int flags) {
 	Command *command;
 
-	if (find_Command_simple(cmd) || (tok && find_Command_simple(tok)))
+	if (find_Command_simple(cmd))
 	{
 		if (module)
 			module->errorcode = MODERR_EXISTS;
 		return NULL;
 	}
 	command = MyMallocEx(sizeof(Command));
-	command->cmd = add_Command_backend(cmd,func,params, 0, flags);
-	command->tok = NULL;
+	command->cmd = add_Command_backend(cmd,func,params, flags);
 	command->cmd->owner = module;
-	if (tok) {
-		command->tok = add_Command_backend(tok,func,params,1,flags);
-		command->cmd->friend = command->tok;
-		command->tok->friend = command->cmd;
-		command->tok->owner = module;
-	}
-	else
-		command->cmd->friend = NULL;
+	command->cmd->friend = NULL;
 	if (module) {
 		ModuleObject *cmdobj = (ModuleObject *)MyMallocEx(sizeof(ModuleObject));
 		cmdobj->object.command = command;
@@ -123,8 +111,6 @@ void CommandDel(Command *command) {
 			cmdstr = tmp;
 	}
 	DelListItem(command->cmd, CommandHash[toupper(*command->cmd->cmd)]);
-	if (command->tok)
-		DelListItem(command->tok, TokenHash[*command->tok->cmd]);
 	if (command->cmd->owner) {
 		ModuleObject *cmdobj;
 		for (cmdobj = command->cmd->owner->objects; cmdobj; cmdobj = (ModuleObject *)cmdobj->next) {
@@ -142,9 +128,5 @@ void CommandDel(Command *command) {
 	}
 	MyFree(command->cmd->cmd);
 	MyFree(command->cmd);
-	if (command->tok) {
-		MyFree(command->tok->cmd);
-		MyFree(command->tok);
-	}
 	MyFree(command);
 }

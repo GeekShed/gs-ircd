@@ -83,7 +83,7 @@ void name_to_number(int address_family, const char *hostname, int port,
   bzero ((char *) addr, sizeof (socket_address) );
 
   if ( address_family == AF_UNIX ) {
-    strcpy(addr->unixx.sun_path,hostname);
+    strlcpy(addr->unixx.sun_path,hostname, sizeof(addr->unixx.sun_path));
     *len2=sizeof( struct sockaddr_un );
   } else {
     if ((hostname) && (hostname[0])) {
@@ -228,8 +228,8 @@ void run_client(aClient *robotptr) {
 void initialize(aClient *robotptr) {
   char passphrase[MYBUFSIZE];
   robotptr->socket=create_client(uplinkservername, atol(jupereason));
-  sprintf(passphrase,
-	  "PROTOCTL %s %s %s %s %s %s %s %s %s\r\n", 
+  snprintf(passphrase, MYBUFSIZE,
+	  "PROTOCTL %s %s %s %s %s %s %s %s\r\n", 
 	  	(options & 0x1) ? "NOQUIT" : "",
 	  	(options & 0x2) ? "TOKEN" : "",
 	  	(options & 0x4) ? "NICKv2" : "",
@@ -238,9 +238,8 @@ void initialize(aClient *robotptr) {
 	  	(options & 0x20) ? "UMODE2" : "",
 	  	(options & 0x40) ? "NS" : "",
 	  	(options & 0x100) ? "SJ3" : "",
-	  	(options & 0x200) ? "SJB64" : "");
   write(robotptr->socket, passphrase, strlen(passphrase));
-  sprintf(passphrase, "PASS %s\r\nSERVER %s 1 :[Burst analysis].\r\n",
+  snprintf(passphrase, MYBUFSIZE, "PASS %s\r\nSERVER %s 1 :[Burst analysis].\r\n",
 	  password,jupedservername);
   write(robotptr->socket, passphrase, strlen(passphrase));
 }
@@ -266,7 +265,7 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "3 = Enable NICKv2  4 = Enable SJOIN\n");
     fprintf(stderr, "5 = Enable SJOIN2  6 = Enable UMODE2\n");
     fprintf(stderr, "7 = Enable NS      8 = Ignore end of burst\n");
-    fprintf(stderr, "9 = Enable SJ3     a = Enable SJB64\n");
+    fprintf(stderr, "9 = Enable SJ3\n");
     fatal("incorrect argument count");
     exit(1);
   }
@@ -296,8 +295,6 @@ int main(int argc, char* argv[]) {
 		options |= 0x80;
 	if (*p == '9')
 		options |= 0x100;
-	if (*p == 'a')
-		options |= 0x200;
   }
   /* installe le signal_catcher */
   signal(SIGTERM,(signalhandler)signal_catcher);

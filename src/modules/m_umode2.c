@@ -47,7 +47,6 @@
 DLLFUNC int m_umode2(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_UMODE2 	"UMODE2"	
-#define TOK_UMODE2 	"|"	
 
 ModuleHeader MOD_HEADER(m_umode2)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_umode2)
 
 DLLFUNC int MOD_INIT(m_umode2)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_UMODE2, TOK_UMODE2, m_umode2, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_UMODE2, m_umode2, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_umode2)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_umode2)(int module_unload)
 {
-	if (del_Command(MSG_UMODE2, TOK_UMODE2, m_umode2) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_umode2).name);
-	}
 	return MOD_SUCCESS;
 }
 

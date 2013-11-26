@@ -27,7 +27,7 @@
 #include <string.h>
 #include "h.h"
 
-/* mode = 0, just use strncpyzt, 1 = Realloc new and return new pointer */
+/* mode = 0, just use strlcpy, 1 = Realloc new and return new pointer */
 char *make_virthost(aClient *sptr, char *curr, char *new, int mode)
 {
 char host[256], *mask, *x, *p, *q;
@@ -41,10 +41,12 @@ char host[256], *mask, *x, *p, *q;
 	*q = '\0';
 
 	/* Call the cloaking layer */
-	if (RCallbacks[CALLBACKTYPE_CLOAK_EX])
+	if (RCallbacks[CALLBACKTYPE_CLOAK_EX] != NULL)
 		mask = RCallbacks[CALLBACKTYPE_CLOAK_EX]->func.pcharfunc(sptr, host);
-	else
+	else if (RCallbacks[CALLBACKTYPE_CLOAK] != NULL)
 		mask = RCallbacks[CALLBACKTYPE_CLOAK]->func.pcharfunc(host);
+	else
+		mask = curr;
 
 	if (mode == 0)
 	{

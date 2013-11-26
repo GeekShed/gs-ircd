@@ -207,6 +207,7 @@ static int _OldOperFlags[] = {
 	OFLAG_UMODEQ, 'q',
 	OFLAG_DCCDENY, 'd',
 	OFLAG_ADDLINE, 'X',
+        OFLAG_TSCTL, 'T',
 	0, 0
 };
 
@@ -230,6 +231,7 @@ static OperFlag _OperFlags[] = {
 	{ OFLAG_REHASH,		"can_rehash" },
 	{ OFLAG_RESTART,        "can_restart" },
 	{ OFLAG_UMODEQ,		"can_setq" },
+	{ OFLAG_TSCTL,		"can_tsctl" },
 	{ OFLAG_UNKLINE,	"can_unkline" },
 	{ OFLAG_WALLOP,         "can_wallops" },
 	{ OFLAG_ZLINE,		"can_zline"},
@@ -246,13 +248,12 @@ static OperFlag _OperFlags[] = {
 
 /* This MUST be alphabetized */
 static OperFlag _ListenerFlags[] = {
-	{ LISTENER_CLIENTSONLY, "clientsonly"},
-	{ LISTENER_JAVACLIENT, 	"java"},
-	{ LISTENER_MASK, 	"mask"},
-	{ LISTENER_REMOTEADMIN, "remoteadmin"},
-	{ LISTENER_SERVERSONLY, "serversonly"},
-	{ LISTENER_SSL, 	"ssl"},
-	{ LISTENER_NORMAL, 	"standard"},
+	{ LISTENER_CLIENTSONLY,  "clientsonly"},
+	{ LISTENER_DEFER_ACCEPT, "defer-accept"},
+	{ LISTENER_JAVACLIENT, 	 "java"},
+	{ LISTENER_SERVERSONLY,  "serversonly"},
+	{ LISTENER_SSL, 	 "ssl"},
+	{ LISTENER_NORMAL, 	 "standard"},
 };
 
 /* This MUST be alphabetized */
@@ -262,7 +263,6 @@ static OperFlag _LinkFlags[] = {
 	{ CONNECT_NOHOSTCHECK, "nohostcheck" },
 	{ CONNECT_QUARANTINE, "quarantine"},
 	{ CONNECT_SSL,	"ssl"		  },
-	{ CONNECT_ZIP,	"zip"		  },
 };
 
 /* This MUST be alphabetized */
@@ -337,8 +337,8 @@ extern void 	win_log(char *format, ...);
 extern void		win_error();
 #endif
 extern void add_entropy_configfile(struct stat st, char *buf);
-extern void unload_all_unused_snomasks();
-extern void unload_all_unused_umodes();
+extern void unload_all_unused_snomasks(void);
+extern void unload_all_unused_umodes(void);
 extern void unload_all_unused_extcmodes(void);
 
 extern int charsys_test_language(char *name);
@@ -662,7 +662,6 @@ void set_channelmodes(char *modes, struct ChMode *store, int warn)
 		{
 			case 'f':
 			{
-#ifdef NEWCHFLOODPROT
 				char *myparam = param;
 
 				ChanFloodProt newf;
@@ -806,47 +805,6 @@ void set_channelmodes(char *modes, struct ChMode *store, int warn)
 					store->mode |= MODE_FLOODLIMIT;
 					break;
 				}
-#else
-				char *myparam = param;
-				char kmode = 0;
-				char *xp;
-				int msgs=0, per=0;
-				int hascolon = 0;
-				if (!myparam)
-					break;
-				/* Go to next parameter */
-				param = strtoken(&save, NULL, " ");
-
-				if (*myparam == '*')
-					kmode = 1;
-				for (xp = myparam; *xp; xp++)
-				{
-					if (*xp == ':')
-					{
-						hascolon++;
-						continue;
-					}
-					if (((*xp < '0') || (*xp > '9')) && *xp != '*')
-						break;
-					if (*xp == '*' && *myparam != '*')
-						break;
-				}
-				if (hascolon != 1)
-					break;
-				xp = strchr(myparam, ':');
-					*xp = 0;
-				msgs = atoi((*myparam == '*') ? (myparam+1) : myparam);
-				xp++;
-				per = atoi(xp);
-				xp--;
-				*xp = ':';
-				if (msgs == 0 || msgs > 500 || per == 0 || per > 500)
-					break;
-				store->msgs = msgs;
-				store->per = per;
-				store->kmode = kmode; 					     
-				store->mode |= MODE_FLOODLIMIT;
-#endif
 				break;
 			}
 			default:
@@ -863,7 +821,6 @@ void set_channelmodes(char *modes, struct ChMode *store, int warn)
 						break;
 					}
 				}
-#ifdef EXTCMODE
 				/* Try extcmodes */
 				if (!tab->mode)
 				{
@@ -890,28 +847,33 @@ void set_channelmodes(char *modes, struct ChMode *store, int warn)
 						}
 					}
 				}
-#endif
 		}
 	}
 	if (parambuf)
 		free(parambuf);
 }
 
-void chmode_str(struct ChMode modes, char *mbuf, char *pbuf)
+void chmode_str(struct ChMode modes, char *mbuf, char *pbuf, size_t mbuf_size, size_t pbuf_size)
 {
+        if (!(mbuf_size && pbuf_size)) return;
 	aCtab *tab;
 	int i;
 	*pbuf = 0;
 	*mbuf++ = '+';
+	if (--mbuf_size == 0) return;
 	for (tab = &cFlagTab[0]; tab->mode; tab++)
 	{
 		if (modes.mode & tab->mode)
 		{
-			if (!tab->parameters)
+			if (!tab->parameters) {
 				*mbuf++ = tab->flag;
+				if (!--mbuf_size) {
+					*--mbuf=0;
+					break;
+				}
+                        }
 		}
 	}
-#ifdef EXTCMODE
 	for (i=0; i <= Channelmode_highest; i++)
 	{
 		if (!(Channelmode_Table[i].flag))
@@ -919,33 +881,30 @@ void chmode_str(struct ChMode modes, char *mbuf, char *pbuf)
 	
 		if (modes.extmodes & Channelmode_Table[i].mode)
 		{
-			*mbuf++ = Channelmode_Table[i].flag;
+			if (mbuf_size) {
+				*mbuf++ = Channelmode_Table[i].flag;
+				if (!--mbuf_size) {
+					*--mbuf=0;
+					break;
+				}
+			}
 			if (Channelmode_Table[i].paracount)
 			{
-				strcat(pbuf, modes.extparams[i]);
-				strcat(pbuf, " ");
+				strncat(pbuf, modes.extparams[i], pbuf_size-1);
+				pbuf_size-=strlen(modes.extparams[i]);
+				if (!pbuf_size) break;
+				strncat(pbuf, " ", pbuf_size-1);
+				if (!--pbuf_size) break;
 			}
 		}
 	}
-#endif
-#ifdef NEWCHFLOODPROT
 	if (modes.floodprot.per)
 	{
-		*mbuf++ = 'f';
-		strcat(pbuf, channel_modef_string(&modes.floodprot));
+		if (!mbuf_size) return;
+		if (--mbuf_size) *mbuf++ = 'f';
+		if (pbuf_size) strncat(pbuf, channel_modef_string(&modes.floodprot), pbuf_size-1);
 	}
-#else
-	if (modes.per)
-	{
-		*mbuf++ = 'f';
-		if (modes.kmode)
-			strcat(pbuf, "*");
-		strcat(pbuf, my_itoa(modes.msgs));
-		strcat(pbuf, ":");
-		strcat(pbuf, my_itoa(modes.per));
-	}
-#endif
-	*mbuf++=0;
+	*mbuf=0;
 }
 
 int channellevel_to_int(char *s)
@@ -1420,7 +1379,7 @@ void config_error(char *format, ...)
 	char		*ptr;
 
 	va_start(ap, format);
-	vsprintf(buffer, format, ap);
+	vsnprintf(buffer, sizeof(buffer), format, ap);
 	va_end(ap);
 	if ((ptr = strchr(buffer, '\n')) != NULL)
 		*ptr = '\0';
@@ -1704,10 +1663,8 @@ void config_setdefaultsettings(aConfiguration *i)
 #ifdef NO_FLOOD_AWAY
 	i->away_count = 4; i->away_period = 120; /* awayflood protection: max 4 per 120s */
 #endif
-#ifdef NEWCHFLOODPROT
 	i->modef_default_unsettime = 0;
 	i->modef_max_unsettime = 60; /* 1 hour seems enough :p */
-#endif
 	i->ban_version_tkl_time = 86400; /* 1d */
 	i->spamfilter_ban_time = 86400; /* 1d */
 	i->spamfilter_ban_reason = strdup("Spam/advertising");
@@ -1731,6 +1688,7 @@ void config_setdefaultsettings(aConfiguration *i)
 #ifdef INET6
 	i->default_ipv6_clone_mask = 64;
 #endif /* INET6 */
+	i->nicklen = NICKLEN;
 }
 
 /* 1: needed for set::options::allow-part-if-shunned,
@@ -1820,39 +1778,19 @@ ConfigItem_log *ca = MyMallocEx(sizeof(ConfigItem_log));
 
 	ca->file = strdup("ircd.log");
 	ca->flags |= LOG_ERROR;
+	ca->logfd = -1;
 	AddListItem(ca, conf_log);
 }
 
 int isanyserverlinked(void)
 {
-int i;
-aClient *acptr;
-
-	for (i = LastSlot; i >= 0; i--)
-		if ((acptr = local[i]) && (acptr != &me) && IsServer(acptr))
-			return 1;
-
-	return 0;
+	return !list_empty(&server_list);
 }
 
 void applymeblock(void)
 {
 	if (!conf_me || !me.serv)
 		return; /* uh-huh? */
-	
-	/* Numeric change? */
-	if (conf_me->numeric != me.serv->numeric)
-	{
-		/* Can we apply ? */
-		if (!isanyserverlinked())
-		{
-			me.serv->numeric = conf_me->numeric;
-		} else {
-			config_warn("me::numeric: Numeric change detected, but change cannot be applied "
-			            "due to being linked to other servers. Unlink all servers and /REHASH to "
-			            "try again.");
-		}
-	}
 }
 
 int	init_conf(char *rootconf, int rehash)
@@ -1986,7 +1924,6 @@ int	init_conf(char *rootconf, int rehash)
 	do_weird_shun_stuff();
 	if (!conf_log)
 		make_default_logblock();
-	nextconnect = TStime() + 1; /* check for autoconnects */
 	config_status("Configuration loaded without any problems ..");
 	return 0;
 }
@@ -2404,6 +2341,8 @@ void	config_rehash()
 	}
 	for (log_ptr = conf_log; log_ptr; log_ptr = (ConfigItem_log *)next) {
 		next = (ListStruct *)log_ptr->next;
+		if (log_ptr->logfd != -1)
+			fd_close(log_ptr->logfd);
 		ircfree(log_ptr->file);
 		DelListItem(log_ptr, conf_log);
 		MyFree(log_ptr);
@@ -2413,7 +2352,7 @@ void	config_rehash()
 		ConfigItem_alias_format *fmt;
 		next = (ListStruct *)alias_ptr->next;		
 		ircfree(alias_ptr->nick);
-		del_Command(alias_ptr->alias, NULL, cmptr->func);
+		del_Command(alias_ptr->alias, cmptr->func);
 		ircfree(alias_ptr->alias);
 		if (alias_ptr->format && (alias_ptr->type == ALIAS_COMMAND)) {
 			for (fmt = (ConfigItem_alias_format *) alias_ptr->format; fmt; fmt = (ConfigItem_alias_format *) next2)
@@ -2464,13 +2403,11 @@ void	config_rehash()
 	}
 	conf_offchans = NULL;
 	
-#ifdef EXTCMODE
 	for (i = 0; i < EXTCMODETABLESZ; i++)
 	{
 		if (iConf.modes_on_join.extparams[i])
 			free(iConf.modes_on_join.extparams[i]);
 	}
-#endif
 
 	for (cgiirc_ptr = conf_cgiirc; cgiirc_ptr; cgiirc_ptr = (ConfigItem_cgiirc *) next)
 	{
@@ -2608,11 +2545,10 @@ int	config_run()
 	close_listeners();
 	listen_cleanup();
 	close_listeners();
-	loop.do_bancheck = 1;
 	free_iConf(&iConf);
 	bcopy(&tempiConf, &iConf, sizeof(aConfiguration));
 	bzero(&tempiConf, sizeof(aConfiguration));
-#ifdef THROTTLING
+
 	{
 		EventInfo eInfo;
 		long v;
@@ -2628,7 +2564,8 @@ int	config_run()
 		eInfo.every = v;
 		EventMod(EventFind("bucketcleaning"), &eInfo);
 	}
-#endif
+
+	check_tkls();
 
 	/* initialize conf_files with defaults if the block isn't set: */
 	if(!conf_files)
@@ -2798,18 +2735,14 @@ ConfigItem_oper	*Find_oper(char *name)
 
 int count_oper_sessions(char *name)
 {
-int i, count = 0;
-aClient *cptr;
+	int count = 0;
+	aClient *cptr;
 
-#ifdef NO_FDLIST
-	for (i = 0; i <= LastSlot; i++)
-#else
-int j;
-	for (i = oper_fdlist.entry[j = 1]; j <= oper_fdlist.last_entry; i = oper_fdlist.entry[++j])
-#endif
-		if ((cptr = local[i]) && IsPerson(cptr) && IsAnOper(cptr) &&
-		    cptr->user && cptr->user->operlogin && !strcmp(cptr->user->operlogin,name))
+	list_for_each_entry(cptr, &oper_list, special_node)
+	{
+		if (cptr->user->operlogin != NULL && !strcmp(cptr->user->operlogin, name))
 			count++;
+	}
 
 	return count;
 }
@@ -3012,7 +2945,7 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 		if (hp && hp->h_name)
 		{
 			hname = hp->h_name;
-			strncpyzt(fullname, hname, sizeof(fullname));
+			strlcpy(fullname, hname, sizeof(fullname));
 			add_local_domain(fullname, HOSTLEN - strlen(fullname));
 			Debug((DEBUG_DNS, "a_il: %s->%s", sockhost, fullname));
 			if (index(aconf->hostname, '@'))
@@ -3033,9 +2966,9 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 		if (index(aconf->ip, '@'))
 		{
 			if (aconf->flags.noident)
-				strncpyzt(uhost, username, sizeof(uhost));
+				strlcpy(uhost, username, sizeof(uhost));
 			else
-				strncpyzt(uhost, cptr->username, sizeof(uhost));
+				strlcpy(uhost, cptr->username, sizeof(uhost));
 			(void)strlcat(uhost, "@", sizeof(uhost));
 		}
 		else
@@ -3070,9 +3003,9 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 		if (!aconf->flags.noident)
 			cptr->flags |= FLAGS_DOID;
 		if (!aconf->flags.useip && hp) 
-			strncpyzt(uhost, fullname, sizeof(uhost));
+			strlcpy(uhost, fullname, sizeof(uhost));
 		else
-			strncpyzt(uhost, sockhost, sizeof(uhost));
+			strlcpy(uhost, sockhost, sizeof(uhost));
 		get_sockhost(cptr, uhost);
 #ifdef INET6
 		is_ipv4 = IN6_IS_ADDR_V4MAPPED(&cptr->ip);
@@ -3081,19 +3014,22 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 		/* FIXME */
 		if (aconf->maxperip)
 		{
+			aClient *acptr, *acptr2;
+
 			ii = 1;
-			for (i = LastSlot; i >= 0; i--)
-				if (local[i] && MyClient(local[i])
+			list_for_each_entry_safe(acptr, acptr2, &lclient_list, lclient_node)
+			{
+				if (
 #ifndef INET6
-				    && local[i]->ip.S_ADDR == cptr->ip.S_ADDR)
+				    acptr->ip.S_ADDR == cptr->ip.S_ADDR)
 #else
 				    /*
 				     * match IPv4 exactly and the ipv6
 				     * based on ipv6_clone_mask.
 				     */
-				    && (is_ipv4
-					? !bcmp(local[i]->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR))
-					: match_ipv6(&local[i]->ip, &cptr->ip, aconf->ipv6_clone_mask)))
+				    (is_ipv4
+					? !bcmp(acptr->ip.S_ADDR, cptr->ip.S_ADDR, sizeof(cptr->ip.S_ADDR))
+					: match_ipv6(&acptr->ip, &cptr->ip, aconf->ipv6_clone_mask)))
 						
 #endif
 				{
@@ -3105,6 +3041,7 @@ int	AllowClient(aClient *cptr, struct hostent *hp, char *sockhost, char *usernam
 						return -5;	/* Already got one with that ip# */
 					}
 				}
+			}
 		}
 		if ((i = Auth_Check(cptr, aconf->auth, cptr->passwd)) == -1)
 		{
@@ -3185,13 +3122,13 @@ char *pretty_time_val(long timeval)
 	buf[0] = 0;
 
 	if (timeval/86400)
-		sprintf(buf, "%ld day%s ", timeval/86400, timeval/86400 != 1 ? "s" : "");
+		snprintf(buf, sizeof(buf), "%ld day%s ", timeval/86400, timeval/86400 != 1 ? "s" : "");
 	if ((timeval/3600) % 24)
-		sprintf(buf, "%s%ld hour%s ", buf, (timeval/3600)%24, (timeval/3600)%24 != 1 ? "s" : "");
+		snprintf(buf, sizeof(buf), "%s%ld hour%s ", buf, (timeval/3600)%24, (timeval/3600)%24 != 1 ? "s" : "");
 	if ((timeval/60)%60)
-		sprintf(buf, "%s%ld minute%s ", buf, (timeval/60)%60, (timeval/60)%60 != 1 ? "s" : "");
+		snprintf(buf, sizeof(buf), "%s%ld minute%s ", buf, (timeval/60)%60, (timeval/60)%60 != 1 ? "s" : "");
 	if ((timeval%60))
-		sprintf(buf, "%s%ld second%s", buf, timeval%60, timeval%60 != 1 ? "s" : "");
+		snprintf(buf, sizeof(buf), "%s%ld second%s", buf, timeval%60, timeval%60 != 1 ? "s" : "");
 	return buf;
 }
 
@@ -3250,7 +3187,7 @@ int	_conf_include(ConfigFile *conf, ConfigEntry *ce)
 #elif defined(_WIN32)
 	bzero(cPath,MAX_PATH);
 	if (strchr(ce->ce_vardata, '/') || strchr(ce->ce_vardata, '\\')) {
-		strncpyzt(cPath,ce->ce_vardata,MAX_PATH);
+		strlcpy(cPath,ce->ce_vardata,MAX_PATH);
 		cSlash=cPath+strlen(cPath);
 		while(*cSlash != '\\' && *cSlash != '/' && cSlash > cPath)
 			cSlash--; 
@@ -3378,9 +3315,9 @@ int	_conf_me(ConfigFile *conf, ConfigEntry *ce)
 		{
 			ircstrdup(conf_me->info, cep->ce_vardata);
 		}
-		else if (!strcmp(cep->ce_varname, "numeric"))
+		else if (!strcmp(cep->ce_varname, "sid"))
 		{
-			conf_me->numeric = atol(cep->ce_vardata);
+			ircstrdup(conf_me->sid, cep->ce_vardata);
 		}
 	}
 	return 1;
@@ -3388,7 +3325,7 @@ int	_conf_me(ConfigFile *conf, ConfigEntry *ce)
 
 int	_test_me(ConfigFile *conf, ConfigEntry *ce)
 {
-	char has_name = 0, has_info = 0, has_numeric = 0;
+	char has_name = 0, has_info = 0, has_sid = 0;
 	ConfigEntry *cep;
 	int	    errors = 0;
 
@@ -3471,18 +3408,27 @@ int	_test_me(ConfigFile *conf, ConfigEntry *ce)
 				errors++;
 			}
 		}
-		/* me::numeric */
-		else if (!strcmp(cep->ce_varname, "numeric"))
+		else if (!strcmp(cep->ce_varname, "sid"))
 		{
-			long l;
-
-			has_numeric = 1;
-			l = atol(cep->ce_vardata);
-			if ((l < 0) || (l > 254))
+			if (has_sid)
 			{
-				config_error("%s:%i: illegal me::numeric error (must be between 0 and 254)",
-					cep->ce_fileptr->cf_filename,
-					cep->ce_varlinenum);
+				config_warn_duplicate(cep->ce_fileptr->cf_filename,
+					cep->ce_varlinenum, "me::sid");
+				continue;
+			}
+			has_sid = 1;
+
+			if (strlen(cep->ce_vardata) != 3)
+			{
+				config_error("%s:%i: me::sid must be 3 characters long and begin with a number",
+					cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
+				errors++;
+			}
+
+			if (!isdigit(*cep->ce_vardata))
+			{
+				config_error("%s:%i: me::sid must be 3 characters long and begin with a number",
+					cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
 				errors++;
 			}
 		}
@@ -3504,10 +3450,9 @@ int	_test_me(ConfigFile *conf, ConfigEntry *ce)
 		config_error_missing(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "me::info");
 		errors++;
 	}
-	if (!has_numeric)
+	if (!has_sid)
 	{
-		config_error_missing(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, 
-			"me::numeric");
+		config_error_missing(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "me::sid");
 		errors++;
 	}
 	requiredstuff.conf_me = 1;
@@ -4698,6 +4643,7 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 			listen = MyMallocEx(sizeof(ConfigItem_listen));
 			listen->ip = strdup(ip);
 			listen->port = iport;
+			listen->fd = -1;
 			isnew = 1;
 		} else
 			isnew = 0;
@@ -5377,7 +5323,6 @@ int     _conf_except(ConfigFile *conf, ConfigEntry *ce)
 			}
 		}
 	}
-#ifdef THROTTLING
 	else if (!strcmp(ce->ce_vardata, "throttle")) {
 		for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 		{
@@ -5398,7 +5343,6 @@ int     _conf_except(ConfigFile *conf, ConfigEntry *ce)
 		}
 
 	}
-#endif
 	else if (!strcmp(ce->ce_vardata, "tkl")) {
 		ConfigEntry *mask = NULL, *type = NULL;
 		for (cep = ce->ce_entries; cep; cep = cep->ce_next)
@@ -5478,7 +5422,6 @@ int     _test_except(ConfigFile *conf, ConfigEntry *ce)
 		}
 		return errors;
 	}
-#ifdef THROTTLING
 	else if (!strcmp(ce->ce_vardata, "throttle")) {
 		for (cep = ce->ce_entries; cep; cep = cep->ce_next)
 		{
@@ -5513,7 +5456,6 @@ int     _test_except(ConfigFile *conf, ConfigEntry *ce)
 		}
 		return errors;
 	}
-#endif
 	else if (!strcmp(ce->ce_vardata, "tkl")) {
 		char has_type = 0;
 
@@ -5925,9 +5867,7 @@ int     _conf_badword(ConfigFile *conf, ConfigEntry *ce)
 	char *tmp;
 	short regex = 0;
 	int regflags = 0;
-#ifdef FAST_BADWORD_REPLACE
 	int ast_l = 0, ast_r = 0;
-#endif
 
 	ca = MyMallocEx(sizeof(ConfigItem_badword));
 	ca->action = BADWORD_REPLACE;
@@ -5953,7 +5893,6 @@ int     _conf_badword(ConfigFile *conf, ConfigEntry *ce)
 		else if (!strcmp(cep->ce_varname, "word"))
 			word = cep;
 	}
-#ifdef FAST_BADWORD_REPLACE
 	/* The fast badwords routine can do: "blah" "*blah" "blah*" and "*blah*",
 	 * in all other cases use regex.
 	 */
@@ -5971,7 +5910,7 @@ int     _conf_badword(ConfigFile *conf, ConfigEntry *ce)
 			break;
 		}
 	}
-	if (regex) 
+	if (regex)
 	{
 		ca->type = BADW_TYPE_REGEX;
 		ircstrdup(ca->word, word->ce_vardata);
@@ -5992,29 +5931,6 @@ int     _conf_badword(ConfigFile *conf, ConfigEntry *ce)
 		if (ast_r)
 			ca->type |= BADW_TYPE_FAST_R;
 	}
-#else
-	for (tmp = word->ce_vardata; *tmp; tmp++)
-	{
-		if (!isalnum(*tmp) && !(*tmp >= 128))
-		{
-			regex = 1;
-			break;
-		}
-	}
-	if (regex)
-	{
-		ircstrdup(ca->word, word->ce_vardata);
-	}
-	else
-	{
-		ca->word = MyMalloc(strlen(word->ce_vardata) + strlen(PATTERN) -1);
-		ircsprintf(ca->word, PATTERN, word->ce_vardata);
-	}
-	/* Yes this is called twice, once in test, and once here, but it is still MUCH
-	   faster than calling it each time a message is received like before. -- codemastr
-	 */
-	regcomp(&ca->expr, ca->word, regflags);
-#endif
 	if (!strcmp(ce->ce_vardata, "channel"))
 		AddListItem(ca, conf_badword_channel);
 	else if (!strcmp(ce->ce_vardata, "message"))
@@ -6180,7 +6096,7 @@ int _conf_spamfilter(ConfigFile *conf, ConfigEntry *ce)
 	nl->expire_at = 0;
 	nl->set_at = TStime();
 
-	strncpyzt(nl->usermask, spamfilter_target_inttostring(target), sizeof(nl->usermask));
+	strlcpy(nl->usermask, spamfilter_target_inttostring(target), sizeof(nl->usermask));
 	nl->subtype = target;
 
 	nl->setby = BadPtr(me.name) ? NULL : strdup(me.name); /* Hmm! */
@@ -6424,6 +6340,7 @@ int     _conf_log(ConfigFile *conf, ConfigEntry *ce)
 	OperFlag *ofp = NULL;
 
 	ca = MyMallocEx(sizeof(ConfigItem_log));
+	ca->logfd = -1;
 	ircstrdup(ca->file, ce->ce_vardata);
 
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
@@ -6447,7 +6364,7 @@ int     _conf_log(ConfigFile *conf, ConfigEntry *ce)
 }
 
 int _test_log(ConfigFile *conf, ConfigEntry *ce) { 
-	int errors = 0;
+	int fd, errors = 0;
 	ConfigEntry *cep, *cepp;
 	char has_flags = 0, has_maxsize = 0;
 
@@ -6535,9 +6452,18 @@ int _test_log(ConfigFile *conf, ConfigEntry *ce) {
 			"log::flags");
 		errors++;
 	}
-	return errors; 
-}
+	if ((fd = fd_fileopen(ce->ce_vardata, O_WRONLY)) == -1)
+	{
+		config_error("%s:%i: Couldn't open logfile (%s) for writing: %s",
+			ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+			ce->ce_vardata, strerror(errno));
+		errors++;
+	}
+	else
+		fd_close(fd);
 
+	return errors;
+}
 
 int	_conf_link(ConfigFile *conf, ConfigEntry *ce)
 {
@@ -6595,10 +6521,6 @@ int	_conf_link(ConfigFile *conf, ConfigEntry *ce)
 		else if (!strcmp(cep->ce_varname, "ciphers"))
 			link->ciphers = strdup(cep->ce_vardata);
 #endif
-#ifdef ZIP_LINKS
-		else if (!strcmp(cep->ce_varname, "compression-level"))
-			link->compression_level = atoi(cep->ce_vardata);
-#endif
 	}
 	AddListItem(link, conf_link);
 	return 0;
@@ -6615,9 +6537,6 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 	char has_options = 0;
 	char has_autoconnect = 0;
 	char has_hostname_wildcards = 0;
-#ifdef ZIP_LINKS
-	char has_compressionlevel = 0;
-#endif
 	if (!ce->ce_vardata)
 	{
 		config_error("%s:%i: link without servername",
@@ -6659,6 +6578,12 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 					errors++; 
 					continue;
 				}
+				if (!stricmp(cepp->ce_varname, "zip"))
+				{
+					config_warn("%s:%i: link %s with deprecated zip option, compression is included with SSL linking",
+						cep->ce_fileptr->cf_filename, cep->ce_varlinenum, ce->ce_vardata);
+					continue;
+				}
 				if (!(ofp = config_binary_flags_search(_LinkFlags, cepp->ce_varname, ARRAY_SIZEOF(_LinkFlags)))) 
 				{
 					config_error_unknownopt(cepp->ce_fileptr->cf_filename,
@@ -6674,14 +6599,6 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 					errors++;
 				}
 #endif
-#ifndef ZIP_LINKS
-				if (ofp->flag == CONNECT_ZIP)
-				{
-					config_error("%s:%i: link %s with ZIP option enabled on a non-ZIP compile",
-						cep->ce_fileptr->cf_filename, cep->ce_varlinenum, ce->ce_vardata);
-					errors++;
-				}
-#endif				
 				if (ofp->flag == CONNECT_AUTO)
 				{
 					has_autoconnect = 1;
@@ -6870,24 +6787,6 @@ int	_test_link(ConfigFile *conf, ConfigEntry *ce)
 			}
 			has_ciphers = 1;
 		}
-#ifdef ZIP_LINKS
-		else if (!strcmp(cep->ce_varname, "compression-level"))
-		{
-			if (has_compressionlevel)
-			{
-				config_warn_duplicate(cep->ce_fileptr->cf_filename, 
-					cep->ce_varlinenum, "link::compression-level");
-				continue;
-			}
-			has_compressionlevel = 1;
-			if ((atoi(cep->ce_vardata) < 1) || (atoi(cep->ce_vardata) > 9))
-			{
-				config_error("%s:%i: compression-level should be in range 1..9",
-					cep->ce_fileptr->cf_filename, cep->ce_varlinenum);
-				errors++;
-			}
-		}
-#endif
 		else
 		{
 			config_error_unknown(cep->ce_fileptr->cf_filename, cep->ce_varlinenum,
@@ -7466,7 +7365,7 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 			{
 				char tmpbuf[512];
 				IsupportSetValue(IsupportFind("MAXCHANNELS"), cep->ce_vardata);
-				ircsprintf(tmpbuf, "#:%s", cep->ce_vardata);
+				ircsnprintf(tmpbuf, sizeof(tmpbuf), "#:%s", cep->ce_vardata);
 				IsupportSetValue(IsupportFind("CHANLIMIT"), tmpbuf);
 			}
 		}
@@ -7527,7 +7426,6 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 				}
 			}
 		}
-#ifdef THROTTLING
 		else if (!strcmp(cep->ce_varname, "throttle")) {
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
 				if (!strcmp(cepp->ce_varname, "period")) 
@@ -7536,7 +7434,6 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 					tempiConf.throttle_count = atoi(cepp->ce_vardata);
 			}
 		}
-#endif
 		else if (!strcmp(cep->ce_varname, "anti-flood")) {
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
 				if (!strcmp(cepp->ce_varname, "unknown-flood-bantime")) 
@@ -7576,9 +7473,6 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 				}
 				else if (!strcmp(cepp->ce_varname, "flat-map")) {
 					tempiConf.flat_map = 1;
-				}
-				else if (!strcmp(cepp->ce_varname, "no-stealth")) {
-					tempiConf.no_oper_hiding = 1;
 				}
 				else if (!strcmp(cepp->ce_varname, "show-opermotd")) {
 					tempiConf.som = 1;
@@ -7714,7 +7608,6 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 		{
 			tempiConf.ban_version_tkl_time = config_checkval(cep->ce_vardata,CFG_TIME);
 		}
-#ifdef NEWCHFLOODPROT
 		else if (!strcmp(cep->ce_varname, "modef-default-unsettime")) {
 			int v = atoi(cep->ce_vardata);
 			tempiConf.modef_default_unsettime = (unsigned char)v;
@@ -7723,7 +7616,12 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 			int v = atoi(cep->ce_vardata);
 			tempiConf.modef_max_unsettime = (unsigned char)v;
 		}
-#endif
+		else if (!strcmp(cep->ce_varname, "nick-length")) {
+			int v = atoi(cep->ce_vardata);
+			tempiConf.nicklen = v;
+			if (loop.ircd_booted)
+				IsupportSetValue(IsupportFind("NICKLEN"), cep->ce_vardata);
+		}
 		else if (!strcmp(cep->ce_varname, "ssl")) {
 #ifdef USE_SSL
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
@@ -7735,6 +7633,10 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 				else if (!strcmp(cepp->ce_varname, "server-cipher-list"))
 				{
 					ircstrdup(tempiConf.x_server_cipher_list, cepp->ce_vardata);
+				}
+				else if (!strcmp(cepp->ce_varname, "dh"))
+				{
+					ircstrdup(tempiConf.x_dh_pem, cepp->ce_vardata);
 				}
 				else if (!strcmp(cepp->ce_varname, "certificate"))
 				{
@@ -7766,7 +7668,7 @@ int	_conf_set(ConfigFile *conf, ConfigEntry *ce)
 							tempiConf.ssl_options |= ofl->flag;
 					}
 					if (tempiConf.ssl_options & SSLFLAG_DONOTACCEPTSELFSIGNED)
-						if (!tempiConf.ssl_options & SSLFLAG_VERIFYCERT)
+						if (!(tempiConf.ssl_options & SSLFLAG_VERIFYCERT))
 							tempiConf.ssl_options |= SSLFLAG_VERIFYCERT;
 				}	
 				
@@ -8210,7 +8112,6 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				}
 			}
 		}
-#ifdef THROTTLING
 		else if (!strcmp(cep->ce_varname, "throttle")) {
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
 				CheckNull(cepp);
@@ -8247,7 +8148,6 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				}
 			}
 		}
-#endif
 		else if (!strcmp(cep->ce_varname, "anti-flood")) {
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
 				CheckNull(cepp);
@@ -8651,7 +8551,6 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				errors++;
 			}
 		}
-#ifdef NEWCHFLOODPROT
 		else if (!strcmp(cep->ce_varname, "modef-default-unsettime")) {
 			int v;
 			CheckDuplicate(cep, modef_default_unsettime, "modef-default-unsettime");
@@ -8676,7 +8575,18 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				errors++;
 			}
 		}
-#endif
+		else if (!strcmp(cep->ce_varname, "nick-length")) {
+			int v;
+			CheckDuplicate(cep, nicklen, "nick-length");
+			CheckNull(cep);
+			v = atoi(cep->ce_vardata);
+			if ((v <= 0) || (v > NICKLEN))
+			{
+				config_error("%s:%i: set::nick-length: value '%d' out of range (should be 1-%d)",
+					cep->ce_fileptr->cf_filename, cep->ce_varlinenum, v, NICKLEN);
+				errors++;
+			}
+		}
 		else if (!strcmp(cep->ce_varname, "ssl")) {
 #ifdef USE_SSL
 			for (cepp = cep->ce_entries; cepp; cepp = cepp->ce_next) {
@@ -8700,6 +8610,11 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 				{
 					CheckNull(cepp);
 					CheckDuplicate(cep, ssl_certificate, "ssl::certificate");
+				}
+				else if (!strcmp(cepp->ce_varname, "dh"))
+				{
+					CheckNull(cepp);
+					CheckDuplicate(cep, ssl_dh, "ssl::dh");
 				}
 				else if (!strcmp(cepp->ce_varname, "key"))
 				{
@@ -8799,14 +8714,6 @@ int	_test_set(ConfigFile *conf, ConfigEntry *ce)
 
 int	_conf_loadmodule(ConfigFile *conf, ConfigEntry *ce)
 {
-#ifdef GLOBH
-	glob_t files;
-	int i;
-#elif defined(_WIN32)
-	HANDLE hFind;
-	WIN32_FIND_DATA FindData;
-	char cPath[MAX_PATH], *cSlash = NULL, *path;
-#endif
 	char *ret;
 	if (!ce->ce_vardata)
 	{
@@ -8814,103 +8721,12 @@ int	_conf_loadmodule(ConfigFile *conf, ConfigEntry *ce)
 			ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
 		return -1;
 	}
-#ifdef GLOBH
-#if defined(__OpenBSD__) && defined(GLOB_LIMIT)
-	glob(ce->ce_vardata, GLOB_NOSORT|GLOB_NOCHECK|GLOB_LIMIT, NULL, &files);
-#else
-	glob(ce->ce_vardata, GLOB_NOSORT|GLOB_NOCHECK, NULL, &files);
-#endif
-	if (!files.gl_pathc) {
-		globfree(&files);
-		config_status("%s:%i: loadmodule %s: failed to load",
-			ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-			ce->ce_vardata);
-		return -1;
-	}	
-	for (i = 0; i < files.gl_pathc; i++) {
-		if ((ret = Module_Create(files.gl_pathv[i]))) {
-			config_status("%s:%i: loadmodule %s: failed to load: %s",
-				ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-				files.gl_pathv[i], ret);
-			return -1;
-		}
-	}
-	globfree(&files);
-#elif defined(_WIN32)
-	bzero(cPath,MAX_PATH);
-	if (strchr(ce->ce_vardata, '/') || strchr(ce->ce_vardata, '\\')) {
-		strncpyzt(cPath,ce->ce_vardata,MAX_PATH);
-		cSlash=cPath+strlen(cPath);
-		while(*cSlash != '\\' && *cSlash != '/' && cSlash > cPath)
-			cSlash--; 
-		*(cSlash+1)=0;
-	}
-	hFind = FindFirstFile(ce->ce_vardata, &FindData);
-	if (!FindData.cFileName || hFind == INVALID_HANDLE_VALUE) {
-		config_status("%s:%i: loadmodule %s: failed to load",
-			ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-			ce->ce_vardata);
-		FindClose(hFind);
-		return -1;
-	}
-
-	if (cPath) {
-		path = MyMalloc(strlen(cPath) + strlen(FindData.cFileName)+1);
-		strcpy(path,cPath);
-		strcat(path,FindData.cFileName);
-		if ((ret = Module_Create(path))) {
-			config_status("%s:%i: loadmodule %s: failed to load: %s",
-				ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-				path, ret);
-			free(path);
-			return -1;
-		}
-		free(path);
-	}
-	else
-	{
-		if ((ret = Module_Create(FindData.cFileName))) {
-			config_status("%s:%i: loadmodule %s: failed to load: %s",
-				ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-				FindData.cFileName, ret);
-			return -1;
-		}
-	}
-	while (FindNextFile(hFind, &FindData) != 0) {
-		if (cPath) {
-			path = MyMalloc(strlen(cPath) + strlen(FindData.cFileName)+1);
-			strcpy(path,cPath);
-			strcat(path,FindData.cFileName);		
-			if ((ret = Module_Create(path)))
-			{
-				config_status("%s:%i: loadmodule %s: failed to load: %s",
-					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-					FindData.cFileName, ret);
-				free(path);
-				return -1;
-			}
-			free(path);
-		}
-		else
-		{
-			if ((ret = Module_Create(FindData.cFileName)))
-			{
-				config_status("%s:%i: loadmodule %s: failed to load: %s",
-					ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-					FindData.cFileName, ret);
-				return -1;
-			}
-		}
-	}
-	FindClose(hFind);
-#else
 	if ((ret = Module_Create(ce->ce_vardata))) {
-			config_status("%s:%i: loadmodule %s: failed to load: %s",
-				ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
-				ce->ce_vardata, ret);
-				return -1;
+		config_status("%s:%i: loadmodule %s: failed to load: %s",
+			ce->ce_fileptr->cf_filename, ce->ce_varlinenum,
+			ce->ce_vardata, ret);
+		return -1;
 	}
-#endif
 	return 1;
 }
 
@@ -8937,15 +8753,6 @@ void	run_configuration(void)
 			}
 				else
 			{
-			}
-		}
-		else
-		{
-			if (listenptr->listener)
-			{
-				listenptr->listener->umodes = 
-					(listenptr->options & ~LISTENER_BOUND) ? listenptr->options : LISTENER_NORMAL;
-				listenptr->listener->umodes |= LISTENER_BOUND;
 			}
 		}
 	}
@@ -9038,7 +8845,7 @@ int	_conf_alias(ConfigFile *conf, ConfigEntry *ce)
 	aCommand *cmptr;
 
 	if ((cmptr = find_Command(ce->ce_vardata, 0, M_ALIAS)))
-		del_Command(ce->ce_vardata, NULL, cmptr->func);
+		del_Command(ce->ce_vardata, cmptr->func);
 	if (find_Command_simple(ce->ce_vardata))
 	{
 		config_warn("%s:%i: Alias '%s' would conflict with command (or server token) '%s', alias not added.",
@@ -9103,7 +8910,7 @@ int	_conf_alias(ConfigFile *conf, ConfigEntry *ce)
 	if (BadPtr(alias->nick) && alias->type != ALIAS_COMMAND) {
 		ircstrdup(alias->nick, alias->alias); 
 	}
-	add_CommandX(alias->alias, NULL, m_alias, 1, M_USER|M_ALIAS);
+	add_CommandX(alias->alias, m_alias, 1, M_USER|M_ALIAS);
 	AddListItem(alias, conf_alias);
 	return 0;
 }
@@ -9911,7 +9718,6 @@ int     rehash(aClient *cptr, aClient *sptr, int sig)
 
 int	rehash_internal(aClient *cptr, aClient *sptr, int sig)
 {
-	flush_connections(&me);
 	if (sig == 1)
 	{
 		sendto_ops("Got signal SIGHUP, reloading %s file", configfile);

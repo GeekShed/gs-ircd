@@ -49,7 +49,6 @@
 DLLFUNC int m_svsnoop(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSNOOP 	"SVSNOOP"	
-#define TOK_SVSNOOP 	"f"
 
 
 ModuleHeader MOD_HEADER(m_svsnoop)
@@ -63,7 +62,7 @@ ModuleHeader MOD_HEADER(m_svsnoop)
 
 DLLFUNC int MOD_INIT(m_svsnoop)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSNOOP, TOK_SVSNOOP, m_svsnoop, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSNOOP, m_svsnoop, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -75,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_svsnoop)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svsnoop)(int module_unload)
 {
-	if (del_Command(MSG_SVSNOOP, TOK_SVSNOOP, m_svsnoop) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svsnoop).name);
-	}
 	return MOD_SUCCESS;
 }
 int m_svsnoop(aClient *cptr, aClient *sptr, int parc, char *parv[])
@@ -90,14 +84,13 @@ long oldumodes;
 	if (!(IsULine(sptr) && parc > 2))
 		return 0;
 	/* svsnoop bugfix --binary */
-	if (hunt_server_token(cptr, sptr, MSG_SVSNOOP, TOK_SVSNOOP, "%s :%s", 1,
-	                      parc, parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s SVSNOOP %s :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		if (parv[2][0] == '+')
 		{
 			SVSNOOP = 1;
 			sendto_ops("This server has been placed in NOOP mode");
-			for (acptr = &me; acptr; acptr = acptr->prev)
+			list_for_each_entry(acptr, &client_list, client_node)
 			{
 				if (MyClient(acptr) && IsAnOper(acptr))
 				{
@@ -106,8 +99,10 @@ long oldumodes;
 						IRCstats.operators--;
 						VERIFY_OPERCOUNT(acptr, "svsnoop");
 					}
-					if (IsAnOper(acptr))
-						delfrom_fdlist(acptr->slot, &oper_fdlist);
+
+					if (!list_empty(&acptr->special_node))
+						list_del(&acptr->special_node);
+
 					oldumodes = acptr->umodes;
 					acptr->umodes &= ~(UMODE_OPER | UMODE_LOCOP | UMODE_HELPOP |
 					                   UMODE_SERVICES | UMODE_SADMIN | UMODE_ADMIN |

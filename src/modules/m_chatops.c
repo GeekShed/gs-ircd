@@ -47,7 +47,6 @@
 DLLFUNC int m_chatops(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_CHATOPS 	"CHATOPS"	
-#define TOK_CHATOPS 	"p"	
 
 ModuleHeader MOD_HEADER(m_chatops)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_chatops)
 
 DLLFUNC int MOD_INIT(m_chatops)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_CHATOPS, TOK_CHATOPS, m_chatops, 1);
+	CommandAdd(modinfo->handle, MSG_CHATOPS, m_chatops, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_chatops)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_chatops)(int module_unload)
 {
-	if (del_Command(MSG_CHATOPS, TOK_CHATOPS, m_chatops) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_chatops).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -104,11 +98,9 @@ DLLFUNC CMD_FUNC(m_chatops)
 		return 0;
 	}
 
-	sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL,
-	    parv[0], MSG_CHATOPS, TOK_CHATOPS, ":%s", message);
-		sendto_umode(UMODE_OPER, "*** ChatOps -- from %s: %s",
-		    parv[0], message);
-		sendto_umode(UMODE_LOCOP, "*** ChatOps -- from %s: %s",
-		    parv[0], message);
+	sendto_server(IsServer(cptr) ? cptr : NULL, 0, 0, ":%s CHATOPS :%s",
+	    parv[0], message);
+	sendto_umode(UMODE_OPER, "*** ChatOps -- from %s: %s", parv[0], message);
+	sendto_umode(UMODE_LOCOP, "*** ChatOps -- from %s: %s", parv[0], message);
 	return 0;
 }

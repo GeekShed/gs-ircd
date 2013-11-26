@@ -71,13 +71,35 @@
 #undef NO_FDLIST
 
 /*
- * Defining this will enable poll() usage instead of select().
- * This is the default on *NIX as of 3.2.10.
- * On Windows this would require Vista or newer so we stick with
- * select for now.
+ * So, the way this works is we determine using the preprocessor
+ * what polling backend to use for the eventloop.  We prefer epoll,
+ * followed by kqueue, followed by poll, and then finally select.
+ * Kind of ugly, but it gets the job done.  You can also fiddle with
+ * this to determine what backend is used.
  */
 #ifndef _WIN32
-#define USE_POLL
+# ifdef HAVE_EPOLL
+#  define BACKEND_EPOLL
+# else
+#  ifdef HAVE_KQUEUE
+#   define BACKEND_KQUEUE
+#  else
+#   ifdef HAVE_POLL
+#    define BACKEND_POLL
+#   else
+#    define BACKEND_SELECT
+#   endif
+#  endif
+# endif
+#else
+# define BACKEND_SELECT
+#endif
+
+/* Define the ircd module suffix, should be .so on UNIX, and .dll on Windows. */
+#ifndef _WIN32
+# define MODULE_SUFFIX	".so"
+#else
+# define MODULE_SUFFIX	".dll"
 #endif
 
 /*
@@ -138,14 +160,6 @@
 #undef STRIPBADWORDS_CHAN_ALWAYS
 
 /*
- * THROTTLING
- *   This will only allow 1 connection per ip in set::throttle::period time
- * NOTE: There's no reason to disable this (anymore) since it can be fully
- *       configured in the unrealircd.conf. Keep the define...
- */
-#define THROTTLING
-
-/*
  * No spoof code
  *
  * This enables the spoof protection.
@@ -163,11 +177,6 @@
  *		 it will strip characters that are not 0-9,a-z,A-Z,_,- or .
  */
 #define HOSTILENAME		/* [DO NOT CHANGE!] */
-
-/*
- * Use JOIN instead of SJOIN on every remotely sent JOIN
-*/
-#undef JOIN_INSTEAD_OF_SJOIN_ON_REMOTEJOIN
 
 /*
  * So called 'smart' banning: if this is enabled and a ban on like *!*@*h.com is present,
@@ -317,15 +326,6 @@
 #undef FAKELAG_CONFIGURABLE
 
 /*
- * Size of the LISTEN request.  Some machines handle this large
- * without problem, but not all.  It defaults to 5, but can be
- * raised if you know your machine handles it.
- */
-#ifndef LISTEN_SIZE
-#define LISTEN_SIZE 5
-#endif
-
-/*
  * Max amount of internal send buffering when socket is stuck (bytes)
  */
 #ifndef MAXSENDQLENGTH
@@ -463,30 +463,6 @@
  * automaticly to switch for the current nick of that user. (seconds)
  */
 #define KILLCHASETIMELIMIT 90	/* Recommended value: 90 */
-
-/*
- * Use much faster badwords replace routine (>100 times faster).
- * Disabling this is not supported.
- */
-#define FAST_BADWORD_REPLACE
-
-/*
- * Forces Unreal to use compressed IPv6 addresses rather than expanding them
- */
-#undef IPV6_COMPRESSED
-
-/*
- * Extended channel modes. This extends the channel modes with yet another
- * 32 possible modes which can also be used in modules.
- * This is now pretty much required.
- */
-#define EXTCMODE
-
-/*
- * New channelmode +f system which allows flood control for:
- * msgs, joins, ctcps, nickchanges and /knock.
- */
-#define NEWCHFLOODPROT
 
 /* JoinThrottle (chanmode +j): +j x:y throttles users to X joins per Y seconds (per-user).
  * In peak situations (eg: just after a server restart with thousand clients joining

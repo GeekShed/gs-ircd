@@ -1,4 +1,4 @@
-/*
+ /*
  *   Unreal Internet Relay Chat Daemon, src/socket.c
  *   Copyright (C) 1990 Jarkko Oikarinen and
  *                      University of Oulu, Computing Center
@@ -31,10 +31,6 @@ extern int errno;		/* ...seems that errno.h doesn't define this everywhere */
 #ifndef _WIN32
 #include <sys/socket.h>
 #endif
-#ifdef DEBUGMODE
-int  writecalls = 0, writeb[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
-#endif
-	
 
 /*
 ** deliver_it
@@ -61,14 +57,7 @@ int  writecalls = 0, writeb[10] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 int  deliver_it(aClient *cptr, char *str, int len)
 {
 	int  retval;
-	aClient *acpt = cptr->listener;
 
-#ifdef	DEBUGMODE
-	writecalls++;
-#endif
-#ifdef VMS
-	retval = netwrite(cptr->fd, str, len);
-#else
 	if (IsDead(cptr) || (!IsServer(cptr) && !IsPerson(cptr)
 	    && !IsHandshake(cptr) 
 #ifdef USE_SSL
@@ -85,8 +74,30 @@ int  deliver_it(aClient *cptr, char *str, int len)
 	}
 
 #ifdef USE_SSL
-	if (cptr->flags & FLAGS_SSL)
-		 retval = ircd_SSL_write(cptr, str, len);	
+	if (IsSSL(cptr) && cptr->ssl != NULL)
+	{
+		retval = SSL_write(cptr->ssl, str, len);
+
+		if (retval < 0)
+		{
+			switch (SSL_get_error(cptr->ssl, retval))
+			{
+			case SSL_ERROR_WANT_READ:
+				/* retry later */
+				return 0;
+			case SSL_ERROR_WANT_WRITE:
+				SET_ERRNO(P_EWOULDBLOCK);
+				break;
+			case SSL_ERROR_SYSCALL:
+				break;
+			case SSL_ERROR_SSL:
+				if (ERRNO == P_EAGAIN)
+					break;
+			default:
+				return 0;
+			}
+		}
+	}
 	else
 #endif
 		retval = send(cptr->fd, str, len, 0);
@@ -105,42 +116,8 @@ int  deliver_it(aClient *cptr, char *str, int len)
 		if (retval < 0 && (WSAGetLastError() == WSAEWOULDBLOCK ||
 		    WSAGetLastError() == WSAENOBUFS))
 # endif
-		{
 			retval = 0;
-			SetBlocked(cptr);
-		}
-		else if (retval > 0)
-		{
-			ClearBlocked(cptr);
-		}
 
-#endif
-#ifdef DEBUGMODE
-	if (retval < 0)
-	{
-		writeb[0]++;
-		Debug((DEBUG_ERROR, "write error (%s) to %s", STRERROR(ERRNO), cptr->name));
-
-	}
-	else if (retval == 0)
-		writeb[1]++;
-	else if (retval < 16)
-		writeb[2]++;
-	else if (retval < 32)
-		writeb[3]++;
-	else if (retval < 64)
-		writeb[4]++;
-	else if (retval < 128)
-		writeb[5]++;
-	else if (retval < 256)
-		writeb[6]++;
-	else if (retval < 512)
-		writeb[7]++;
-	else if (retval < 1024)
-		writeb[8]++;
-	else
-		writeb[9]++;
-#endif
 	if (retval > 0)
 	{
 		cptr->sendB += retval;
@@ -150,21 +127,13 @@ int  deliver_it(aClient *cptr, char *str, int len)
 			cptr->sendK += (cptr->sendB >> 10);
 			cptr->sendB &= 0x03ff;	/* 2^10 = 1024, 3ff = 1023 */
 		}
-		if (acpt != &me)
-		{
-			acpt->sendB += retval;
-			if (acpt->sendB > 1023)
-			{
-				acpt->sendK += (acpt->sendB >> 10);
-				acpt->sendB &= 0x03ff;
-			}
-		}
 		if (me.sendB > 1023)
 		{
 			me.sendK += (me.sendB >> 10);
 			me.sendB &= 0x03ff;
 		}
 	}
+
 	return (retval);
 }
 
@@ -182,7 +151,7 @@ char	*Inet_si2pB(struct SOCKADDR_IN *sin, char *buf, int sz)
 	    && cp[9] == 0 && cp[10] == 0xff
 	    && cp[11] == 0xff)
 	{
-		(void)ircsprintf(buf, "%u.%u.%u.%u",
+		(void)ircsnprintf(buf, sz, "%u.%u.%u.%u",
 		    (u_int)(cp[12]), (u_int)(cp[13]),
 		    (u_int)(cp[14]), (u_int)(cp[15]));
 	
@@ -220,7 +189,7 @@ char	*Inet_ia2p(struct IN_ADDR *ia)
 	    && cp[9] == 0 && cp[10] == 0xff
 	    && cp[11] == 0xff)
 	{
-		(void)ircsprintf(buf, "%u.%u.%u.%u",
+		(void)ircsnprintf(buf, sizeof(buf), "%u.%u.%u.%u",
 		    (u_int)(cp[12]), (u_int)(cp[13]),
 		    (u_int)(cp[14]), (u_int)(cp[15]));
 	

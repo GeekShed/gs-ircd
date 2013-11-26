@@ -47,7 +47,6 @@
 DLLFUNC int m_eos(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_EOS 	"EOS"	
-#define TOK_EOS 	"ES"	
 
 ModuleHeader MOD_HEADER(m_eos)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_eos)
 
 DLLFUNC int MOD_INIT(m_eos)(ModuleInfo *modinfo)
 {
-	add_CommandX(MSG_EOS, TOK_EOS, m_eos, MAXPARA, M_SERVER);
+	CommandAdd(modinfo->handle, MSG_EOS, m_eos, MAXPARA, M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_eos)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_eos)(int module_unload)
 {
-	if (del_Command(MSG_EOS, TOK_EOS, m_eos) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_eos).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -97,7 +91,7 @@ DLLFUNC CMD_FUNC(m_eos)
 	ircd_log(LOG_ERROR, "[EOSDBG] m_eos: got sync from %s (path:%s)", sptr->name, cptr->name);
 	ircd_log(LOG_ERROR, "[EOSDBG] m_eos: broadcasting it back to everyone except route from %s", cptr->name);
 #endif
-	sendto_serv_butone_token(cptr,
-		parv[0], MSG_EOS, TOK_EOS, "", NULL);
+	sendto_server(cptr, 0, 0, ":%s EOS", parv[0]);
+
 	return 0;
 }

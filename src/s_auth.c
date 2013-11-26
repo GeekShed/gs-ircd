@@ -44,19 +44,22 @@ static char sccsid[] = "@(#)s_auth.c	1.18 4/18/94 (C) 1992 Darren Reed";
 #include "proto.h"
 #include <string.h>
 
+static void send_authports(int fd, int revents, void *data);
+static void read_authports(int fd, int revents, void *data);
+
 void ident_failed(aClient *cptr)
 {
 	Debug((DEBUG_NOTICE, "ident_failed() for %x", cptr));
 	ircstp->is_abad++;
 	if (cptr->authfd != -1)
 	{
-		CLOSE_SOCK(cptr->authfd);
+		fd_close(cptr->authfd);
 		--OpenFiles;
 		cptr->authfd = -1;
 	}
 	cptr->flags &= ~(FLAGS_WRAUTH | FLAGS_AUTH);
 	if (!DoingDNS(cptr))
-		SetAccess(cptr);
+		finish_auth(cptr);
 	if (SHOWCONNECTINFO && !cptr->serv && !IsServersOnlyListener(cptr->listener))
 		sendto_one(cptr, "%s", REPORT_FAIL_ID);
 }
@@ -74,28 +77,37 @@ void start_auth(aClient *cptr)
 {
 	struct SOCKADDR_IN sock, us;
 	int len;
-	
+	char buf[BUFSIZE];
+
 	if (IDENT_CHECK == 0) {
 		cptr->flags &= ~(FLAGS_WRAUTH | FLAGS_AUTH);
+		if (!DoingDNS(cptr))
+			finish_auth(cptr);
 		return;
 	}
-	Debug((DEBUG_NOTICE, "start_auth(%x) slot=%d, fd=%d, status=%d",
-	    cptr, cptr->slot, cptr->fd, cptr->status));
-	if ((cptr->authfd = socket(AFINET, SOCK_STREAM, 0)) == -1)
+	Debug((DEBUG_NOTICE, "start_auth(%x) fd=%d, status=%d",
+	    cptr, cptr->fd, cptr->status));
+	snprintf(buf, sizeof buf, "identd: %s", get_client_name(cptr, TRUE));
+	if ((cptr->authfd = fd_socket(AFINET, SOCK_STREAM, 0, buf)) == -1)
 	{
 		Debug((DEBUG_ERROR, "Unable to create auth socket for %s:%s",
 		    get_client_name(cptr, TRUE), strerror(get_sockerr(cptr))));
 		ident_failed(cptr);
 		return;
 	}
-    if (++OpenFiles >= (MAXCONNECTIONS - 2))
+	if (++OpenFiles >= (MAXCONNECTIONS - 2))
 	{
 		sendto_ops("Can't allocate fd, too many connections.");
-		CLOSE_SOCK(cptr->authfd);
+		fd_close(cptr->authfd);
 		--OpenFiles;
 		cptr->authfd = -1;
 		return;
 	}
+
+#if defined(INET6) && defined(IPV6_V6ONLY)
+        int opt = 0;
+        setsockopt(cptr->authfd, IPPROTO_IPV6, IPV6_V6ONLY, (OPT_TYPE *)&opt, sizeof(opt));
+#endif
 
 	if (SHOWCONNECTINFO && !cptr->serv && !IsServersOnlyListener(cptr->listener))
 		sendto_one(cptr, "%s", REPORT_DO_ID);
@@ -129,6 +141,9 @@ void start_auth(aClient *cptr)
 		return;
 	}
 	cptr->flags |= (FLAGS_WRAUTH | FLAGS_AUTH);
+
+	fd_setselect(cptr->authfd, FD_SELECT_WRITE, send_authports, cptr);
+
 	return;
 }
 
@@ -141,11 +156,12 @@ void start_auth(aClient *cptr)
  * problem since the socket should have a write buffer far greater than
  * this message to store it in should problems arise. -avalon
  */
-void send_authports(aClient *cptr)
+static void send_authports(int fd, int revents, void *data)
 {
 	struct SOCKADDR_IN us, them;
 	char authbuf[32];
 	int  ulen, tlen;
+	aClient *cptr = data;
 
 	Debug((DEBUG_NOTICE, "write_authports(%x) fd %d authfd %d stat %d",
 	    cptr, cptr->fd, cptr->authfd, cptr->status));
@@ -156,7 +172,7 @@ void send_authports(aClient *cptr)
 		goto authsenderr;
 	}
 
-	(void)ircsprintf(authbuf, "%u , %u\r\n",
+	ircsnprintf(authbuf, sizeof(authbuf), "%u , %u\r\n",
 	    (unsigned int)ntohs(them.SIN_PORT),
 	    (unsigned int)ntohs(us.SIN_PORT));
 
@@ -170,6 +186,9 @@ authsenderr:
 		ident_failed(cptr);
 	}
 	cptr->flags &= ~FLAGS_WRAUTH;
+
+	fd_setselect(cptr->authfd, FD_SELECT_READ, read_authports, cptr);
+
 	return;
 }
 
@@ -180,12 +199,13 @@ authsenderr:
  * The actual read processijng here is pretty weak - no handling of the reply
  * if it is fragmented by IP.
  */
-void read_authports(aClient *cptr)
+static void read_authports(int fd, int revents, void *userdata)
 {
 	char *s, *t;
 	int  len;
 	char ruser[USERLEN + 1], system[8];
 	u_short remp = 0, locp = 0;
+	aClient *cptr = userdata;
 
 	*system = *ruser = '\0';
 	Debug((DEBUG_NOTICE, "read_authports(%x) fd %d authfd %d stat %d",
@@ -214,7 +234,7 @@ void read_authports(aClient *cptr)
 		for (t = (rindex(cptr->buffer, ':') + 1); *t; t++)
 			if (!isspace(*t))
 				break;
-		strncpyzt(system, t, sizeof(system));
+		strlcpy(system, t, sizeof(system));
 		for (t = ruser; *s && *s != '@' && (t < ruser + sizeof(ruser));
 		    s++)
 			if (!isspace(*s) && *s != ':')
@@ -230,13 +250,13 @@ void read_authports(aClient *cptr)
 		Debug((DEBUG_ERROR, "bad auth reply in [%s]", cptr->buffer));
 		*ruser = '\0';
 	}
-    CLOSE_SOCK(cptr->authfd);
+    fd_close(cptr->authfd);
     --OpenFiles;
     cptr->authfd = -1;
 	cptr->count = 0;
 	ClearAuth(cptr);
 	if (!DoingDNS(cptr))
-		SetAccess(cptr);
+		finish_auth(cptr);
 	if (len > 0)
 		Debug((DEBUG_INFO, "ident reply: [%s]", cptr->buffer));
 
@@ -249,7 +269,7 @@ void read_authports(aClient *cptr)
 		return;
 	}
 	ircstp->is_asuc++;
-	strncpyzt(cptr->username, ruser, USERLEN + 1);
+	strlcpy(cptr->username, ruser, USERLEN + 1);
 	cptr->flags |= FLAGS_GOTID;
 	Debug((DEBUG_INFO, "got username [%s]", ruser));
 	return;

@@ -47,7 +47,6 @@
 DLLFUNC int m_globops(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_GLOBOPS 	"GLOBOPS"	
-#define TOK_GLOBOPS 	"]"	
 
 ModuleHeader MOD_HEADER(m_globops)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_globops)
 
 DLLFUNC int MOD_INIT(m_globops)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_GLOBOPS, TOK_GLOBOPS, m_globops, 1);
+	CommandAdd(modinfo->handle, MSG_GLOBOPS, m_globops, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_globops)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_globops)(int module_unload)
 {
-	if (del_Command(MSG_GLOBOPS, TOK_GLOBOPS, m_globops) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_globops).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -102,8 +96,8 @@ DLLFUNC CMD_FUNC(m_globops)
 		sendto_one(sptr, err_str(ERR_NOPRIVILEGES), me.name, parv[0]);
 		return 0;
 	}
-	sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL,
-	    parv[0], MSG_GLOBOPS, TOK_GLOBOPS, ":%s", message);
+	sendto_server(IsServer(cptr) ? cptr : NULL, 0, 0, ":%s GLOBOPS :%s",
+	    parv[0], message);
 	sendto_failops_whoare_opers("from %s: %s", parv[0], message);
 	return 0;
 }

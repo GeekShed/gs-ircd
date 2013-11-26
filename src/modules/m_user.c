@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_user);
 
 #define MSG_USER 	"USER"	
-#define TOK_USER 	"%"	
 
 ModuleHeader MOD_HEADER(m_user)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_user)
 
 DLLFUNC int MOD_INIT(m_user)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_USER, TOK_USER, m_user, 4, M_USER|M_UNREGISTERED);
+	CommandAdd(modinfo->handle, MSG_USER, m_user, 4, M_USER|M_UNREGISTERED);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -98,7 +97,7 @@ DLLFUNC CMD_FUNC(m_user)
 	if (IsServer(cptr) && !IsUnknown(sptr))
 		return 0;
 
-	if (MyConnect(sptr) && (sptr->listener->umodes & LISTENER_SERVERSONLY))
+	if (MyConnect(sptr) && (sptr->listener->options & LISTENER_SERVERSONLY))
 	{
 		return exit_client(cptr, sptr, sptr,
 		    "This port is for servers only");
@@ -148,6 +147,14 @@ DLLFUNC CMD_FUNC(m_user)
 		virthost = parv[6];
 		ip = parv[7];
 	}
+	else if (parc == 10 && IsServer(cptr))
+	{
+		sstamp = (BadPtr(parv[4])) ? "0" : parv[4];
+		realname = (BadPtr(parv[9])) ? "<bad-realname>" : parv[9];
+		umodex = parv[5];
+		virthost = parv[6];
+		ip = parv[8];
+	}
 	else
 	{
 		realname = (BadPtr(parv[4])) ? "<bad-realname>" : parv[4];
@@ -159,16 +166,7 @@ DLLFUNC CMD_FUNC(m_user)
 		if (sptr->srvptr == NULL)
 			sendto_ops("WARNING, User %s introduced as being "
 			    "on non-existant server %s.", sptr->name, server);
-		if (SupportNS(cptr))
-		{
-			acptr = (aClient *)find_server_b64_or_real(server);
-			if (acptr)
-				user->server = find_or_add(acptr->name);
-			else
-				user->server = find_or_add(server);
-		}
-		else
-			user->server = find_or_add(server);
+		user->server = find_or_add(sptr->srvptr->name);
 		strlcpy(user->realhost, host, sizeof(user->realhost));
 		goto user_finish;
 	}
@@ -194,12 +192,12 @@ DLLFUNC CMD_FUNC(m_user)
 	 * this was copying user supplied data directly into user->realhost
 	 * which seemed bad. Not to say this is much better ;p. -- Syzop
 	 */
-	strncpyzt(user->realhost, Inet_ia2p(&sptr->ip), sizeof(user->realhost));
+	strlcpy(user->realhost, Inet_ia2p(&sptr->ip), sizeof(user->realhost));
 	if (!user->ip_str)
 		user->ip_str = strdup(Inet_ia2p(&sptr->ip));
 	user->server = me_hash;
       user_finish:
-	if (sstamp != NULL)
+	if (sstamp != NULL && *sstamp != '*')
 		strlcpy(user->svid, sstamp, sizeof(user->svid));
 
 	strlcpy(sptr->info, realname, sizeof(sptr->info));
@@ -218,7 +216,7 @@ DLLFUNC CMD_FUNC(m_user)
 		    virthost,ip));
 	}
 	else
-		strncpyzt(sptr->user->username, username, USERLEN + 1);
+		strlcpy(sptr->user->username, username, USERLEN + 1);
 
 	return 0;
 }

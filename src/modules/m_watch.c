@@ -47,7 +47,6 @@
 DLLFUNC CMD_FUNC(m_watch);
 
 #define MSG_WATCH 	"WATCH"	
-#define TOK_WATCH 	"`"	
 
 ModuleHeader MOD_HEADER(m_watch)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_watch)
 
 DLLFUNC int MOD_INIT(m_watch)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_WATCH, TOK_WATCH, m_watch, 1, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_WATCH, m_watch, 1, M_USER|M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -90,38 +89,22 @@ static void show_watch(aClient *cptr, char *name, int rpl1, int rpl2, int awayno
 	{
 		if (awaynotify && acptr->user->away)
 		{
-			if (IsWebTV(cptr))
-				sendto_one(cptr, ":IRC!IRC@%s PRIVMSG %s :%s (%s@%s) is on IRC, but away", 
-				    me.name, cptr->name, acptr->name, acptr->user->username,
-				    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
-				    realhost);
-			else
-				sendto_one(cptr, rpl_str(RPL_NOWISAWAY), me.name, cptr->name,
-				    acptr->name, acptr->user->username,
-				    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
-				    realhost, acptr->user->lastaway);
+			sendto_one(cptr, rpl_str(RPL_NOWISAWAY), me.name, cptr->name,
+			    acptr->name, acptr->user->username,
+			    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
+			    realhost, acptr->user->lastaway);
 			return;
 		}
 		
-		if (IsWebTV(cptr))
-			sendto_one(cptr, ":IRC!IRC@%s PRIVMSG %s :%s (%s@%s) is on IRC", 
-			    me.name, cptr->name, acptr->name, acptr->user->username,
-			    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
-			    realhost);
-		else
-			sendto_one(cptr, rpl_str(rpl1), me.name, cptr->name,
-			    acptr->name, acptr->user->username,
-			    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
-			    realhost, acptr->lastnick);
+		sendto_one(cptr, rpl_str(rpl1), me.name, cptr->name,
+		    acptr->name, acptr->user->username,
+		    IsHidden(acptr) ? acptr->user->virthost : acptr->user->
+		    realhost, acptr->lastnick);
 	}
 	else
 	{
-		if (IsWebTV(cptr))
-			sendto_one(cptr, ":IRC!IRC@%s PRIVMSG %s :%s is not on IRC", me.name, 
-				cptr->name, name);
-		else	
-			sendto_one(cptr, rpl_str(rpl2), me.name, cptr->name,
-			    name, "*", "*", 0L);
+		sendto_one(cptr, rpl_str(rpl2), me.name, cptr->name,
+		    name, "*", "*", 0);
 	}
 }
 

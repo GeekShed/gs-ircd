@@ -49,13 +49,11 @@ char backupbuf[8192];
 /*
  * NOTE: parse() should not be called recursively by other functions!
  */
-extern int lifesux;
 static char *para[MAXPARA + 2];
 
 static char sender[HOSTLEN + 1];
 static int cancel_clients(aClient *, aClient *, char *);
 static void remove_unknown(aClient *, char *);
-static char nsprefix = 0;
 /*
 **  Find a client (server or user) by name.
 **
@@ -64,14 +62,17 @@ static char nsprefix = 0;
 **	the old. 'name' is now assumed to be a null terminated
 **	string and the search is the for server and user.
 */
-aClient inline *find_client(char *name, aClient *cptr)
+aClient *find_client(char *name, aClient *cptr)
 {
-
-	if (name)
+	if (cptr == NULL || IsServer(cptr))
 	{
-		cptr = hash_find_client(name, cptr);
+		aClient *acptr;
+
+		if ((acptr = hash_find_id(name, NULL)) != NULL)
+			return acptr;
 	}
-	return cptr;
+
+	return hash_find_client(name, NULL);
 }
 
 aClient inline *find_nickserv(char *name, aClient *cptr)
@@ -100,9 +101,13 @@ aClient inline *find_server(char *name, aClient *cptr)
 {
 	if (name)
 	{
-		cptr = hash_find_server(name, cptr);
+		aClient *acptr;
+
+		if ((acptr = find_client(name, NULL)) != NULL && IsServer(acptr))
+			return acptr;
 	}
-	return cptr;
+
+	return NULL;
 }
 
 
@@ -117,7 +122,7 @@ aClient inline *find_name(char *name, aClient *cptr)
 		return (c2ptr);
 	if (!index(name, '*'))
 		return c2ptr;
-	for (c2ptr = client; c2ptr; c2ptr = c2ptr->next)
+	list_for_each_entry(c2ptr, &client_list, client_node)
 	{
 		if (!IsServer(c2ptr) && !IsMe(c2ptr))
 			continue;
@@ -135,14 +140,14 @@ aClient inline *find_name(char *name, aClient *cptr)
 */
 aClient *find_person(char *name, aClient *cptr)
 {
-	aClient *c2ptr = cptr;
+	aClient *c2ptr;
 
-	c2ptr = find_client(name, c2ptr);
+	c2ptr = find_client(name, cptr);
 
 	if (c2ptr && IsClient(c2ptr) && c2ptr->user)
 		return c2ptr;
-	else
-		return cptr;
+
+	return NULL;
 }
 
 
@@ -183,7 +188,7 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 	int buf_len = 0;
 	aClient *from = cptr;
 	char *ch, *s;
-	int  len, i, numeric = 0, paramcount, noprefix = 0;
+	int  len, i, numeric = 0, paramcount;
 #ifdef DEBUGMODE
 	time_t then, ticks;
 	int  retval;
@@ -220,10 +225,6 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 	para[0] = from->name;
 	if (*ch == ':' || *ch == '@')
 	{
-		if (*ch == '@')
-			nsprefix = 1;
-		else
-			nsprefix = 0;
 		/*
 		   ** Copy the prefix to 'sender' assuming it terminates
 		   ** with SPACE (or NULL, which is an error, though).
@@ -245,21 +246,10 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 		 */
 		if (*sender && IsServer(cptr))
 		{
-			if (nsprefix)
-			{
-				from = (aClient *) find_server_by_base64(sender);
-				if (from) 
-					para[0] = from->name;
-			}
-				else
-			{
-				from = find_client(sender, (aClient *)NULL);
-				if (!from || match(from->name, sender))
-					from = find_server_quick(sender);
-				else if (!from && index(sender, '@'))
-					from = find_nickserv(sender, (aClient *)NULL);
-				para[0] = sender;
-			}
+			from = find_client(sender, (aClient *)NULL);
+			if (!from && index(sender, '@'))
+				from = find_nickserv(sender, (aClient *)NULL);
+			para[0] = sender;
 
 			/* Hmm! If the client corresponding to the
 			 * prefix is not found--what is the correct
@@ -289,8 +279,7 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 		while (*ch == ' ')
 			ch++;
 	}
-	else
-		noprefix = 1;
+
 	if (*ch == '\0')
 	{
 		ircstp->is_empt++;
@@ -300,6 +289,7 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 			cptr->since++; /* 1s fake lag */
 		return (-1);
 	}
+
 	/*
 	   ** Extract the command code from the packet.  Point s to the end
 	   ** of the command code and calculate the length using pointer
@@ -334,6 +324,8 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 			flags |= M_SHUN;
 		if (IsVirus(from))
 			flags |= M_VIRUS;
+		if (IsAnOper(from))
+			flags |= M_OPER;
 		cmptr = find_Command(ch, IsServer(cptr) ? 1 : 0, flags);
 		if (!cmptr)
 		{
@@ -381,6 +373,12 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 			return -1;
 		}
 		if ((flags & M_SERVER) && !(cmptr->flags & M_SERVER))
+			return -1;
+		}
+		if ((cmptr->flags & M_OPER) && !(flags & M_OPER))
+		{
+			sendto_one(cptr, rpl_str(ERR_NOPRIVILEGES), 
+					me.name, from->name);
 			return -1;
 		}
 		paramcount = cmptr->parameters;
@@ -478,110 +476,7 @@ int  parse(aClient *cptr, char *buffer, char *bufend)
 
 static int cancel_clients(aClient *cptr, aClient *sptr, char *cmd)
 {
-	/*
-	 * kill all possible points that are causing confusion here,
-	 * I'm not sure I've got this all right...
-	 * - avalon
-	 * No you didn't...
-	 * - Run
-	 */
-	/* This little bit of code allowed paswords to nickserv to be 
-	 * seen.  A definite no-no.  --Russell
-	 sendto_ops("Message (%s) for %s[%s!%s@%s] from %s", cmd,
-	 sptr->name, sptr->from->name, sptr->from->username,
-	 sptr->from->sockhost, get_client_name(cptr, TRUE));*/
-	/*
-	 * Incorrect prefix for a server from some connection.  If it is a
-	 * client trying to be annoying, just QUIT them, if it is a server
-	 * then the same deal.
-	 */
-	if (IsServer(sptr) || IsMe(sptr))
-	{
-		/*
-		 * First go at tracking down what really causes the
-		 * dreaded Fake Direction error.  It should not be possible
-		 * ever to happen.  Assume nothing here since this is an
-		 * impossibility.
-		 *
-		 * Check for valid fields, then send out globops with
-		 * the msg command recieved, who apperently sent it,
-		 * where it came from, and where it was suppose to come
-		 * from.  We send the msg command to find out if its some
-		 * bug somebody found with an old command, maybe some
-		 * weird thing like, /ping serverto.* serverfrom.* and on
-		 * the way back, fake direction?  Don't know, maybe this
-		 * will tell us.  -Cabal95
-		 *
-		 * Take #2 on Fake Direction.  Most of them seem to be
-		 * numerics.  But sometimes its getting fake direction on
-		 * SERVER msgs.. HOW??  Display the full message now to
-		 * figure it out... -Cabal95
-		 *
-		 * Okay I give up.  Can't find it.  Seems like it will
-		 * exist untill ircd is completely rewritten. :/ For now
-		 * just completely ignore them.  Needs to be modified to
-		 * send these messages to a special oper channel. -Cabal95
-		 *
-		 aClient *from;
-		 char   *fromname=NULL, *sptrname=NULL, *cptrname=NULL, *s;
-
-		 while (*cmd == ' ')
-		 cmd++;
-		 if (s = index(cmd, ' '))
-		 *s++ = '\0';
-		 if (!strcasecmp(cmd, "PRIVMSG") ||
-		 !strcasecmp(cmd, "NOTICE") ||
-		 !strcasecmp(cmd, "PASS"))
-		 s = NULL;
-		 if (sptr && sptr->name)
-		 sptrname = sptr->name;
-		 if (cptr && cptr->name)
-		 cptrname = cptr->name;
-		 if (sptr && sptr->from && sptr->from->name)
-		 fromname = sptr->from->name;
-
-		 sendto_serv_butone(NULL, ":%s GLOBOPS :"
-		 "Fake Direction: Message[%s %s] from %s via %s "
-		 "instead of %s (Tell Cabal95)", me.name, cmd,
-		 (s ? s : ""),
-		 (sptr->name!=NULL)?sptr->name:"<unknown>",
-		 (cptr->name!=NULL)?cptr->name:"<unknown>",
-		 (fromname!=NULL)?fromname:"<unknown>");
-		 sendto_ops(
-		 "Fake Direction: Message[%s %s] from %s via %s "
-		 "instead of %s (Tell Cabal95)", cmd,
-		 (s ? s : ""),
-		 (sptr->name!=NULL)?sptr->name:"<unknown>",
-		 (cptr->name!=NULL)?cptr->name:"<unknown>",
-		 (fromname!=NULL)?fromname:"<unknown>");
-
-		 * We don't drop the server anymore.  Just ignore
-		 * the message and go about your business.  And hope
-		 * we don't get flooded. :-)  -Cabal95
-		 sendto_ops("Dropping server %s", cptr->name);
-		 return exit_client(cptr, cptr, &me, "Fake Direction");
-		 */
-		return 0;
-	}
-	/*
-	 * Ok, someone is trying to impose as a client and things are
-	 * confused.  If we got the wrong prefix from a server, send out a
-	 * kill, else just exit the lame client.
-	 */
-	if (IsServer(cptr))
-	{
-		/*
-		   ** It is NOT necessary to send a KILL here...
-		   ** We come here when a previous 'NICK new'
-		   ** nick collided with an older nick, and was
-		   ** ignored, and other messages still were on
-		   ** the way (like the following USER).
-		   ** We simply ignore it all, a purge will be done
-		   ** automatically by the server 'cptr' as a reaction
-		   ** on our 'NICK older'. --Run
-		 */
-		return 0;	/* On our side, nothing changed */
-	}
+	if (IsServer(cptr) || IsServer(sptr) || IsMe(sptr)) return 0;
 	return exit_client(cptr, cptr, &me, "Fake prefix");
 }
 
@@ -603,7 +498,7 @@ static void remove_unknown(aClient *cptr, char *sender)
 	 * Do kill if it came from a server because it means there is a ghost
 	 * user on the other server which needs to be removed. -avalon
 	 */
-	if (!index(sender, '.') && !nsprefix)
+	if (!index(sender, '.') && !isdigit(*sender))
 		sendto_one(cptr, ":%s KILL %s :%s (%s(?) <- %s)",
 		    me.name, sender, me.name, sender, cptr->name);
 	else

@@ -46,7 +46,6 @@
 #endif
 
 #define MSG_SETIDENT 	"SETIDENT"	/* set ident */
-#define	TOK_SETIDENT	"AD"	/* good old BASIC ;P */
 
 DLLFUNC int m_setident(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_setident)
 
 DLLFUNC int MOD_INIT(m_setident)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SETIDENT, TOK_SETIDENT, m_setident, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SETIDENT, m_setident, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -76,11 +72,6 @@ DLLFUNC int MOD_LOAD(m_setident)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_setident)(int module_unload)
 {
-	if (del_Command(MSG_SETIDENT, TOK_SETIDENT, m_setident) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_setident).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -196,7 +187,6 @@ DLLFUNC int m_setident(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	}
 
 	{
-		DYN_LOCAL(char, did_parts, sptr->user->joined);
 		switch (UHOST_ALLOWED)
 		{
 			case UHALLOW_ALWAYS:
@@ -205,7 +195,6 @@ DLLFUNC int m_setident(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				if (MyClient(sptr))
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /SetIdent is disabled", me.name, sptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
@@ -213,24 +202,21 @@ DLLFUNC int m_setident(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				if (MyClient(sptr) && sptr->user->joined)
 				{
 					sendto_one(sptr, ":%s NOTICE %s :*** /SetIdent can not be used while you are on a channel", me.name, sptr->name);
-					DYN_FREE(did_parts);
 					return 0;
 				}
 				break;
 			case UHALLOW_REJOIN:
-				rejoin_doparts(sptr, did_parts);
+				rejoin_doquits(sptr);
 				break;
 		}
 
 		/* get it in */
-		ircsprintf(sptr->user->username, "%s", vident);
+		ircsnprintf(sptr->user->username, sizeof(sptr->user->username), "%s", vident);
 		/* spread it out */
-		sendto_serv_butone_token(cptr, sptr->name,
-		    MSG_SETIDENT, TOK_SETIDENT, "%s", parv[1]);
+		sendto_server(cptr, 0, 0, ":%s SETIDENT %s", sptr->name, parv[1]);
 
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
-			rejoin_dojoinandmode(sptr, did_parts);
-		DYN_FREE(did_parts);
+			rejoin_dojoinandmode(sptr);
 	}
 
 	if (MyConnect(sptr))

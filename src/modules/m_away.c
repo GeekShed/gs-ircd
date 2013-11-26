@@ -49,7 +49,6 @@
 DLLFUNC int m_away(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_AWAY 	"AWAY"	
-#define TOK_AWAY 	"6"	
 
 DLLFUNC ModuleHeader MOD_HEADER(m_away)
   = {
@@ -62,7 +61,7 @@ DLLFUNC ModuleHeader MOD_HEADER(m_away)
 
 DLLFUNC int MOD_INIT(m_away)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_AWAY, TOK_AWAY, m_away, 1);
+	CommandAdd(modinfo->handle, MSG_AWAY, m_away, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -74,11 +73,6 @@ DLLFUNC int MOD_LOAD(m_away)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_away)(int module_unload)
 {
-	if (del_Command(MSG_AWAY, TOK_AWAY, m_away) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_away).name);
-	}
 	return MOD_SUCCESS;
 }
 /***********************************************************************
@@ -114,7 +108,7 @@ int n, wasaway = 0;
                         MyFree(away);
                         sptr->user->away = NULL;
 			/* Only send this if they were actually away -- codemastr */
-	                sendto_serv_butone_token(cptr, parv[0], MSG_AWAY, TOK_AWAY, "");
+	                sendto_server(cptr, 0, 0, ":%s AWAY", parv[0]);
 	                hash_check_watch(cptr, RPL_NOTAWAY);
 
 			sendto_common_channels_local_butone(sptr, PROTO_AWAY_NOTIFY, ":%s AWAY", sptr->name);
@@ -157,7 +151,7 @@ int n, wasaway = 0;
 
 	sptr->user->lastaway = TStime();
 	
-        sendto_serv_butone_token(cptr, parv[0], MSG_AWAY, TOK_AWAY, ":%s", awy2);
+        sendto_server(cptr, 0, 0, ":%s AWAY :%s", parv[0], awy2);
 
 	if (away)
 	{

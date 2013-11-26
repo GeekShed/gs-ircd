@@ -47,7 +47,6 @@ DLLFUNC int m_lag(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_LAG         "LAG"   /* Lag detect */
-#define TOK_LAG         "AF"    /* a or ? */
 
 ModuleHeader MOD_HEADER(m_lag)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_lag)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_lag)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_LAG, TOK_LAG, m_lag, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_LAG, m_lag, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,13 +74,7 @@ DLLFUNC int MOD_LOAD(m_lag)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_lag)(int module_unload)
 {
-	if (del_Command(MSG_LAG, TOK_LAG, m_lag) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_lag).name);
-	}
 	return MOD_SUCCESS;
-	
 }
 
 /* m_lag (lag measure) - Stskeeps
@@ -115,8 +105,7 @@ DLLFUNC int m_lag(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		    me.name, parv[0], "LAG");
 		return 0;
 	}
-	if (hunt_server_token(cptr, sptr, MSG_LAG, TOK_LAG, ":%s", 1, parc,
-	    parv) == HUNTED_NOSUCH)
+	if (hunt_server(cptr, sptr, ":%s LAG :%s", 1, parc, parv) == HUNTED_NOSUCH)
 	{
 		return 0;
 	}

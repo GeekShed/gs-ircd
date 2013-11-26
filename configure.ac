@@ -10,7 +10,7 @@ dnl Unreal.nfo
 dnl .CHANGES.NEW
 dnl src/version.c.SH
 
-AC_INIT([unrealircd], [3.2.10.2], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
+AC_INIT([unrealircd], [3.4-dev], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
 AC_CONFIG_SRCDIR([src/ircd.c])
 AC_CONFIG_HEADER([include/setup.h])
 AC_CONFIG_AUX_DIR([autoconf])
@@ -23,21 +23,21 @@ fi
 
 dnl Calculate the versions. Perhaps the use of expr is a little too extravagant
 # Generation version number (e.g.: 3 for Unreal3*)
-UNREAL_VERSION_GENERATION=["`expr $PACKAGE_VERSION : '\([^.]*\)\.[^.]*\.[^.-_]*'`"]
+UNREAL_VERSION_GENERATION=["3"]
 AC_DEFINE_UNQUOTED([UNREAL_VERSION_GENERATION], [$UNREAL_VERSION_GENERATION], [Generation version number (e.g.: 3 for Unreal3*)])
 
 # Major version number (e.g.: 2 for Unreal3.2*)
-UNREAL_VERSION_MAJOR=["`expr $PACKAGE_VERSION : '[0-9]*\.\([0-9]*\)\.[0-9]*'`"]
+UNREAL_VERSION_MAJOR=["4"]
 AC_DEFINE_UNQUOTED([UNREAL_VERSION_MAJOR], [$UNREAL_VERSION_MAJOR], [Major version number (e.g.: 2 for Unreal3.2*)])
 
 # Minor version number (e.g.: 1 for Unreal3.2.1)
-UNREAL_VERSION_MINOR=["`expr $PACKAGE_VERSION : '[0-9]*\.[0-9]*\.\([0-9]*\)'`"]
+UNREAL_VERSION_MINOR=["0"]
 AC_DEFINE_UNQUOTED([UNREAL_VERSION_MINOR], [$UNREAL_VERSION_MINOR], [Minor version number (e.g.: 1 for Unreal3.2.1)])
 
 # The version suffix such as a beta marker or release candidate
 # marker. (e.g.: -rc2 for unrealircd-3.2.9-rc2). This macro is a
 # string instead of an integer because it contains arbitrary data.
-UNREAL_VERSION_SUFFIX=["`expr $PACKAGE_VERSION : '[0-9]*\.[0-9]*\.[0-9]*\(.*\)'`"]
+UNREAL_VERSION_SUFFIX=["`expr $PACKAGE_VERSION : '[0-9]*\.[0-9]*\(.*\)'`"]
 AC_DEFINE_UNQUOTED([UNREAL_VERSION_SUFFIX], ["$UNREAL_VERSION_SUFFIX"], [Version suffix such as a beta marker or release candidate marker. (e.g.: -rc2 for unrealircd-3.2.9-rc2)])
 
 AC_PROG_CC
@@ -55,11 +55,6 @@ fi
 fi
 
 dnl (the gcc flag detection trick is taken from xemacs/Vin Shelton)
-
-dnl UnrealIRCd might not be strict-aliasing safe at this time
-case "`$CC -v --help 2>&1`" in
-	*-fstrict-aliasing* ) CFLAGS="$CFLAGS -fno-strict-aliasing" ;;
-esac
 
 dnl Pointer signedness warnings are really a pain and 99.9% of the time
 dnl they are of absolutely no use whatsoever. IMO the person who decided
@@ -451,18 +446,12 @@ AC_CHECK_FUNCS(syslog,AC_DEFINE([HAVE_SYSLOG], [], [Define if you have syslog]))
 AC_SUBST(STRTOUL)
 AC_SUBST(CRYPTOLIB)
 AC_SUBST(MODULEFLAGS)
-AC_ARG_WITH(listen, [AS_HELP_STRING([--with-listen=backlog],[Specify the listen backlog value])],
-	[AC_DEFINE_UNQUOTED([LISTEN_SIZE], [$withval], [Set to the listen backlog size you want])],
-	[AC_DEFINE([LISTEN_SIZE], [5], [Set to the listen backlog size you want])])
 AC_ARG_WITH(nick-history, [AS_HELP_STRING([--with-nick-history=length],[Specify the length of the nickname history])],
 	[AC_DEFINE_UNQUOTED([NICKNAMEHISTORYLENGTH], [$withval], [Set to the nickname history length you want])],
 	[AC_DEFINE([NICKNAMEHISTORYLENGTH], [2000], [Set to the nickname history length you want])])
 AC_ARG_WITH([sendq], [AS_HELP_STRING([--with-sendq=maxsendq],[Specify the max sendq for the server])],
 	[AC_DEFINE_UNQUOTED([MAXSENDQLENGTH], [$withval], [Set to the max sendq you want])],
 	[AC_DEFINE([MAXSENDQLENGTH], [3000000], [Set to the max sendq you want])])
-AC_ARG_WITH(bufferpool, [AS_HELP_STRING([--with-bufferpool=size],[Specify the size of the buffer pool])],
-	[AC_DEFINE_UNQUOTED([BUFFERPOOL],[($withval * MAXSENDQLENGTH)], [Set to the bufferpool size you want])],
-	[AC_DEFINE([BUFFERPOOL],[(18 * MAXSENDQLENGTH)], [Set to the bufferpool size you want])])
 AC_ARG_WITH(permissions, [AS_HELP_STRING([--with-permissions=permissions], [Specify the default permissions for
 configuration files])],
 	dnl We have an apparently out-of-place 0 here because of a MacOSX bug and because
@@ -521,7 +510,6 @@ AC_ARG_WITH(disable-extendedban-stacking, [AS_HELP_STRING([--with-disable-extend
 AC_ARG_WITH(system-tre, [AS_HELP_STRING([--with-system-tre], [Use the system tre package instead of bundled, discovered using pkg-config])], [], [with_system_tre=no])
 AC_ARG_WITH(system-cares, [AS_HELP_STRING([--with-system-cares], [Use the system c-ares (at least version 1.6.0) package instead of bundled c-ares, discovered using pkg-config])], [], [with_system_cares=no])
 CHECK_SSL
-CHECK_ZLIB
 AC_ARG_ENABLE(dynamic-linking, [AS_HELP_STRING([--disable-dynamic-linking], [Make the IRCd statically link with shared objects rather than dynamically (noone knows if disabling dynamic linking actually does anything or not)])],
 	[enable_dynamic_linking=$enableval], [enable_dynamic_linking="yes"])
 AS_IF([test $enable_dynamic_linking = "yes"],
@@ -556,6 +544,13 @@ case `uname -s` in
 		IRCDLIBS="$IRCDLIBS -lresolv "
 		;;
 esac
+
+AC_CHECK_FUNCS([poll],
+	AC_DEFINE([HAVE_POLL], [], [Define if you have poll]))
+AC_CHECK_FUNCS([epoll_create epoll_ctl epoll_wait],
+	AC_DEFINE([HAVE_EPOLL], [], [Define if you have epoll]))
+AC_CHECK_FUNCS([kqueue kevent],
+	AC_DEFINE([HAVE_KQUEUE], [], [Define if you have kqueue]))
 
 dnl c-ares needs PATH_SEPARATOR set or it will
 dnl fail on certain solaris boxes. We might as
@@ -610,7 +605,7 @@ AS_IF([test "x$with_system_cares" = "xno"],[
 dnl REMEMBER TO CHANGE WITH A NEW C-ARES RELEASE!
 dnl NOTE: when changing this here, ALSO change it in ./curlinstall
 dnl       and in the comment in this file around line 400!
-cares_version="1.10.0"
+cares_version="1.9.1"
 AC_MSG_RESULT(extracting c-ares resolver library)
 cur_dir=`pwd`
 cd extras

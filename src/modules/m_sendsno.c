@@ -47,7 +47,6 @@ DLLFUNC int m_sendsno(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SENDSNO   "SENDSNO"
-#define TOK_SENDSNO   "Ss"
 
 ModuleHeader MOD_HEADER(m_sendsno)
   = {
@@ -61,7 +60,7 @@ ModuleHeader MOD_HEADER(m_sendsno)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_sendsno)(ModuleInfo *modinfo)
 {
-	add_CommandX(MSG_SENDSNO, TOK_SENDSNO, m_sendsno, MAXPARA, M_SERVER);
+	CommandAdd(modinfo->handle, MSG_SENDSNO, m_sendsno, MAXPARA, M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -75,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_sendsno)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_sendsno)(int module_unload)
 {
-	if (del_Command(MSG_SENDSNO, TOK_SENDSNO, m_sendsno) < 0)
-	{
-		sendto_realops("Failed to delete command sendsno when unloading %s",
-				MOD_HEADER(m_sendsno).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -96,9 +90,6 @@ DLLFUNC int m_sendsno(aClient *cptr, aClient *sptr, int parc, char *parv[])
 char *sno, *msg, *p;
 long snomask = 0;
 int i;
-#ifndef NO_FDLIST
-int j;
-#endif
 aClient *acptr;
 
 	if ((parc < 3) || BadPtr(parv[2]))
@@ -110,8 +101,7 @@ aClient *acptr;
 	msg = parv[2];
 
 	/* Forward to others... */
-	sendto_serv_butone_token(cptr, sptr->name, MSG_SENDSNO, TOK_SENDSNO,
-		"%s :%s", parv[1], parv[2]);
+	sendto_server(cptr, 0, 0, ":%s SENDSNO %s :%s", sptr->name, parv[1], parv[2]);
 
 	for (p = sno; *p; p++)
 	{
@@ -125,16 +115,11 @@ aClient *acptr;
 		}
 	}
 
-#ifdef NO_FDLIST
-	for(i = 0; i <= LastSlot; i++)
-#else
-	for (i = oper_fdlist.entry[j = 1]; j <= oper_fdlist.last_entry; i = oper_fdlist.entry[++j])
-#endif
-		if ((acptr = local[i]) && IsPerson(acptr) && IsAnOper(acptr) &&
-		    (acptr->user->snomask & snomask))
-		{
+	list_for_each_entry(acptr, &oper_list, special_node)
+	{
+		if (acptr->user->snomask & snomask)
 			sendto_one(acptr, ":%s NOTICE %s :%s", me.name, acptr->name, msg);
-		}
+	}
 
 	return 0;
 }

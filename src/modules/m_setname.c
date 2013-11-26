@@ -48,7 +48,6 @@ DLLFUNC int m_setname(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SETNAME 	"SETNAME"	/* setname */
-#define TOK_SETNAME 	"AE"	
 
 ModuleHeader MOD_HEADER(m_setname)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_setname)
 
 DLLFUNC int MOD_INIT(m_setname)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SETNAME, TOK_SETNAME, m_setname, 1);
+	CommandAdd(modinfo->handle, MSG_SETNAME, m_setname, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -76,11 +72,6 @@ DLLFUNC int MOD_LOAD(m_setname)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_setname)(int module_unload)
 {
-	if (del_Command(MSG_SETNAME, TOK_SETNAME, m_setname) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_setname).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -131,7 +122,7 @@ DLLFUNC CMD_FUNC(m_setname)
 		return exit_client(cptr, sptr, &me,
 		                   "Your GECOS (real name) is banned from this server");
 
-	sendto_serv_butone_token(cptr, sptr->name, MSG_SETNAME, TOK_SETNAME, ":%s", parv[1]);
+	sendto_server(cptr, 0, 0, ":%s SETNAME :%s", sptr->name, parv[1]);
 
 	if (MyConnect(sptr))
 		sendnotice(sptr, "Your \"real name\" is now set to be %s - you have to set it manually to undo it",

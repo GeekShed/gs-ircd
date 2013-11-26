@@ -49,7 +49,6 @@
 DLLFUNC int m_mkpasswd(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_MKPASSWD 	"MKPASSWD"	
-#define TOK_MKPASSWD 	"y"	
 
 ModuleHeader MOD_HEADER(m_mkpasswd)
   = {
@@ -62,7 +61,7 @@ ModuleHeader MOD_HEADER(m_mkpasswd)
 
 DLLFUNC int MOD_INIT(m_mkpasswd)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_MKPASSWD, TOK_MKPASSWD, m_mkpasswd, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_MKPASSWD, m_mkpasswd, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -74,11 +73,6 @@ DLLFUNC int MOD_LOAD(m_mkpasswd)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_mkpasswd)(int module_unload)
 {
-	if (del_Command(MSG_MKPASSWD, TOK_MKPASSWD, m_mkpasswd) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_mkpasswd).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -144,8 +138,8 @@ int  m_mkpasswd(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				me.name, sptr->name, parv[1]);
 		return 0;
 	}
-	sendto_one(sptr, ":%s %s %s :*** Authentication phrase (method=%s, para=%s) is: %s",
-		me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", parv[0], parv[1], parv[2], result);
+	sendnotice(sptr, "*** Authentication phrase (method=%s, para=%s) is: %s",
+		parv[1], parv[2], result);
 
 	return 0;
 }

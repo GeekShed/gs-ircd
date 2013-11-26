@@ -47,7 +47,6 @@ DLLFUNC int m_svspart(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SVSPART       "SVSPART"
-#define TOK_SVSPART       "BT"
 
 ModuleHeader MOD_HEADER(m_svspart)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_svspart)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_svspart)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SVSPART, TOK_SVSPART, m_svspart, 3);
+	CommandAdd(modinfo->handle, MSG_SVSPART, m_svspart, 3, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,11 +74,6 @@ DLLFUNC int MOD_LOAD(m_svspart)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_svspart)(int module_unload)
 {
-	if (del_Command(MSG_SVSPART, TOK_SVSPART, m_svspart) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svspart).name);
-	}
 	return MOD_SUCCESS;	
 }
 

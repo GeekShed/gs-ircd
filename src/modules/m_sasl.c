@@ -44,15 +44,13 @@
 #ifdef _WIN32
 #include "version.h"
 #endif
+#include "m_cap.h"
 
 #define MSG_AUTHENTICATE "AUTHENTICATE"
-#define TOK_AUTHENTICATE "SX"
 
 #define MSG_SASL "SASL"
-#define TOK_SASL "SY"
 
 #define MSG_SVSLOGIN "SVSLOGIN"
-#define TOK_SVSLOGIN "SZ"
 
 /* returns a server identifier given agent_p */
 #define AGENT_SID(agent_p)	(agent_p->user != NULL ? agent_p->user->server : agent_p->name)
@@ -94,7 +92,7 @@ ModuleHeader MOD_HEADER(m_sasl)
  */
 static aClient *decode_puid(char *puid)
 {
-	aClient *client;
+	aClient *cptr;
 	char *it, *it2;
 	unsigned int slot;
 	int cookie = 0;
@@ -110,20 +108,14 @@ static aClient *decode_puid(char *puid)
 		cookie = atoi(it2);
 	}
 
-	slot = atoi(it);
-
 	if (stricmp(me.name, puid))
 		return NULL;
 
-	if (slot >= MAXCONNECTIONS)
-		return NULL;
+	list_for_each_entry(cptr, &unknown_list, lclient_node)
+		if (cptr->sasl_cookie == cookie)
+			return cptr;
 
-	client = local[slot];
-
-	if (cookie && client->sasl_cookie != cookie)
-		return NULL;
-
-	return client;
+	return NULL;
 }
 
 /*
@@ -139,7 +131,7 @@ static const char *encode_puid(aClient *client)
 	while (!client->sasl_cookie)
 		client->sasl_cookie = getrandom16();
 
-	snprintf(buf, sizeof buf, "%s!%d.%d", me.name, client->slot, client->sasl_cookie);
+	snprintf(buf, sizeof buf, "%s!0.%d", me.name, client->sasl_cookie);
 
 	return buf;
 }
@@ -181,8 +173,8 @@ static int m_svslogin(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	}
 
 	/* not for us; propagate. */
-	sendto_serv_butone_token(cptr, parv[0], MSG_SVSLOGIN, TOK_SVSLOGIN, "%s %s %s",
-				 parv[1], parv[2], parv[3]);
+	sendto_server(cptr, 0, 0, ":%s SVSLOGIN %s %s %s",
+	    parv[0], parv[1], parv[2], parv[3]);
 
 	return 0;
 }
@@ -238,8 +230,8 @@ static int m_sasl(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	}
 
 	/* not for us; propagate. */
-	sendto_serv_butone_token(cptr, parv[0], MSG_SASL, TOK_SASL, "%s %s %c %s %s",
-				 parv[1], parv[2], *parv[3], parv[4], parc > 5 ? parv[5] : "");
+	sendto_server(cptr, 0, 0, ":%s SASL %s %s %c %s %s",
+	    parv[0], parv[1], parv[2], *parv[3], parv[4], parc > 5 ? parv[5] : "");
 
 	return 0;
 }
@@ -274,10 +266,11 @@ static int m_authenticate(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		agent_p = find_client(sptr->sasl_agent, NULL);
 
 	if (agent_p == NULL)
-		sendto_serv_butone_token(NULL, me.name, MSG_SASL, TOK_SASL, "%s %s S %s",
-					 SASL_SERVER, encode_puid(sptr), parv[1]);
+		sendto_server(NULL, 0, 0, ":%s SASL %s %s S %s",
+		    me.name, SASL_SERVER, encode_puid(sptr), parv[1]);
 	else
-		sendto_serv_butone_token(NULL, me.name, MSG_SASL, TOK_SASL, "%s %s C %s", AGENT_SID(agent_p), encode_puid(sptr), parv[1]);
+		sendto_server(NULL, 0, 0, ":%s SASL %s %s C %s",
+		    me.name, AGENT_SID(agent_p), encode_puid(sptr), parv[1]);
 
 	sptr->sasl_out++;
 
@@ -298,13 +291,28 @@ static int abort_sasl(struct Client *cptr)
 
 		if (agent_p != NULL)
 		{
-			sendto_serv_butone_token(NULL, me.name, MSG_SASL, TOK_SASL, "%s %s D A", AGENT_SID(agent_p), encode_puid(cptr));
+			sendto_server(NULL, 0, 0, ":%s SASL %s %s D A",
+			    me.name, AGENT_SID(agent_p), encode_puid(cptr));
 			return 0;
 		}
 	}
 
-	sendto_serv_butone_token(NULL, me.name, MSG_SASL, TOK_SASL, "* %s D A", encode_puid(cptr));
+	sendto_server(NULL, 0, 0, ":%s SASL * %s D A", me.name, encode_puid(cptr));
 	return 0;
+}
+
+static ClientCapability cap_sasl = {
+	.name = "sasl",
+	.cap = PROTO_SASL,
+};
+
+static void m_sasl_caplist(struct list_head *head)
+{
+	/* if SASL is disabled or server not online, then pretend it does not exist. -- Syzop */
+	if (!SASL_SERVER || !find_server(SASL_SERVER, NULL))
+		return;
+
+	clicap_append(head, &cap_sasl);
 }
 
 /* This is called on module init, before Server Ready */
@@ -312,12 +320,14 @@ DLLFUNC int MOD_INIT(m_sasl)(ModuleInfo *modinfo)
 {
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 
-	CommandAdd(modinfo->handle, MSG_SASL, TOK_SASL, m_sasl, MAXPARA, M_USER|M_SERVER);
-	CommandAdd(modinfo->handle, MSG_SVSLOGIN, TOK_SVSLOGIN, m_svslogin, MAXPARA, M_USER|M_SERVER);
-	CommandAdd(modinfo->handle, MSG_AUTHENTICATE, TOK_AUTHENTICATE, m_authenticate, MAXPARA, M_UNREGISTERED);
+	CommandAdd(modinfo->handle, MSG_SASL, m_sasl, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_SVSLOGIN, m_svslogin, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_AUTHENTICATE, m_authenticate, MAXPARA, M_UNREGISTERED);
 
 	HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_CONNECT, abort_sasl);
 	HookAddEx(modinfo->handle, HOOKTYPE_LOCAL_QUIT, abort_sasl);
+
+	HookAddVoidEx(modinfo->handle, HOOKTYPE_CAPLIST, m_sasl_caplist);
 
 	return MOD_SUCCESS;
 }

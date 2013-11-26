@@ -47,7 +47,6 @@
 DLLFUNC int m_topic(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_TOPIC 	"TOPIC"	
-#define TOK_TOPIC 	")"	
 
 ModuleHeader MOD_HEADER(m_topic)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_topic)
 
 DLLFUNC int MOD_INIT(m_topic)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_TOPIC, TOK_TOPIC, m_topic, 4);
+	CommandAdd(modinfo->handle, MSG_TOPIC, m_topic, 4, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_topic)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_topic)(int module_unload)
 {
-	if (del_Command(MSG_TOPIC, TOK_TOPIC, m_topic) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_topic).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -158,7 +152,7 @@ long flags = 0; /* cache: membership flags */
 		if (parc > 4)
 		{
 			tnick = parv[2];
-			ttime = TS2ts(parv[3]);
+			ttime = atol(parv[3]);
 			topic = parv[4];
 
 		}
@@ -207,21 +201,22 @@ long flags = 0; /* cache: membership flags */
 					nicKlen = (NICKLEN+USERLEN+HOSTLEN+5);
 
 				chptr->topic = MyMalloc(topiClen + 1);
-				strncpyzt(chptr->topic, topic, topiClen + 1);
+				strlcpy(chptr->topic, topic, topiClen + 1);
 
 				if (chptr->topic_nick)
 					MyFree(chptr->topic_nick);
 
 				chptr->topic_nick = MyMalloc(nicKlen + 1);
-				strncpyzt(chptr->topic_nick, tnick,
+				strlcpy(chptr->topic_nick, tnick,
 				    nicKlen + 1);
 
 				chptr->topic_time = ttime;
 				RunHook4(HOOKTYPE_TOPIC, cptr, sptr, chptr, topic);
-				sendto_serv_butone_token
-				    (cptr, parv[0], MSG_TOPIC,
-				    TOK_TOPIC, "%s %s %lu :%s",
-				    chptr->chname, chptr->topic_nick,
+				sendto_server(cptr, PROTO_SID, 0, ":%s TOPIC %s %s %lu :%s",
+				    ID(sptr), chptr->chname, chptr->topic_nick,
+				    chptr->topic_time, chptr->topic);
+				sendto_server(cptr, 0, PROTO_SID, ":%s TOPIC %s %s %lu :%s",
+				    sptr->name, chptr->chname, chptr->topic_nick,
 				    chptr->topic_time, chptr->topic);
 				sendto_channel_butserv(chptr, sptr,
 				    ":%s TOPIC %s :%s", parv[0],
@@ -260,7 +255,7 @@ long flags = 0; /* cache: membership flags */
 				{
 					topicoverride(sptr, chptr, topic);
 				} else {
-					ircsprintf(buf, "You cannot change the topic on %s while being banned", chptr->chname);
+					ircsnprintf(buf, sizeof(buf), "You cannot change the topic on %s while being banned", chptr->chname);
 					sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND), me.name, parv[0], "TOPIC",  buf);
 					return -1;
 				}
@@ -274,7 +269,7 @@ long flags = 0; /* cache: membership flags */
 					topicoverride(sptr, chptr, topic);
 				} else {
 					/* With +m and -t, only voice and higher may change the topic */
-					ircsprintf(buf, "Voice (+v) or higher is required in order to change the topic on %s (channel is +m)", chptr->chname);
+					ircsnprintf(buf, sizeof(buf), "Voice (+v) or higher is required in order to change the topic on %s (channel is +m)", chptr->chname);
 					sendto_one(sptr, err_str(ERR_CANNOTDOCOMMAND), me.name, parv[0], "TOPIC",  buf);
 					return -1;
 				}
@@ -312,27 +307,25 @@ long flags = 0; /* cache: membership flags */
 			if (nicKlen > (NICKLEN+USERLEN+HOSTLEN+5))
 				nicKlen = NICKLEN+USERLEN+HOSTLEN+5;
 			chptr->topic = MyMalloc(topiClen + 1);
-			strncpyzt(chptr->topic, topic, topiClen + 1);
+			strlcpy(chptr->topic, topic, topiClen + 1);
 
 			if (chptr->topic_nick)
 				MyFree(chptr->topic_nick);
 
 			chptr->topic_nick = MyMalloc(nicKlen + 1);
 #ifndef TOPIC_NICK_IS_NUHOST
-			strncpyzt(chptr->topic_nick, sptr->name, nicKlen + 1);
+			strlcpy(chptr->topic_nick, sptr->name, nicKlen + 1);
 #else
-			strncpyzt(chptr->topic_nick, tnick, nicKlen + 1);
+			strlcpy(chptr->topic_nick, tnick, nicKlen + 1);
 #endif
 			RunHook4(HOOKTYPE_TOPIC, cptr, sptr, chptr, topic);
 			if (ttime && IsServer(cptr))
 				chptr->topic_time = ttime;
 			else
 				chptr->topic_time = TStime();
-			sendto_serv_butone_token
-			    (cptr, parv[0], MSG_TOPIC, TOK_TOPIC,
-			    "%s %s %lu :%s",
-			    chptr->chname,
-			    chptr->topic_nick, chptr->topic_time, chptr->topic);
+			sendto_server(cptr, 0, 0, ":%s TOPIC %s %s %lu :%s",
+			    parv[0], chptr->chname, chptr->topic_nick,
+			    chptr->topic_time, chptr->topic);
 			sendto_channel_butserv(chptr, sptr,
 			    ":%s TOPIC %s :%s", parv[0], chptr->chname,
 			    chptr->topic);

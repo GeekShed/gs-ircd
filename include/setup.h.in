@@ -3,9 +3,6 @@
 /* Define if you have BSD signals */
 #undef BSD_RELIABLE_SIGNALS
 
-/* Set to the bufferpool size you want */
-#undef BUFFERPOOL
-
 /* Define to one of `_getb67', `GETB67', `getb67' for Cray-2 and Cray-YMP
    systems. This function is required for `alloca.c' support on those systems.
    */
@@ -67,6 +64,18 @@
 /* Define to 1 if you don't have `vprintf' but do have `_doprnt.' */
 #undef HAVE_DOPRNT
 
+/* Define if you have epoll */
+#undef HAVE_EPOLL
+
+/* Define to 1 if you have the `epoll_create' function. */
+#undef HAVE_EPOLL_CREATE
+
+/* Define to 1 if you have the `epoll_ctl' function. */
+#undef HAVE_EPOLL_CTL
+
+/* Define to 1 if you have the `epoll_wait' function. */
+#undef HAVE_EPOLL_WAIT
+
 /* Define to 1 if you have the `getrusage' function. */
 #undef HAVE_GETRUSAGE
 
@@ -97,11 +106,20 @@
 /* Define to 1 if you have the <inttypes.h> header file. */
 #undef HAVE_INTTYPES_H
 
+/* Define to 1 if you have the `kevent' function. */
+#undef HAVE_KEVENT
+
+/* Define to 1 if you have the `kqueue' function. */
+#undef HAVE_KQUEUE
+
 /* Define to 1 if you have the `lrand48' function. */
 #undef HAVE_LRAND48
 
 /* Define to 1 if you have the <memory.h> header file. */
 #undef HAVE_MEMORY_H
+
+/* Define to 1 if you have the `poll' function. */
+#undef HAVE_POLL
 
 /* Define if you have PS_STRINGS */
 #undef HAVE_PSSTRINGS
@@ -174,9 +192,6 @@
 
 /* Define if you want IPv6 enabled */
 #undef INET6
-
-/* Set to the listen backlog size you want */
-#undef LISTEN_SIZE
 
 /* Define if you want modes shown in /list */
 #undef LIST_SHOW_MODES
@@ -368,9 +383,6 @@
 
 /* Define if you want to allow SSL connections */
 #undef USE_SSL
-
-/* Define if you have zlib and want zip links support. */
-#undef ZIP_LINKS
 
 /* Define if you are compiling unrealircd on Sun's (or Oracle's?) Solaris */
 #undef _SOLARIS

@@ -49,7 +49,6 @@
 DLLFUNC int m_svsnick(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSNICK 	"SVSNICK"	
-#define TOK_SVSNICK 	"e"	
 
 ModuleHeader MOD_HEADER(m_svsnick)
   = {
@@ -62,7 +61,7 @@ ModuleHeader MOD_HEADER(m_svsnick)
 
 DLLFUNC int MOD_INIT(m_svsnick)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SVSNICK, TOK_SVSNICK, m_svsnick, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SVSNICK, m_svsnick, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -74,11 +73,6 @@ DLLFUNC int MOD_LOAD(m_svsnick)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_svsnick)(int module_unload)
 {
-	if (del_Command(MSG_SVSNICK, TOK_SVSNICK, m_svsnick) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_svsnick).name);
-	}
 	return MOD_SUCCESS;
 }
 /*
@@ -96,7 +90,7 @@ aClient *ocptr; /* Other client */
 	if (!IsULine(sptr) || parc < 4 || (strlen(parv[2]) > NICKLEN))
 		return -1; /* This looks like an error anyway -Studded */
 
-	if (hunt_server_token(cptr, sptr, MSG_SVSNICK, TOK_SVSNICK, "%s %s :%s", 1, parc, parv) != HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s SVSNICK %s %s :%s", 1, parc, parv) != HUNTED_ISME)
 		return 0; /* Forwarded, done */
 
 	if (do_nick_name(parv[2]) == 0)
@@ -115,17 +109,16 @@ aClient *ocptr; /* Other client */
 
 	if (acptr != ocptr)
 		acptr->umodes &= ~UMODE_REGNICK;
-	acptr->lastnick = TS2ts(parv[3]);
+	acptr->lastnick = atol(parv[3]);
 	sendto_common_channels(acptr, ":%s NICK :%s", parv[1], parv[2]);
 	add_history(acptr, 1);
-	sendto_serv_butone_token(NULL, parv[1], MSG_NICK, TOK_NICK,
-	                         "%s :%ld", parv[2], TS2ts(parv[3]));
+	sendto_server(NULL, 0, 0, ":%s NICK %s :%ld", parv[1], parv[2], atol(parv[3]));
 
 	(void)del_from_client_hash_table(acptr->name, acptr);
 	hash_check_watch(acptr, RPL_LOGOFF);
 
 	sendto_snomask(SNO_NICKCHANGE,
-		"*** Notice -- %s (%s@%s) has been forced to change his/her nickname to %s", 
+		"*** Notice -- %s (%s@%s) has been forced to change their nickname to %s", 
 		acptr->name, acptr->user->username, acptr->user->realhost, parv[2]);
 	RunHook2(HOOKTYPE_LOCAL_NICKCHANGE, acptr, parv[2]);
 

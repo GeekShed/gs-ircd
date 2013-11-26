@@ -47,7 +47,6 @@
 DLLFUNC int m_ison(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_ISON 	"ISON"	
-#define TOK_ISON 	"K"	
 
 ModuleHeader MOD_HEADER(m_ison)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_ison)
 
 DLLFUNC int MOD_INIT(m_ison)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_ISON, TOK_ISON, m_ison, 1);
+	CommandAdd(modinfo->handle, MSG_ISON, m_ison, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_ison)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_ison)(int module_unload)
 {
-	if (del_Command(MSG_ISON, TOK_ISON, m_ison) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_ison).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -91,8 +85,7 @@ DLLFUNC int MOD_UNLOAD(m_ison)(int module_unload)
  */
 
 static char buf[BUFSIZE];
-DLLFUNC CMD_FUNC(m_ison)
-{
+DLLFUNC CMD_FUNC(m_ison) {
 	char namebuf[USERLEN + HOSTLEN + 4];
 	aClient *acptr;
 	char *s, **pav = parv, *user;
@@ -100,40 +93,32 @@ DLLFUNC CMD_FUNC(m_ison)
 	char *p = NULL;
 
 
-	if (parc < 2)
-	{
+	if (parc < 2) {
 		sendto_one(sptr, err_str(ERR_NEEDMOREPARAMS),
 		    me.name, parv[0], "ISON");
 		return 0;
 	}
 
-	(void)ircsprintf(buf, rpl_str(RPL_ISON), me.name, *parv);
+	ircsnprintf(buf, sizeof(buf), rpl_str(RPL_ISON), me.name, *parv);
 	len = strlen(buf);
-#ifndef NO_FDLIST
-	cptr->priority += 30;	/* this keeps it from moving to 'busy' list */
-#endif
-	for (s = strtoken(&p, *++pav, " "); s; s = strtoken(&p, NULL, " "))
-	{
+
+	for (s = strtoken(&p, *++pav, " "); s; s = strtoken(&p, NULL, " ")) {
 		if ((user = index(s, '!')))
 			*user++ = '\0';
-		if ((acptr = find_person(s, NULL)))
-		{
-			if (user)
-			{
-				strcpy(namebuf, acptr->user->username);
-				strcat(namebuf, "@");
-				strcat(namebuf, GetHost(acptr));
-				if (match(user, namebuf))
-					continue;
+		if ((acptr = find_person(s, NULL))) {
+			if (user) {
+				ircsnprintf(namebuf, sizeof(namebuf), "%s@%s", acptr->user->username, GetHost(acptr));
+				if (match(user, namebuf)) continue;
 				*--user = '!';
 			}
 
-			(void)strncat(buf, s, sizeof(buf) - len);
+			(void)strncat(buf, s, sizeof(buf) - (len+1));
 			len += strlen(s);
-			(void)strncat(buf, " ", sizeof(buf) - len);
+			(void)strncat(buf, " ", sizeof(buf) - (len+1));
 			len++;
 		}
 	}
+
 	sendto_one(sptr, "%s", buf);
 	return 0;
 }

@@ -47,7 +47,6 @@
 DLLFUNC int m_sajoin(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SAJOIN 	"SAJOIN"	
-#define TOK_SAJOIN 	"AX"	
 
 ModuleHeader MOD_HEADER(m_sajoin)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_sajoin)
 
 DLLFUNC int MOD_INIT(m_sajoin)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SAJOIN, TOK_SAJOIN, m_sajoin, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SAJOIN, m_sajoin, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_sajoin)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_sajoin)(int module_unload)
 {
-	if (del_Command(MSG_SAJOIN, TOK_SAJOIN, m_sajoin) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_sajoin).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -135,8 +129,7 @@ DLLFUNC CMD_FUNC(m_sajoin)
 				parted = 1;
 				continue;
 			}
-			if (check_channelmask(sptr, cptr, name) == -1 || *name == '0' ||
-			    !IsChannelName(name))
+			if (*name == '0' || !IsChannelName(name))
 			{
 				sendto_one(sptr,
 				    err_str(ERR_NOSUCHCHANNEL), me.name,
@@ -181,8 +174,7 @@ DLLFUNC CMD_FUNC(m_sajoin)
 							 "Left all channels");
 					remove_user_from_channel(acptr, chptr);
 				}
-				sendto_serv_butone_token(acptr, acptr->name,
-				    MSG_JOIN, TOK_JOIN, "0");
+				sendto_server(acptr, 0, 0, ":%s JOIN 0", acptr->name);
 				strcpy(jbuf, "0");
 				i = 1;
 				continue;
@@ -210,7 +202,7 @@ DLLFUNC CMD_FUNC(m_sajoin)
 			sendnotice(acptr, "*** You were forced to join %s", jbuf);
 			sendto_realops("%s used SAJOIN to make %s join %s", sptr->name, acptr->name,
 				       jbuf);
-			sendto_serv_butone(&me, ":%s GLOBOPS :%s used SAJOIN to make %s join %s",
+			sendto_server(&me, 0, 0, ":%s GLOBOPS :%s used SAJOIN to make %s join %s",
 					   me.name, sptr->name, acptr->name, jbuf);
 			/* Logging function added by XeRXeS */
 			ircd_log(LOG_SACMDS,"SAJOIN: %s used SAJOIN to make %s join %s",

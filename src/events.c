@@ -215,12 +215,13 @@ void	SetupEvents(void)
 	EventAddEx(NULL, "tunefile", 300, 0, save_tunefile, NULL);
 	EventAddEx(NULL, "garbage", GARBAGE_COLLECT_EVERY, 0, garbage_collect, NULL);
 	EventAddEx(NULL, "loop", 0, 0, loop_event, NULL);
-#ifndef NO_FDLIST
-	EventAddEx(NULL, "fdlistcheck", 1, 0, e_check_fdlists, NULL);
-#endif
 #ifdef JOINTHROTTLE
 	EventAddEx(NULL, "cmodej_cleanup_structs", 60, 0, cmodej_cleanup_structs, NULL);
 #endif
 	EventAddEx(NULL, "unrealdns_removeoldrecords", 15, 0, unrealdns_removeoldrecords, NULL);
+	EventAddEx(NULL, "check_pings", 9, 0, check_pings, NULL);
+	EventAddEx(NULL, "check_unknowns", 16, 0, check_unknowns, NULL);
+	EventAddEx(NULL, "try_connections", 15, 0, try_connections, NULL);
+
 	UnlockEventSystem();
 }

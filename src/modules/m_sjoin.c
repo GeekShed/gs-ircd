@@ -47,7 +47,6 @@
 DLLFUNC int m_sjoin(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SJOIN 	"SJOIN"	
-#define TOK_SJOIN 	"~"	
 
 ModuleHeader MOD_HEADER(m_sjoin)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_sjoin)
 
 DLLFUNC int MOD_INIT(m_sjoin)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SJOIN, TOK_SJOIN, m_sjoin, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SJOIN, m_sjoin, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_sjoin)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_sjoin)(int module_unload)
 {
-	if (del_Command(MSG_SJOIN, TOK_SJOIN, m_sjoin) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_sjoin).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -161,7 +155,7 @@ static int compare_floodprot_modes(ChanFloodProt *a, ChanFloodProt *b)
 	modebuf[b] = 0;\
 }\
 else {\
-	sendto_serv_butone_sjoin(cptr, ":%s MODE %s %s %s %lu", sptr->name, chptr->chname,\
+	sendto_server(cptr, 0, PROTO_SJOIN, ":%s MODE %s %s %s %lu", sptr->name, chptr->chname,\
 		modebuf, parabuf, chptr->creationtime); \
 	sendto_channel_butserv(chptr, sptr, ":%s MODE %s %s %s", sptr->name, chptr->chname,\
 		modebuf, parabuf);\
@@ -172,7 +166,7 @@ else {\
 	b = 2;\
 }
 #define Addsingle(x) do { modebuf[b] = x; b++; modebuf[b] = '\0'; } while(0)
-#define CheckStatus(x,y) do { if (modeflags & (y)) { Addit((x), nick); } } while(0)
+#define CheckStatus(x,y) do { if (modeflags & (y)) { Addit((x), acptr->name); } } while(0)
 #define AddBan(x) do { strlcat(banbuf, x, sizeof banbuf); strlcat(banbuf, " ", sizeof banbuf); } while(0)
 #define AddEx(x) do { strlcat(exbuf, x, sizeof exbuf); strlcat(exbuf, " ", sizeof exbuf); } while(0)
 #define AddInvex(x) do { strlcat(invexbuf, x, sizeof invexbuf); strlcat(invexbuf, " ", sizeof invexbuf); } while(0)
@@ -186,16 +180,18 @@ CMD_FUNC(m_sjoin)
 	unsigned short merge;	/* same timestamp */
 	char pvar[MAXMODEPARAMS][MODEBUFLEN + 3];
 	char paraback[1024];
-#ifndef NEWCHFLOODPROT
-	char modeback[1024];
-#endif
 	char banbuf[1024];
 	char exbuf[1024];
 	char invexbuf[1024];
 	char cbuf[1024];
 	char buf[1024];
 	char nick[1024];
+	char nick_buf[BUFSIZE];
+	char uid_buf[BUFSIZE];
+	char sj3_parabuf[BUFSIZE];
+	size_t buflen;
 	char *s = NULL;
+	char *nptr, *uptr;
 	aClient *acptr;
 	aChannel *chptr;
 	Member *lp;
@@ -240,10 +236,7 @@ CMD_FUNC(m_sjoin)
 	}
 	chptr = get_channel(cptr, parv[2], CREATE);
 
-	if (*parv[1] != '!')
-		ts = (time_t)atol(parv[1]);
-	else
-		ts = (time_t)base64dec(parv[1] + 1);
+	ts = (time_t)atol(parv[1]);
 
 	if (chptr->creationtime > ts)
 	{
@@ -275,7 +268,7 @@ CMD_FUNC(m_sjoin)
 	banbuf[0] = '\0';
 	exbuf[0] = '\0';
 	invexbuf[0] = '\0';
-	channel_modes(cptr, modebuf, parabuf, chptr);
+	channel_modes(cptr, modebuf, parabuf, sizeof(modebuf), sizeof(parabuf), chptr);
 	if (removeours)
 	{
 		modebuf[0] = '-';
@@ -286,7 +279,7 @@ CMD_FUNC(m_sjoin)
 			ap = mp2parv(modebuf, parabuf);
 			set_mode(chptr, cptr, ap->parc, ap->parv, &pcount,
 			    pvar, 0);
-			sendto_serv_butone_sjoin(cptr,
+			sendto_server(cptr, 0, PROTO_SJOIN,
 			    ":%s MODE %s %s %s %lu",
 			    sptr->name, chptr->chname, modebuf, parabuf,
 			    chptr->creationtime);
@@ -366,7 +359,7 @@ CMD_FUNC(m_sjoin)
 		if (b > 1)
 		{
 			modebuf[b] = '\0';
-			sendto_serv_butone_sjoin(cptr,
+			sendto_server(cptr, 0, PROTO_SJOIN,
 			    ":%s MODE %s %s %s %lu",
 			    sptr->name, chptr->chname,
 			    modebuf, parabuf, chptr->creationtime);
@@ -389,9 +382,30 @@ CMD_FUNC(m_sjoin)
 	c = 0;
 	bp = buf;
 	strlcpy(cbuf, parv[parc-1], sizeof cbuf);
+
+	strlcpy(sj3_parabuf, "", sizeof sj3_parabuf);
+	for (i = 2; i <= (parc - 2); i++)
+	{
+		if (!parv[i])
+		{
+			sendto_ops("Got null parv in SJ3 code");
+			continue;
+		}
+		strlcat(sj3_parabuf, parv[i], sizeof sj3_parabuf);
+		if (((i + 1) <= (parc - 2)))
+			strlcat(sj3_parabuf, " ", sizeof sj3_parabuf);
+	}
+
+	buflen = snprintf(nick_buf, sizeof nick_buf, ":%s SJOIN %ld %s :",
+		sptr->name, ts, sj3_parabuf);
+	nptr = nick_buf + buflen;
+
+	buflen = snprintf(uid_buf, sizeof uid_buf, ":%s SJOIN %ld %s :",
+		ID(sptr), ts, sj3_parabuf);
+	uptr = uid_buf + buflen;
+
 	for (s = s0 = strtoken(&p, cbuf, " "); s; s = s0 = strtoken(&p, (char *)NULL, " "))
 	{
-	
 		c = f = 0;
 		modeflags = 0;
 		i = 0;
@@ -404,29 +418,45 @@ CMD_FUNC(m_sjoin)
 			switch (*(tp++))
 			{
 			  case '@':
+				  *nptr++ = '@';
+				  *uptr++ = '@';
 				  modeflags |= CHFL_CHANOP;
 				  break;
 			  case '%':
+				  *nptr++ = '%';
+				  *uptr++ = '%';
 				  modeflags |= CHFL_HALFOP;
 				  break;
 			  case '+':
+				  *nptr++ = '+';
+				  *uptr++ = '+';
 				  modeflags |= CHFL_VOICE;
 				  break;
 			  case '*':
+				  *nptr++ = '*';
+				  *uptr++ = '*';
 				  modeflags |= CHFL_CHANOWNER;
 				  break;
 			  case '~':
+				  *nptr++ = '~';
+				  *uptr++ = '~';
 				  modeflags |= CHFL_CHANPROT;
 				  break;
 			  case '&':
+				  *nptr++ = '&';
+				  *uptr++ = '&';
 				  modeflags |= CHFL_BAN;				
 				  goto getnick;
 				  break;
 			  case '"':
+				  *nptr++ = '"';
+				  *uptr++ = '"';
 				  modeflags |= CHFL_EXCEPT;
 				  goto getnick;
 				  break;
 			  case '\'':
+				  *nptr++ = '\'';
+				  *uptr++ = '\'';
 				  modeflags |= CHFL_INVEX;
 				  goto getnick;
 				  break;
@@ -482,19 +512,7 @@ CMD_FUNC(m_sjoin)
 			 * locally (dont send a join to the chan) but propagate it to the other servers.
 			 * I'm not sure if the propagation is needed however -- Syzop.
 			 */
-			if (IsMember(acptr, chptr)) {
-#if 0
-				int i;
-				sendto_realops("[BUG] Duplicate user entry in SJOIN! Please report at http://bugs.unrealircd.org !!! Chan='%s', User='%s', modeflags=%ld",
-					chptr->chname ? chptr->chname : "<NULL>", acptr->name ? acptr->name : "<NULL>", modeflags);
-				ircd_log(LOG_ERROR, "[BUG] Duplicate user entry in SJOIN! Please report to UnrealIrcd team!! Chan='%s', User='%s', modeflags=%ld",
-					chptr->chname ? chptr->chname : "<NULL>", acptr->name ? acptr->name : "<NULL>", modeflags);
-				ircd_log(LOG_ERROR, "--- Dump of parameters ---");
-				for (i=0; i < parc; i++)
-					ircd_log(LOG_ERROR, "parv[%d] = '%s'", i, BadPtr(parv[i]) ? "<NULL-or-empty>" : parv[i]);
-				ircd_log(LOG_ERROR, "--- End of dump ---");
-#endif
-			} else {
+			if (!IsMember(acptr, chptr)) {
 				add_user_to_channel(chptr, acptr, modeflags);
 				RunHook4(HOOKTYPE_REMOTE_JOIN, cptr, acptr, chptr, NULL);
 				if (chptr->mode.mode & MODE_AUDITORIUM)
@@ -506,18 +524,39 @@ CMD_FUNC(m_sjoin)
 							acptr->name, acptr->user->username, GetHost(acptr), chptr->chname);
 				} else
 					sendto_channel_butserv(chptr, acptr, ":%s JOIN :%s", nick, chptr->chname);
-#ifdef NEWCHFLOODPROT
+
 				if (chptr->mode.floodprot && sptr->serv->flags.synced && !IsULine(sptr))
-			        do_chanflood(chptr->mode.floodprot, FLD_JOIN);
-#endif
+				        do_chanflood(chptr->mode.floodprot, FLD_JOIN);
 			}
-			sendto_serv_butone_sjoin(cptr, ":%s JOIN %s",
+			sendto_server(cptr, 0, PROTO_SJOIN, ":%s JOIN %s",
 			    nick, chptr->chname);
 			CheckStatus('q', CHFL_CHANOWNER);
 			CheckStatus('a', CHFL_CHANPROT);
 			CheckStatus('o', CHFL_CHANOP);
 			CheckStatus('h', CHFL_HALFOP);
 			CheckStatus('v', CHFL_VOICE);
+
+			if (((nptr - nick_buf) + NICKLEN + 10) > BUFSIZE)
+			{
+				sendto_server(cptr, PROTO_SJOIN | PROTO_SJ3, PROTO_SID, "%s", nick_buf);
+
+				buflen = snprintf(nick_buf, sizeof nick_buf, ":%s SJOIN %ld %s :",
+					sptr->name, ts, sj3_parabuf);
+				nptr = nick_buf + buflen;
+			}
+
+			nptr += sprintf(nptr, "%s ", acptr->name);
+
+			if (((uptr - uid_buf) + IDLEN + 10) > BUFSIZE)
+			{
+				sendto_server(cptr, PROTO_SJOIN | PROTO_SJ3 | PROTO_SID, 0, "%s", uid_buf);
+
+				buflen = snprintf(uid_buf, sizeof uid_buf, ":%s SJOIN %ld %s :",
+					ID(sptr), ts, sj3_parabuf);
+				uptr = uid_buf + buflen;
+			}
+
+			uptr += sprintf(uptr, "%s ", ID(acptr));
 		}
 		else
 		{
@@ -551,15 +590,36 @@ CMD_FUNC(m_sjoin)
 					AddInvex(nick);
 				}
 			}
+
+			if (((nptr - nick_buf) + NICKLEN + 10) > BUFSIZE)
+			{
+				sendto_server(cptr, PROTO_SJOIN | PROTO_SJ3, PROTO_SID, "%s", nick_buf);
+
+				buflen = snprintf(nick_buf, sizeof nick_buf, ":%s SJOIN %ld %s :",
+					sptr->name, ts, sj3_parabuf);
+				nptr = nick_buf + buflen;
+			}
+
+			nptr += sprintf(nptr, "%s ", nick);
+
+			if (((uptr - uid_buf) + IDLEN + 10) > BUFSIZE)
+			{
+				sendto_server(cptr, PROTO_SJOIN | PROTO_SJ3 | PROTO_SID, 0, "%s", uid_buf);
+
+				buflen = snprintf(uid_buf, sizeof uid_buf, ":%s SJOIN %ld %s :",
+					ID(sptr), ts, sj3_parabuf);
+				uptr = uid_buf + buflen;
+			}
+
+			uptr += sprintf(uptr, "%s ", nick);
 		}
-docontinue:
 		continue;
 	}
 
 	if (modebuf[1])
 	{
 		modebuf[b] = '\0';
-		sendto_serv_butone_sjoin(cptr,
+		sendto_server(cptr, 0, PROTO_SJOIN,
 		    ":%s MODE %s %s %s %lu",
 		    sptr->name, chptr->chname, modebuf, parabuf,
 		    chptr->creationtime);
@@ -580,7 +640,7 @@ docontinue:
 		strlcpy(paraback, parabuf, sizeof paraback);
 		ap = mp2parv(modebuf, parabuf);
 		set_mode(chptr, cptr, ap->parc, ap->parv, &pcount, pvar, 0);
-		sendto_serv_butone_sjoin(cptr,
+		sendto_server(cptr, 0, PROTO_SJOIN,
 		    ":%s MODE %s %s %s %lu",
 		    sptr->name, chptr->chname, modebuf, paraback,
 		    chptr->creationtime);
@@ -593,18 +653,17 @@ docontinue:
 	{
 		aCtab *acp;
 		bcopy(&chptr->mode, &oldmode, sizeof(Mode));
-#ifdef EXTCMODE
+
 		/* Fun.. we have to duplicate all extended modes too... */
 		oldmode.extmodeparam = NULL;
 		oldmode.extmodeparam = extcmode_duplicate_paramlist(chptr->mode.extmodeparam);
-#endif
-#ifdef NEWCHFLOODPROT
+
 		if (chptr->mode.floodprot)
 		{
 			oldmode.floodprot = MyMalloc(sizeof(ChanFloodProt));
 			memcpy(oldmode.floodprot, chptr->mode.floodprot, sizeof(ChanFloodProt));
 		}
-#endif
+
 		/* merge the modes */
 		strlcpy(modebuf, parv[3], sizeof modebuf);
 		parabuf[0] = '\0';
@@ -637,25 +696,12 @@ docontinue:
 		{
 			Addit('L', oldmode.link);
 		}
-#ifdef NEWCHFLOODPROT
 		if (oldmode.floodprot && !chptr->mode.floodprot)
 		{
 			char *x = channel_modef_string(oldmode.floodprot);
 			Addit('f', x);
 		}
-#else
-		if ((oldmode.msgs || oldmode.per || oldmode.kmode)
-		    && ((chptr->mode.msgs == 0) && (chptr->mode.per == 0)
-		    && (chptr->mode.kmode == 0)))
-		{
-			ircsprintf(modeback, "%s%i:%i",
-			    (oldmode.kmode == 1 ? "*" : ""),
-			    oldmode.msgs, oldmode.per);
-			Addit('f', modeback);
-		}
-#endif
 
-#ifdef EXTCMODE
 		/* First, check if we have something they don't have..
 		 * note that: oldmode.* = us, chptr->mode.* = them.
 		 */
@@ -674,7 +720,7 @@ docontinue:
 				}
 			}
 		}
-#endif
+
 		/* Check if we had +s and it became +p, then revert it... */
 		if ((oldmode.mode & MODE_SECRET) && (chptr->mode.mode & MODE_PRIVATE))
 		{
@@ -725,37 +771,12 @@ docontinue:
 			}
 		}
 		/* first we check if it has been set, we did unset longer up */
-		if (!oldmode.limit && chptr->mode.limit)
-		{
-			Addit('l', (char *)my_itoa(chptr->mode.limit));
-		}
-		if (!oldmode.key[0] && chptr->mode.key[0])
-		{
-			Addit('k', chptr->mode.key);
-		}
-		if (!oldmode.link[0] && chptr->mode.link[0])
-		{
-			Addit('L', chptr->mode.link);
-		}
-#ifdef NEWCHFLOODPROT
 		if (chptr->mode.floodprot && !oldmode.floodprot)
 		{
 			char *x = channel_modef_string(chptr->mode.floodprot);
 			Addit('f', x);
 		}
-#else
-		if (!(oldmode.msgs || oldmode.per || oldmode.kmode)
-		    && (chptr->mode.msgs || chptr->mode.per
-		    || chptr->mode.kmode))
-		{
-			ircsprintf(modeback, "%s%i:%i",
-			    (chptr->mode.kmode == 1 ? "*" : ""),
-			    chptr->mode.msgs, chptr->mode.per);
-			Addit('f', modeback);
-		}
-#endif
 
-#ifdef EXTCMODE
 		/* Now, check if they have something we don't have..
 		 * note that: oldmode.* = us, chptr->mode.* = them.
 		 */
@@ -774,7 +795,6 @@ docontinue:
 				}
 			}
 		}
-#endif
 
 		/* now, if we had diffent para modes - this loop really could be done better, but */
 
@@ -818,7 +838,6 @@ docontinue:
 		/* 
 		 * run a max on each?
 		 */
-#ifdef NEWCHFLOODPROT
 		if (chptr->mode.floodprot && oldmode.floodprot)
 		{
 			char *x;
@@ -837,28 +856,7 @@ docontinue:
 				Addit('f', x);
 			}
 		}
-#else
-		if ((oldmode.kmode != chptr->mode.kmode)
-		    || (oldmode.msgs != chptr->mode.msgs)
-		    || (oldmode.per != chptr->mode.per))
-		{
-			chptr->mode.kmode =
-			    MAX(chptr->mode.kmode, oldmode.kmode);
-			chptr->mode.msgs = MAX(chptr->mode.msgs, oldmode.msgs);
-			chptr->mode.per = MAX(chptr->mode.per, oldmode.per);
-			if ((oldmode.kmode != chptr->mode.kmode)
-			    || (oldmode.msgs != chptr->mode.msgs)
-			    || (oldmode.per != chptr->mode.per))
-			{
-				ircsprintf(modeback, "%s%i:%i",
-				    (chptr->mode.kmode == 1 ? "*" : ""),
-				    chptr->mode.msgs, chptr->mode.per);
-				Addit('f', modeback);
-			}
-		}
-#endif
 
-#ifdef EXTCMODE
 		/* Now, check for any param differences in extended channel modes..
 		 * note that: oldmode.* = us, chptr->mode.* = them.
 		 * if we win: copy oldmode to chptr mode, if they win: send the mode
@@ -901,32 +899,29 @@ docontinue:
 				}
 			}
 		}
-#endif
 
 		Addsingle('\0');
 
 		if (modebuf[1])
 		{
-			sendto_serv_butone_sjoin(cptr,
+			sendto_server(cptr, 0, PROTO_SJOIN,
 			    ":%s MODE %s %s %s %lu",
 			    sptr->name, chptr->chname, modebuf, parabuf,
 			    chptr->creationtime);
 			sendto_channel_butserv(chptr, sptr, ":%s MODE %s %s %s",
 			    sptr->name, chptr->chname, modebuf, parabuf);
 		}
-#ifdef EXTCMODE
+
 		/* free the oldmode.* crap :( */
 		extcmode_free_paramlist(oldmode.extmodeparam);
 		oldmode.extmodeparam = NULL; /* just to be sure ;) */
-#endif
-#ifdef NEWCHFLOODPROT
+
 		/* and the oldmode.floodprot struct too... :/ */
 		if (oldmode.floodprot)
 		{
 			free(oldmode.floodprot);
 			oldmode.floodprot = NULL;
 		}
-#endif
 	}
 
 	/* we should be synched by now, */
@@ -956,14 +951,12 @@ docontinue:
 		return -1;
 	}
 	/* This sends out to SJ3 servers .. */
-	Debug((DEBUG_DEBUG, "Sending '%li %s :%s' to sj3-!sjb64", ts, parabuf,
+	Debug((DEBUG_DEBUG, "Sending '%li %s :%s' to sj3", ts, parabuf,
 	    parv[parc - 1]));
-	sendto_serv_butone_token_opt(cptr, OPT_SJOIN | OPT_SJ3 | OPT_NOT_SJB64, sptr->name,
-	    MSG_SJOIN, TOK_SJOIN, "%li %s :%s", ts, parabuf, parv[parc - 1]);
-	Debug((DEBUG_DEBUG, "Sending '%B %s :%s' to sj3-sjb64", (long)ts, parabuf,
-	    parv[parc - 1]));
-	sendto_serv_butone_token_opt(cptr, OPT_SJOIN | OPT_SJ3 | OPT_SJB64, sptr->name,
-	    MSG_SJOIN, TOK_SJOIN, "%B %s :%s", (long)ts, parabuf, parv[parc - 1]);
-	 
+	sendto_server(cptr, PROTO_SJOIN | PROTO_SJ3, PROTO_SID,
+	    "%s", nick_buf);
+	sendto_server(cptr, PROTO_SID | PROTO_SJOIN | PROTO_SJ3, 0,
+	    "%s", uid_buf);
+
 	return 0;
 }

@@ -30,7 +30,8 @@
 ID_Copyright("(C) 1991 Darren Reed");
 ID_Notes("2.10 7/3/93");
 
-static aHashEntry clientTable[U_MAX];
+static struct list_head clientTable[U_MAX];
+static struct list_head idTable[U_MAX];
 static aHashEntry channelTable[CH_MAX];
 
 /*
@@ -89,7 +90,7 @@ unsigned int hash_nn_name(const char *hname)
 }
 
 
-unsigned hash_nick_name(char *nname)
+unsigned hash_nick_name(const char *nname)
 {
 	unsigned hash = 0;
 	int  hash2 = 0;
@@ -160,7 +161,13 @@ unsigned int hash_whowas_name(char *name)
  */
 void clear_client_hash_table(void)
 {
-	memset((char *)clientTable, '\0', sizeof(aHashEntry) * U_MAX);
+	int i;
+
+	for (i = 0; i < U_MAX; i++)
+		INIT_LIST_HEAD(&clientTable[i]);
+
+	for (i = 0; i < U_MAX; i++)
+		INIT_LIST_HEAD(&idTable[i]);
 }
 
 void clear_channel_hash_table(void)
@@ -191,12 +198,21 @@ int  add_to_client_hash_table(char *name, aClient *cptr)
 	if (loop.tainted)
 		return 0;
 	hashv = hash_nick_name(name);
-	cptr->hnext = (aClient *)clientTable[hashv].list;
-	clientTable[hashv].list = (void *)cptr;
-	clientTable[hashv].links++;
-	clientTable[hashv].hits++;
+	list_add(&cptr->client_hash, &clientTable[hashv]);
 	return 0;
 }
+
+/*
+ * add_to_client_hash_table
+ */
+int  add_to_id_hash_table(char *name, aClient *cptr)
+{
+	unsigned int  hashv;
+	hashv = hash_nick_name(name);
+	list_add(&cptr->id_hash, &idTable[hashv]);
+	return 0;
+}
+
 /*
  * add_to_channel_hash_table
  */
@@ -216,35 +232,24 @@ int  add_to_channel_hash_table(char *name, aChannel *chptr)
  */
 int  del_from_client_hash_table(char *name, aClient *cptr)
 {
-	aClient *tmp, *prev = NULL;
-	unsigned int  hashv;
+	if (!list_empty(&cptr->client_hash))
+		list_del(&cptr->client_hash);
 
-	hashv = hash_nick_name(name);
-	for (tmp = (aClient *)clientTable[hashv].list; tmp; tmp = tmp->hnext)
-	{
-		if (tmp == cptr)
-		{
-			if (prev)
-				prev->hnext = tmp->hnext;
-			else
-				clientTable[hashv].list = (void *)tmp->hnext;
-			tmp->hnext = NULL;
-			if (clientTable[hashv].links > 0)
-			{
-				clientTable[hashv].links--;
-				return 1;
-			}
-			else
-				/*
-				 * Should never actually return from here and if we do it
-				 * is an error/inconsistency in the hash table.
-				 */
-				return -1;
-		}
-		prev = tmp;
-	}
+	INIT_LIST_HEAD(&cptr->client_hash);
+
 	return 0;
 }
+
+int  del_from_id_hash_table(char *name, aClient *cptr)
+{
+	if (!list_empty(&cptr->id_hash))
+		list_del(&cptr->id_hash);
+
+	INIT_LIST_HEAD(&cptr->id_hash);
+
+	return 0;
+}
+
 /*
  * del_from_channel_hash_table
  */
@@ -280,62 +285,61 @@ int  del_from_channel_hash_table(char *name, aChannel *chptr)
 /*
  * hash_find_client
  */
-aClient *hash_find_client(char *name, aClient *cptr)
+aClient *hash_find_client(const char *name, aClient *cptr)
 {
 	aClient *tmp;
-	aHashEntry *tmp3;
 	unsigned int  hashv;
 
 	hashv = hash_nick_name(name);
-	tmp3 = &clientTable[hashv];
-	/*
-	 * Got the bucket, now search the chain.
-	 */
-	for (tmp = (aClient *)tmp3->list; tmp; tmp = tmp->hnext)
+	list_for_each_entry(tmp, &clientTable[hashv], client_hash)
+	{
 		if (smycmp(name, tmp->name) == 0)
-		{
 			return (tmp);
-		}
+	}
+
 	return (cptr);
-	/*
-	 * If the member of the hashtable we found isnt at the top of its
-	 * chain, put it there.  This builds a most-frequently used order
-	 * into the chains of the hash table, giving speedier lookups on
-	 * those nicks which are being used currently.  This same block of
-	 * code is also used for channels and servers for the same
-	 * performance reasons.
-	 * 
-	 * I don't believe it does.. it only wastes CPU, lets try it and
-	 * see....
-	 * 
-	 * - Dianora
-	 */
+}
+
+aClient *hash_find_id(const char *name, aClient *cptr)
+{
+	aClient *tmp;
+	unsigned int  hashv;
+
+	hashv = hash_nick_name(name);
+	list_for_each_entry(tmp, &idTable[hashv], id_hash)
+	{
+		if (smycmp(name, tmp->id) == 0)
+			return (tmp);
+	}
+
+	return (cptr);
 }
 
 /*
  * hash_find_nickserver
  */
-aClient *hash_find_nickserver(char *name, aClient *cptr)
+aClient *hash_find_nickserver(const char *name, aClient *cptr)
 {
 	aClient *tmp;
-	aHashEntry *tmp3;
 	unsigned int  hashv;
 	char *serv;
 
 	serv = (char *)strchr(name, '@');
 	*serv++ = '\0';
 	hashv = hash_nick_name(name);
-	tmp3 = &clientTable[hashv];
+
 	/*
 	 * Got the bucket, now search the chain.
 	 */
-	for (tmp = (aClient *)tmp3->list; tmp; tmp = tmp->hnext)
+	list_for_each_entry(tmp, &clientTable[hashv], client_hash)
+	{
 		if (smycmp(name, tmp->name) == 0 && tmp->user &&
 		    smycmp(serv, tmp->user->server) == 0)
 		{
 			*--serv = '\0';
 			return (tmp);
 		}
+	}
 
 	*--serv = '\0';
 	return (cptr);
@@ -343,21 +347,13 @@ aClient *hash_find_nickserver(char *name, aClient *cptr)
 /*
  * hash_find_server
  */
-aClient *hash_find_server(char *server, aClient *cptr)
+aClient *hash_find_server(const char *server, aClient *cptr)
 {
 	aClient *tmp;
-#if 0
-	char *t;
-	char ch;
-#endif
-	aHashEntry *tmp3;
-
 	unsigned int  hashv;
 
 	hashv = hash_nick_name(server);
-	tmp3 = &clientTable[hashv];
-
-	for (tmp = (aClient *)tmp3->list; tmp; tmp = tmp->hnext)
+	list_for_each_entry(tmp, &clientTable[hashv], client_hash)
 	{
 		if (!IsServer(tmp) && !IsMe(tmp))
 			continue;
@@ -367,42 +363,6 @@ aClient *hash_find_server(char *server, aClient *cptr)
 		}
 	}
 
-	/*
-	 * Whats happening in this next loop ? Well, it takes a name like
-	 * foo.bar.edu and proceeds to earch for *.edu and then *.bar.edu.
-	 * This is for checking full server names against masks although it
-	 * isnt often done this way in lieu of using matches().
-	 */
-
-	/* why in god's name would we ever want to do something like this?
-	 * commented out, probably to be removed sooner or later - lucas 
-	 */
-
-#if 0
-	t = ((char *)server + strlen(server));
-
-	for (;;)
-	{
-		t--;
-		for (; t > server; t--)
-			if (*(t + 1) == '.')
-				break;
-		if (*t == '*' || t == server)
-			break;
-		ch = *t;
-		*t = '*';
-		/*
-		 * Dont need to check IsServer() here since nicknames cant have
-		 * *'s in them anyway.
-		 */
-		if (((tmp = hash_find_client(t, cptr))) != cptr)
-		{
-			*t = ch;
-			return (tmp);
-		}
-		*t = ch;
-	}
-#endif
 	return (cptr);
 }
 
@@ -562,24 +522,14 @@ int   hash_check_watch(aClient *cptr, int reply)
 	{
 		if (!awaynotify)
 		{
-			/* Most common: LOGON or LOGOFF */
-			if (IsWebTV(lp->value.cptr))
-				sendto_one(lp->value.cptr, ":IRC!IRC@%s PRIVMSG %s :%s (%s@%s) "
-					" %s IRC",
-					me.name, lp->value.cptr->name, cptr->name,
-				    	(IsPerson(cptr) ? cptr->user->username : "<N/A>"),
-					(IsPerson(cptr) ?
-				    	(IsHidden(cptr) ? cptr->user->virthost : cptr->
-				    	user->realhost) : "<N/A>"), reply == RPL_LOGON ? 
-					"is now on" : "has left");
-			else
-				sendto_one(lp->value.cptr, rpl_str(reply), me.name,
-				    lp->value.cptr->name, cptr->name,
-				    (IsPerson(cptr) ? cptr->user->username : "<N/A>"),
-				    (IsPerson(cptr) ?
-				    (IsHidden(cptr) ? cptr->user->virthost : cptr->
-				    user->realhost) : "<N/A>"), anptr->lasttime, cptr->info);
-		} else
+			sendto_one(lp->value.cptr, rpl_str(reply), me.name,
+			    lp->value.cptr->name, cptr->name,
+			    (IsPerson(cptr) ? cptr->user->username : "<N/A>"),
+			    (IsPerson(cptr) ?
+			    (IsHidden(cptr) ? cptr->user->virthost : cptr->
+			    user->realhost) : "<N/A>"), anptr->lasttime, cptr->info);
+		}
+		else
 		{
 			/* AWAY or UNAWAY */
 			if (!lp->flags)
@@ -775,8 +725,6 @@ int   hash_del_watch_list(aClient *cptr)
  * -by Stskeeps
 */
 
-#ifdef THROTTLING
-
 struct	MODVAR ThrottlingBucket	*ThrottlingHash[THROTTLING_HASH_SIZE+1];
 
 void	init_throttling_hash()
@@ -916,5 +864,3 @@ int	throttle_can_connect(aClient *sptr, struct IN_ADDR *in)
 		return 2;
 	}
 }
-
-#endif

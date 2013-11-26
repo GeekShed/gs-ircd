@@ -47,7 +47,6 @@
 DLLFUNC int m_samode(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SAMODE 	"SAMODE"	
-#define TOK_SAMODE 	"o"	
 
 ModuleHeader MOD_HEADER(m_samode)
   = {
@@ -60,7 +59,7 @@ ModuleHeader MOD_HEADER(m_samode)
 
 DLLFUNC int MOD_INIT(m_samode)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_SAMODE, TOK_SAMODE, m_samode, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SAMODE, m_samode, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -72,11 +71,6 @@ DLLFUNC int MOD_LOAD(m_samode)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_samode)(int module_unload)
 {
-	if (del_Command(MSG_SAMODE, TOK_SAMODE, m_samode) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_samode).name);
-	}
 	return MOD_SUCCESS;
 }
 

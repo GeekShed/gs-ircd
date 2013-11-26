@@ -47,9 +47,7 @@ DLLFUNC int m_sendumode(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_SENDUMODE   "SENDUMODE"
-#define TOK_SENDUMODE   "AP"
 #define MSG_SMO         "SMO"
-#define TOK_SMO         "AU"
 
 ModuleHeader MOD_HEADER(m_sendumode)
   = {
@@ -63,11 +61,8 @@ ModuleHeader MOD_HEADER(m_sendumode)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_sendumode)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_SENDUMODE, TOK_SENDUMODE, m_sendumode, MAXPARA);
-	add_Command(MSG_SMO, TOK_SMO, m_sendumode, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_SENDUMODE, m_sendumode, MAXPARA, 0);
+	CommandAdd(modinfo->handle, MSG_SMO, m_sendumode, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -81,19 +76,7 @@ DLLFUNC int MOD_LOAD(m_sendumode)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_sendumode)(int module_unload)
 {
-	if (del_Command(MSG_SENDUMODE, TOK_SENDUMODE, m_sendumode) < 0)
-	{
-		sendto_realops("Failed to delete command sendumode when unloading %s",
-				MOD_HEADER(m_sendumode).name);
-	}
-	if (del_Command(MSG_SMO, TOK_SMO, m_sendumode) < 0)
-	{
-		sendto_realops("Failed to delete command smo when unloading %s",
-				MOD_HEADER(m_sendumode).name);
-	}
 	return MOD_SUCCESS;
-	
-
 }
 
 /*
@@ -131,7 +114,7 @@ DLLFUNC int m_sendumode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		return 0;
 	}
 
-	sendto_serv_butone(IsServer(cptr) ? cptr : NULL,
+	sendto_server(IsServer(cptr) ? cptr : NULL, 0, 0,
 	    ":%s SMO %s :%s", parv[0], parv[1], message);
 
 	for (p = parv[1]; *p; p++)
@@ -174,10 +157,9 @@ DLLFUNC int m_sendumode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		}
 	}
 
-	for(i = 0; i <= LastSlot; i++)
-	    if((acptr = local[i]) && IsPerson(acptr) && ((acptr->user->snomask & snomask) ||
-		(acptr->umodes & umode_s)))
+	list_for_each_entry(acptr, &oper_list, special_node)
 	{
+	    if((acptr->user->snomask & snomask) || (acptr->umodes & umode_s))
 		sendto_one(acptr, ":%s NOTICE %s :%s", me.name, acptr->name, message);
 	}
 

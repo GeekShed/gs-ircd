@@ -141,10 +141,6 @@ void reread_motdsandrules();
 **		note:	it is guaranteed that parv[0]..parv[parc-1] are all
 **			non-NULL pointers.
 */
-#ifndef NO_FDLIST
-extern fdlist serv_fdlist;
-#endif
-
 #ifndef _WIN32
 char *getosname(void)
 {
@@ -185,8 +181,7 @@ CMD_FUNC(m_version)
 	if (!IsPerson(sptr) && !IsServer(cptr))
 		goto normal;
 
-	if (hunt_server_token(cptr, sptr, MSG_VERSION, TOK_VERSION, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s VERSION :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		sendto_one(sptr, rpl_str(RPL_VERSION), me.name,
 		    parv[0], version, debugmode, me.name,
@@ -196,10 +191,6 @@ CMD_FUNC(m_version)
 #ifdef USE_SSL
 		if (IsAnOper(sptr))
 			sendto_one(sptr, ":%s NOTICE %s :%s", me.name, sptr->name, OPENSSL_VERSION_TEXT);
-#endif
-#ifdef ZIP_LINKS
-		if (IsAnOper(sptr))
-			sendto_one(sptr, ":%s NOTICE %s :zlib %s", me.name, sptr->name, zlibVersion());
 #endif
 #ifdef USE_LIBCURL
 		if (IsAnOper(sptr))
@@ -222,8 +213,7 @@ char *num = NULL;
 
 /*
  * send_proto:
- * Sends PROTOCTL message to server, taking care of whether ZIP
- * should be enabled or not.
+ * Sends PROTOCTL message to server
  * Now split up into multiple PROTOCTL messages (again), since we have
  * too many for a single line. If this breaks your services because
  * you fail to maintain PROTOCTL state, then fix them!
@@ -236,35 +226,15 @@ char buf[1024];
 	sendto_one(cptr, "PROTOCTL %s", PROTOCTL_SERVER);
 
 	/* Second line */
-	sprintf(buf, "CHANMODES=%s%s,%s%s,%s%s,%s%s NICKCHARS=%s MLOCK",
-		CHPAR1, EXPAR1, CHPAR2, EXPAR2, CHPAR3, EXPAR3, CHPAR4, EXPAR4, langsinuse);
-#ifdef ZIP_LINKS
-	if (aconf->options & CONNECT_ZIP)
-		strcat(buf, " ZIP");
-#endif
+	snprintf(buf, sizeof(buf), "CHANMODES=%s%s,%s%s,%s%s,%s%s NICKCHARS=%s SID=%s MLOCK",
+		CHPAR1, EXPAR1, CHPAR2, EXPAR2, CHPAR3, EXPAR3, CHPAR4, EXPAR4, langsinuse, me.id);
+
 	sendto_one(cptr, "PROTOCTL %s", buf);
 }
 
 #ifndef IRCDTOTALVERSION
 #define IRCDTOTALVERSION BASE_VERSION PATCH1 PATCH2 PATCH3 PATCH4 PATCH5 PATCH6 PATCH7 PATCH8 PATCH9
 #endif
-
-int remotecmdfilter(aClient *sptr, int parc, char *parv[])
-{
-	/* no remote requests permitted from non-ircops */
-	if (MyClient(sptr) && !IsOper(sptr) && !BadPtr(parv[1]))
-	{
-		parv[1] = NULL;
-		parc = 1;
-	}
-
-	/* same as above, but in case an old server forwards a request to us: we ignore it */
-	if (!MyClient(sptr) && !IsOper(sptr))
-		return 1; /* STOP (return) */
-	
-	return 0; /* Continue */
-}
-
 
 /*
  * sends m_info into to sptr
@@ -281,11 +251,11 @@ char *unrealinfo[] =
 	"* binki        <binki@unrealircd.com>",
 	"",
 	"Contributors:",
-	"* nenolod, Adam, warg, Stealth, WolfSage, katsklaw, darkex, fspijkerman,",
-	"  fbi, Apocalypse",
+	"* nenolod, Adam, warg, Stealth, WolfSage, katsklaw, darkex,"
+	"  fspijkerman, fbi, Apocalypse",
 	"",
 	"RC Testers:",
-	"* therock247uk, katsklaw, nenolod, Han`, Adam, Cronus, warg, Crash,",
+	"* <<TODO>>,",
 	"  and everyone else who downloaded the release candidates.",
 	"",
 	"Past UnrealIRCd3.2* coders/contributors:",
@@ -344,11 +314,7 @@ char **text = unrealinfo;
 
 CMD_FUNC(m_info)
 {
-	if (remotecmdfilter(sptr, parc, parv))
-		return 0;
-
-	if (hunt_server_token(cptr, sptr, MSG_INFO, TOK_INFO, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s INFO :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		m_info_send(sptr);
 	}
@@ -365,11 +331,7 @@ CMD_FUNC(m_dalinfo)
 {
 	char **text = dalinfotext;
 
-	if (remotecmdfilter(sptr, parc, parv))
-		return 0;
-
-	if (hunt_server_token(cptr, sptr, MSG_DALINFO, TOK_DALINFO, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s DALINFO :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		while (*text)
 			sendto_one(sptr, rpl_str(RPL_INFO),
@@ -396,11 +358,7 @@ CMD_FUNC(m_license)
 {
 	char **text = gnulicense;
 
-	if (remotecmdfilter(sptr, parc, parv))
-		return 0;
-
-	if (hunt_server_token(cptr, sptr, MSG_LICENSE, TOK_LICENSE, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s LICENSE :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		while (*text)
 			sendto_one(sptr, rpl_str(RPL_INFO),
@@ -422,11 +380,7 @@ CMD_FUNC(m_credits)
 {
 	char **text = unrealcredits;
 
-	if (remotecmdfilter(sptr, parc, parv))
-		return 0;
-
-	if (hunt_server_token(cptr, sptr, MSG_CREDITS, TOK_CREDITS, ":%s", 1, parc,
-	    parv) == HUNTED_ISME)
+	if (hunt_server(cptr, sptr, ":%s CREDITS :%s", 1, parc, parv) == HUNTED_ISME)
 	{
 		while (*text)
 			sendto_one(sptr, rpl_str(RPL_INFO),
@@ -463,8 +417,6 @@ char *get_cptr_status(aClient *acptr)
 		if (acptr->umodes & LISTENER_SSL)
 			*p++ = 's';
 #endif
-		if (acptr->umodes & LISTENER_REMOTEADMIN)
-			*p++ = 'R';
 		if (acptr->umodes & LISTENER_JAVACLIENT)
 			*p++ = 'J';
 	}
@@ -550,14 +502,14 @@ CMD_FUNC(m_error)
 		return 0;
 	if (cptr == sptr)
 	{
-		sendto_serv_butone(&me, ":%s GLOBOPS :ERROR from %s -- %s",
+		sendto_server(&me, 0, 0, ":%s GLOBOPS :ERROR from %s -- %s",
 		    me.name, get_client_name(cptr, FALSE), para);
 		sendto_locfailops("ERROR :from %s -- %s",
 		    get_client_name(cptr, FALSE), para);
 	}
 	else
 	{
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s GLOBOPS :ERROR from %s via %s -- %s", me.name,
 		    sptr->name, get_client_name(cptr, FALSE), para);
 		sendto_ops("ERROR :from %s via %s -- %s", sptr->name,
@@ -603,9 +555,14 @@ void load_tunefile(void)
 	if (!tunefile)
 		return;
 	fprintf(stderr, "* Loading tunefile..\n");
-	fgets(buf, 1023, tunefile);
+	if (!fgets(buf, sizeof(buf), tunefile))
+	    fprintf(stderr, "Warning: error while reading the timestamp offset from the tunefile%s%s\n",
+		errno? ": ": "", errno? strerror(errno): "");
 	TSoffset = atol(buf);
-	fgets(buf, 1023, tunefile);
+
+	if (!fgets(buf, sizeof(buf), tunefile))
+	    fprintf(stderr, "Warning: error while reading the peak user count from the tunefile%s%s\n",
+		errno? ": ": "", errno? strerror(errno): "");
 	IRCstats.me_max = atol(buf);
 	fclose(tunefile);
 }
@@ -673,12 +630,12 @@ CMD_FUNC(m_rehash)
 		if (parv[1] && (parv[1][0] == '-'))
 			x = HUNTED_ISME;
 		else
-			x = hunt_server_token(cptr, sptr, MSG_REHASH, TOK_REHASH, "%s", 1, parc, parv);
+			x = hunt_server(cptr, sptr, ":%s REHASH :%s", 1, parc, parv);
 	} else {
 		if (!_match("-glob*", parv[1])) /* This is really ugly... hack to make /rehash -global -something work */
 			x = HUNTED_ISME;
 		else
-			x = hunt_server_token(cptr, sptr, MSG_REHASH, TOK_REHASH, "%s %s", 1, parc, parv);
+			x = hunt_server(cptr, sptr, ":%s REHASH %s :%s", 1, parc, parv);
 	}
 	if (x != HUNTED_ISME)
 		return 0; /* Now forwarded or server didnt exist */
@@ -697,7 +654,7 @@ CMD_FUNC(m_rehash)
 					me.name, sptr->name);
 				return 0;
 			}
-			sendto_serv_butone(&me,
+			sendto_server(&me, 0, 0,
 			    ":%s GLOBOPS :%s is remotely rehashing server config file",
 			    me.name, sptr->name);
 			sendto_ops
@@ -715,7 +672,6 @@ CMD_FUNC(m_rehash)
 		if (parv[1] && !_match("-glob*", parv[1]))
 		{
 			/* /REHASH -global [options] */
-			Link *lp;
 			aClient *acptr;
 			
 			/* Shift parv's to the left */
@@ -738,14 +694,12 @@ CMD_FUNC(m_rehash)
 				return 0;
 			}
 			/* Broadcast it in an inefficient, but backwards compatible way. */
-			for (lp = Servers; lp; lp = lp->next)
+			list_for_each_entry(acptr, &global_server_list, client_node)
 			{
-				acptr = lp->value.cptr;
 				if (acptr == &me)
 					continue;
-				sendto_one(acptr, ":%s %s %s %s",
+				sendto_one(acptr, ":%s REHASH %s %s",
 					sptr->name,
-					IsToken(acptr->from) ? TOK_REHASH : MSG_REHASH,
 					acptr->name,
 					parv[1] ? parv[1] : "-all");
 			}
@@ -791,7 +745,7 @@ CMD_FUNC(m_rehash)
 				    cptr != sptr ? "Remotely " : "",
 				    sptr->name);
 				if (cptr != sptr)
-					sendto_serv_butone(&me, ":%s GLOBOPS :%s is remotely rehashing OperMOTD", me.name, sptr->name);
+					sendto_server(&me, 0, 0, ":%s GLOBOPS :%s is remotely rehashing OperMOTD", me.name, sptr->name);
 				read_motd(conf_files->opermotd_file, &opermotd);
 				RunHook3(HOOKTYPE_REHASHFLAG, cptr, sptr, parv[1]);
 				return 0;
@@ -803,7 +757,7 @@ CMD_FUNC(m_rehash)
 				    cptr != sptr ? "Remotely " : "",
 				    sptr->name);
 				if (cptr != sptr)
-					sendto_serv_butone(&me, ":%s GLOBOPS :%s is remotely rehashing BotMOTD", me.name, sptr->name);
+					sendto_server(&me, 0, 0, ":%s GLOBOPS :%s is remotely rehashing BotMOTD", me.name, sptr->name);
 				read_motd(conf_files->botmotd_file, &botmotd);
 				RunHook3(HOOKTYPE_REHASHFLAG, cptr, sptr, parv[1]);
 				return 0;
@@ -816,7 +770,7 @@ CMD_FUNC(m_rehash)
 				    cptr != sptr ? "Remotely " : "",
 				    sptr->name);
 				if (cptr != sptr)
-					sendto_serv_butone(&me, ":%s GLOBOPS :%s is remotely rehashing all MOTDs and RULES", me.name, sptr->name);
+					sendto_server(&me, 0, 0, ":%s GLOBOPS :%s is remotely rehashing all MOTDs and RULES", me.name, sptr->name);
 				rehash_motdrules();
 				RunHook3(HOOKTYPE_REHASHFLAG, cptr, sptr, parv[1]);
 				return 0;
@@ -902,15 +856,11 @@ char *reason = parv[1];
 		}
 	}
 	sendto_ops("Server is Restarting by request of %s", parv[0]);
-	
-	for (i = 0; i <= LastSlot; i++)
+
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
 		if (IsClient(acptr))
-			sendto_one(acptr,
-			    ":%s %s %s :Server Restarting. %s",
-			    me.name, IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name, sptr->name);
+			sendnotice(acptr, "Server Restarted by %s", sptr->name);
 		else if (IsServer(acptr))
 			sendto_one(acptr, ":%s ERROR :Restarted by %s: %s",
 			    me.name, get_client_name(sptr, TRUE), reason ? reason : "No reason");
@@ -998,8 +948,6 @@ int short_motd(aClient *sptr)
  * we can now use 1 function for multiple files -- codemastr
  * Merged read_motd/read_rules stuff into this -- Syzop
  */
-
-#define MOTD_LINE_LEN 81
 
 
 /** Read motd-like file, used for rules/motd/botmotd/opermotd/etc.
@@ -1159,8 +1107,6 @@ void do_read_motd(const char *filename, aMotdFile *themotd)
 			*tmp = '\0';
 		if ((tmp = strchr(line, '\r')))
 			*tmp = '\0';
-		if (strlen(line) > MOTD_LINE_LEN)
-			line[MOTD_LINE_LEN] = '\0';
 
 		temp = MyMalloc(sizeof(aMotdLine));
 		if (!temp)
@@ -1252,18 +1198,16 @@ CMD_FUNC(m_die)
 	/* Let the +s know what is going on */
 	sendto_ops("Server Terminating by request of %s", parv[0]);
 
-	for (i = 0; i <= LastSlot; i++)
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
 		if (IsClient(acptr))
-			sendto_one(acptr,
-			    ":%s %s %s :Server Terminating. %s",
-			    me.name, IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name, sptr->name);
+			sendnotice(acptr, "Server Terminated by %s", 
+				sptr->name);
 		else if (IsServer(acptr))
 			sendto_one(acptr, ":%s ERROR :Terminated by %s",
 			    me.name, get_client_name(sptr, TRUE));
 	}
+
 	(void)s_die();
 	return 0;
 }
@@ -1276,16 +1220,11 @@ CMD_FUNC(m_die)
 int  localdie(void)
 {
 	aClient *acptr;
-	int  i;
 
-	for (i = 0; i <= LastSlot; i++)
+	list_for_each_entry(acptr, &lclient_list, lclient_node)
 	{
-		if (!(acptr = local[i]))
-			continue;
 		if (IsClient(acptr))
-			sendto_one(acptr,
-			    ":%s %s %s :Server Terminated by local console",
-			    me.name, IsWebTV(acptr) ? "PRIVMSG" : "NOTICE", acptr->name);
+			sendnotice(acptr, "Server Terminated by local console");
 		else if (IsServer(acptr))
 			sendto_one(acptr,
 			    ":%s ERROR :Terminated by local console", me.name);
@@ -1302,7 +1241,10 @@ aClient *find_match_server(char *mask)
 
 	if (BadPtr(mask))
 		return NULL;
-	for (acptr = client, collapse(mask); acptr; acptr = acptr->next)
+
+	collapse(mask);
+
+	list_for_each_entry(acptr, &client_list, client_node)
 	{
 		if (!IsServer(acptr) && !IsMe(acptr))
 			continue;
@@ -1310,6 +1252,7 @@ aClient *find_match_server(char *mask)
 			break;
 		continue;
 	}
+
 	return acptr;
 }
 
@@ -1416,27 +1359,3 @@ int i;
 	
 	return NULL;
 }
-
-aClient *find_non_pending_net_duplicates(aClient *cptr)
-{
-aPendingNet *e;
-int i;
-aClient *acptr;
-
-	for (e = pendingnet; e; e = e->next)
-	{
-		if (e->sptr != cptr)
-			continue;
-		/* Ok, found myself */
-		for (i = 0; i < e->numservers; i++)
-		{
-			int numeric = e->servers[i];
-			acptr = find_server_by_numeric(numeric);
-			if (acptr)
-				return acptr; /* Found another (fully CONNECTED) server with identical numeric */
-		}
-	}
-	
-	return NULL;
-}
-

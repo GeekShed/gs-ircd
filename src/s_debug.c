@@ -18,7 +18,6 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
-
 #ifndef CLEAN_COMPILE
 static char sccsid[] =
     "@(#)s_debug.c	2.30 1/3/94 (C) 1988 University of Oulu, \
@@ -41,9 +40,10 @@ MODVAR char serveropts[] = {
 #ifdef	DEBUGMODE
 	'D',
 #endif
-#ifndef	NO_FDLIST
+	/* FDLIST is always compiled in now.  Well, my replacement to it
+	 * is anyway.  --nenolod
+	 */
 	'F',
-#endif
 	/*
 	 * Marks that the ircd is ``compiled as'' a hub.
 	 * Now always defined as it's impossible to build unrealircd
@@ -79,12 +79,7 @@ MODVAR char serveropts[] = {
 #ifndef OPEROVERRIDE_VERIFY
 	'o',
 #endif
-#ifdef ZIP_LINKS
-	'Z',
-#endif
-#ifdef EXTCMODE
 	'E',
-#endif
 	'\0', /* Don't change those 3 nuls. -- Syzop */
 	'\0',
 	'\0'
@@ -204,33 +199,17 @@ void debug(int level, char *form, ...)
 	if ((debuglevel >= 0) && (level <= debuglevel))
 	{
 #ifndef USE_VARARGS
-		(void)ircsprintf(debugbuf, form, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);
+		(void)ircsnprintf(debugbuf, sizeof(debugbuf), form, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10);
 #else
-		(void)ircvsprintf(debugbuf, form, vl);
-#if 0
-# ifdef _WIN32
-		strcat(debugbuf,"\r\n");
-# endif
-#endif
+		(void)ircvsnprintf(debugbuf, sizeof(debugbuf), form, vl);
 #endif
 
-#if 0
-		if (local[2])
-		{
-			local[2]->sendM++;
-			local[2]->sendB += strlen(debugbuf);
-		}
-#endif
 #ifndef _WIN32
 		(void)fprintf(stderr, "%s", debugbuf);
 		(void)fputc('\n', stderr);
 #else
-//# ifndef _WIN32GUI
-//		Cio_Puts(hCio, debugbuf, strlen(debugbuf));
-//# else
-		strcat(debugbuf, "\r\n");
+		strncat(debugbuf, "\r\n", sizeof(debugbuf)-strlen(debugbuf)-1);
 		OutputDebugString(debugbuf);
-//# endif
 #endif
 	}
 	va_end(vl);
@@ -328,8 +307,6 @@ void send_usage(aClient *cptr, char *nick)
 #endif
 	sendto_one(cptr, ":%s %d %s :Reads %d Writes %d",
 	    me.name, RPL_STATSDEBUG, nick, readcalls, writecalls);
-	sendto_one(cptr, ":%s %d %s :DBUF alloc %d blocks %d",
-	    me.name, RPL_STATSDEBUG, nick, dbufalloc, dbufblocks);
 	sendto_one(cptr,
 	    ":%s %d %s :Writes:  <0 %d 0 %d <16 %d <32 %d <64 %d",
 	    me.name, RPL_STATSDEBUG, nick,

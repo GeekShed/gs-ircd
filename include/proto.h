@@ -39,19 +39,17 @@ void clear_scache_hash_table(void);
 void sendto_one(aClient *, char *, ...) __attribute__((format(printf,2,3)));
 void sendto_chanops_butone(aClient *one, aChannel *chptr, char *pattern, ...) __attribute__((format(printf,3,4)));
 void sendto_realops(char *pattern, ...) __attribute__((format(printf,1,2)));
-void sendto_serv_butone_token(aClient *one, char *prefix, char *command, 
-                              char *token, char *pattern, ...) __attribute__((format(printf,5,6)));
-void sendto_serv_butone_token_opt(aClient *one, int opt, char *prefix, 
-                                  char *command, char *token, char *pattern, ...) __attribute__((format(printf,6,7)));
 void sendto_channel_ntadmins(aClient *from, aChannel *chptr, char *pattern, ...) __attribute__((format(printf,3,4))); 
 
 /* fdlist.c */
 EVENT(lcf_check);
 EVENT(htm_calc);
 /* ircd.c */
-EVENT(e_check_fdlists);
 EVENT(garbage_collect);
 EVENT(loop_event);
+EVENT(check_pings);
+EVENT(check_unknowns);
+EVENT(try_connections);
 /* support.c */
 char *my_itoa(int i);
 
@@ -72,4 +70,9 @@ char *get_mode_str(aClient *acptr);
 
 /* whowas.c */
 void initwhowas(void);
+
+/* uid.c */
+void uid_init(void);
+const char *uid_get(void);
+
 #endif /* proto_h */

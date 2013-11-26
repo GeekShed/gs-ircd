@@ -47,7 +47,6 @@
 DLLFUNC int m_help(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_HELP 	"HELP"	
-#define TOK_HELP 	"4"	
 #define MSG_HELPOP	"HELPOP"
 
 ModuleHeader MOD_HEADER(m_help)
@@ -61,8 +60,8 @@ ModuleHeader MOD_HEADER(m_help)
 
 DLLFUNC int MOD_INIT(m_help)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_HELP, TOK_HELP, m_help, 1);
-	add_Command(MSG_HELPOP, NULL, m_help, 1);
+	CommandAdd(modinfo->handle, MSG_HELP, m_help, 1, 0);
+	CommandAdd(modinfo->handle, MSG_HELPOP, m_help, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -74,16 +73,6 @@ DLLFUNC int MOD_LOAD(m_help)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_help)(int module_unload)
 {
-	if (del_Command(MSG_HELP, TOK_HELP, m_help) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_help).name);
-	}
-	if (del_Command(MSG_HELPOP, NULL, m_help) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_help).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -99,48 +88,7 @@ CMD_FUNC(m_help)
 
 	message = parc > 1 ? parv[1] : NULL;
 
-/* Drags along from wallops code... I'm not sure what it's supposed to do,
-   at least it won't do that gracefully, whatever it is it does - but
-   checking whether or not it's a person _is_ good... -Donwulff */
-
-	if (!IsServer(sptr) && MyConnect(sptr) && !IsPerson(sptr))
-	{
-	}
-
-	if (IsServer(sptr) || IsHelpOp(sptr))
-	{
-		if (BadPtr(message)) {
-			if (MyClient(sptr)) {
-				parse_help(sptr, parv[0], NULL);
-				sendto_one(sptr,
-					":%s NOTICE %s :*** NOTE: As a helpop you have to prefix your text with ? to query the help system, like: /helpop ?usercmds",
-					me.name, sptr->name);
-			}
-			return 0;
-		}
-		if (message[0] == '?')
-		{
-			parse_help(sptr, parv[0], message + 1);
-			return 0;
-		}
-		if (!myncmp(message, "IGNORE ", 7))
-		{
-			tmpl = make_link();
-			DupString(tmpl->value.cp, message + 7);
-			tmpl->next = helpign;
-			helpign = tmpl;
-			return 0;
-		}
-		if (message[0] == '!')
-			message++;
-		if (BadPtr(message))
-			return 0;
-		sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL,
-		    parv[0], MSG_HELP, TOK_HELP, "%s", message);
-		sendto_umode(UMODE_HELPOP, "*** HelpOp -- from %s (HelpOp): %s",
-		    parv[0], message);
-	}
-	else if (MyConnect(sptr))
+	if (MyConnect(sptr))
 	{
 		/* New syntax: ?... never goes out, !... always does. */
 		if (BadPtr(message)) {
@@ -158,32 +106,6 @@ CMD_FUNC(m_help)
 			if (parse_help(sptr, parv[0], message))
 				return 0;
 		}
-		if (BadPtr(message))
-			return 0;
-		s = make_nick_user_host(cptr->name, cptr->user->username,
-		    cptr->user->realhost);
-		for (tmpl = helpign; tmpl; tmpl = tmpl->next)
-			if (match(tmpl->value.cp, s) == 0)
-			{
-				sendto_one(sptr, rpl_str(RPL_HELPIGN), me.name,
-				    parv[0]);
-				return 0;
-			}
-
-		sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL,
-		    parv[0], MSG_HELP, TOK_HELP, "%s", message);
-		sendto_umode(UMODE_HELPOP, "*** HelpOp -- from %s (Local): %s",
-		    parv[0], message);
-		sendto_one(sptr, rpl_str(RPL_HELPFWD), me.name, parv[0]);
-	}
-	else
-	{
-		if (BadPtr(message))
-			return 0;
-		sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL,
-		    parv[0], MSG_HELP, TOK_HELP, "%s", message);
-		sendto_umode(UMODE_HELPOP, "*** HelpOp -- from %s: %s", parv[0],
-		    message);
 	}
 
 	return 0;

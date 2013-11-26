@@ -144,7 +144,7 @@ extern	char	*rindex(char *, char);
 /*
  * Mac OS X Tiger Support (Intel Only)
  */
-#if defined(macosx) || defined(__APPLE__)
+#if defined(macosx) || (defined(__APPLE__) && defined(__MACH__))
 #define OSXTIGER
 #endif
 
@@ -167,8 +167,6 @@ extern char OSName[256];
 #define MYOSNAME getosname()
 #endif
 #ifdef DEBUGMODE
-// #define ircsprintf sprintf
-//#define ircvsprintf vsprintf
 #endif
 
 #ifdef _WIN32

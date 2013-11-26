@@ -45,7 +45,6 @@
 DLLFUNC int m_netinfo(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_NETINFO 	"NETINFO"	
-#define TOK_NETINFO 	"AO"	
 
 ModuleHeader MOD_HEADER(m_netinfo)
   = {
@@ -58,7 +57,7 @@ ModuleHeader MOD_HEADER(m_netinfo)
 
 DLLFUNC int MOD_INIT(m_netinfo)(ModuleInfo *modinfo)
 {
-	add_Command(MSG_NETINFO, TOK_NETINFO, m_netinfo, MAXPARA);
+	CommandAdd(modinfo->handle, MSG_NETINFO, m_netinfo, MAXPARA, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -70,11 +69,6 @@ DLLFUNC int MOD_LOAD(m_netinfo)(int module_load)
 
 DLLFUNC int MOD_UNLOAD(m_netinfo)(int module_unload)
 {
-	if (del_Command(MSG_NETINFO, TOK_NETINFO, m_netinfo) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-			MOD_HEADER(m_netinfo).name);
-	}
 	return MOD_SUCCESS;
 }
 
@@ -124,7 +118,7 @@ DLLFUNC CMD_FUNC(m_netinfo)
 	}
 	/* is a long therefore not ATOI */
 	lmax = atol(parv[1]);
-	endsync = TS2ts(parv[2]);
+	endsync = atol(parv[2]);
 	protocol = atol(parv[3]);
 
 	/* max global count != max_global_count --sts */
@@ -146,7 +140,7 @@ DLLFUNC CMD_FUNC(m_netinfo)
 		sendto_realops
 		    ("Possible negative TS split at link %s (%li - %li = %li)%s",
 		    cptr->name, (xx), (endsync), (xx - endsync), emsg);
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s SMO o :\2(sync)\2 Possible negative TS split at link %s (%li - %li = %li)%s",
 		    me.name, cptr->name, (xx), (endsync), (xx - endsync), emsg);
 	}
@@ -154,19 +148,8 @@ DLLFUNC CMD_FUNC(m_netinfo)
 	    ("Link %s -> %s is now synced [secs: %li recv: %ld.%hu sent: %ld.%hu]",
 	    cptr->name, me.name, (TStime() - endsync), sptr->receiveK,
 	    sptr->receiveB, sptr->sendK, sptr->sendB);
-#ifdef ZIP_LINKS
-	if ((MyConnect(cptr)) && (IsZipped(cptr)) && cptr->zip->in->total_out && cptr->zip->out->total_in) {
-		sendto_realops
-		("Zipstats for link to %s: decompressed (in): %01lu=>%01lu (%3.1f%%), compressed (out): %01lu=>%01lu (%3.1f%%)",
-			get_client_name(cptr, TRUE),
-			cptr->zip->in->total_in, cptr->zip->in->total_out,
-			(100.0*(float)cptr->zip->in->total_in) /(float)cptr->zip->in->total_out,
-			cptr->zip->out->total_in, cptr->zip->out->total_out,
-			(100.0*(float)cptr->zip->out->total_out) /(float)cptr->zip->out->total_in);
-	}
-#endif
 
-	sendto_serv_butone(&me,
+	sendto_server(&me, 0, 0,
 	    ":%s SMO o :\2(sync)\2 Link %s -> %s is now synced [secs: %li recv: %ld.%hu sent: %ld.%hu]",
 	    me.name, cptr->name, me.name, (TStime() - endsync), sptr->receiveK,
 	    sptr->receiveB, sptr->sendK, sptr->sendB);
@@ -175,7 +158,7 @@ DLLFUNC CMD_FUNC(m_netinfo)
 	{
 		sendto_realops("Network name mismatch from link %s (%s != %s)",
 		    cptr->name, parv[8], ircnetwork);
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s SMO o :\2(sync)\2 Network name mismatch from link %s (%s != %s)",
 		    me.name, cptr->name, parv[8], ircnetwork);
 	}
@@ -185,7 +168,7 @@ DLLFUNC CMD_FUNC(m_netinfo)
 		sendto_realops
 		    ("Link %s is running Protocol u%li while we are running %d!",
 		    cptr->name, protocol, UnrealProtocol);
-		sendto_serv_butone(&me,
+		sendto_server(&me, 0, 0,
 		    ":%s SMO o :\2(sync)\2 Link %s is running u%li while %s is running %d!",
 		    me.name, cptr->name, protocol, me.name, UnrealProtocol);
 

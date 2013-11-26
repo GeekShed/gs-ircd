@@ -79,6 +79,7 @@ MODVAR int oper_access[] = {
 	OFLAG_UMODEQ, 'q',
 	OFLAG_DCCDENY, 'd',
 	OFLAG_ADDLINE, 'X',
+        OFLAG_TSCTL, 'T',
 	0, 0
 };
 
@@ -247,8 +248,7 @@ int ret;
 		{
 			if (alias->spamfilter && (ret = dospamfilter(sptr, parv[1], SPAMF_USERMSG, alias->nick, 0, NULL)) < 0)
 				return ret;
-			sendto_one(acptr, ":%s %s %s@%s :%s", parv[0],
-				IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
+			sendto_one(acptr, ":%s PRIVMSG %s@%s :%s", parv[0],
 				alias->nick, SERVICES_NAME, parv[1]);
 		}
 		else
@@ -261,8 +261,7 @@ int ret;
 		{
 			if (alias->spamfilter && (ret = dospamfilter(sptr, parv[1], SPAMF_USERMSG, alias->nick, 0, NULL)) < 0)
 				return ret;
-			sendto_one(acptr, ":%s %s %s@%s :%s", parv[0],
-				IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
+			sendto_one(acptr, ":%s PRIVMSG %s@%s :%s", parv[0],
 				alias->nick, STATS_SERVER, parv[1]);
 		}
 		else
@@ -280,8 +279,7 @@ int ret;
 					sptr->user->username, GetHost(sptr),
 					alias->nick, parv[1]);
 			else
-				sendto_one(acptr, ":%s %s %s :%s", parv[0],
-					IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
+				sendto_one(acptr, ":%s PRIVMSG %s :%s", parv[0],
 					alias->nick, parv[1]);
 		}
 		else
@@ -297,12 +295,10 @@ int ret;
 			{
 				if (alias->spamfilter && (ret = dospamfilter(sptr, parv[1], SPAMF_CHANMSG, chptr->chname, 0, NULL)) < 0)
 					return ret;
-				sendto_channelprefix_butone_tok(sptr,
-				    sptr, chptr,
-				    PREFIX_ALL,
-				    MSG_PRIVATE,
-				    TOK_PRIVATE,
-				    chptr->chname, parv[1], 0);
+				sendto_channelprefix_butone(sptr,
+				    sptr, chptr, PREFIX_ALL,
+                                    ":%s PRIVMSG %s :%s", parv[0],
+				    chptr->chname, parv[1]);
 				return 0;
 			}
 		}
@@ -348,7 +344,7 @@ int ret;
 							}
 							else 
 								strrangetok(ptr, current, ' ', atoi(nums), atoi(nums));
-							if (!current)
+							if (!*current)
 								continue;
 							if (j + strlen(current)+1 >= 500)
 								break;
@@ -386,9 +382,8 @@ int ret;
 					{
 						if (alias->spamfilter && (ret = dospamfilter(sptr, output, SPAMF_USERMSG, format->nick, 0, NULL)) < 0)
 							return ret;
-						sendto_one(acptr, ":%s %s %s@%s :%s", parv[0],
-						IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
-						format->nick, SERVICES_NAME, output);
+						sendto_one(acptr, ":%s PRIVMSG %s@%s :%s", parv[0],
+							format->nick, SERVICES_NAME, output);
 					} else
 						sendto_one(sptr, err_str(ERR_SERVICESDOWN), me.name,
 							parv[0], format->nick);
@@ -399,8 +394,7 @@ int ret;
 					{
 						if (alias->spamfilter && (ret = dospamfilter(sptr, output, SPAMF_USERMSG, format->nick, 0, NULL)) < 0)
 							return ret;
-						sendto_one(acptr, ":%s %s %s@%s :%s", parv[0],
-							IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
+						sendto_one(acptr, ":%s PRIVMSG %s@%s :%s", parv[0],
 							format->nick, STATS_SERVER, output);
 					} else
 						sendto_one(sptr, err_str(ERR_SERVICESDOWN), me.name,
@@ -417,8 +411,7 @@ int ret;
 							sptr->user->username, IsHidden(sptr) ? sptr->user->virthost : sptr->user->realhost,
 							format->nick, output);
 						else
-							sendto_one(acptr, ":%s %s %s :%s", parv[0],
-								IsToken(acptr->from) ? TOK_PRIVATE : MSG_PRIVATE, 
+							sendto_one(acptr, ":%s PRIVMSG %s :%s", parv[0],
 								format->nick, output);
 					}
 					else
@@ -434,11 +427,10 @@ int ret;
 						{
 							if (alias->spamfilter && (ret = dospamfilter(sptr, output, SPAMF_CHANMSG, chptr->chname, 0, NULL)) < 0)
 								return ret;
-							sendto_channelprefix_butone_tok(sptr,
-							    sptr, chptr,
-							    PREFIX_ALL, MSG_PRIVATE,
-							    TOK_PRIVATE, chptr->chname,
-							    output, 0);
+							sendto_channelprefix_butone(sptr,
+							    sptr, chptr, PREFIX_ALL,
+			                                    ":%s PRIVMSG %s :%s", parv[0],
+							    chptr->chname, parv[1]);
 							return 0;
 						}
 					}

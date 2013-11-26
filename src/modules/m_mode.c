@@ -61,20 +61,16 @@ int do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 int do_extmode_char(aChannel *chptr, int modeindex, char *param, u_int what,
                     aClient *cptr, u_int *pcount, char pvar[MAXMODEPARAMS][MODEBUFLEN + 3],
                     char bounce);
-#ifdef EXTCMODE
 void make_mode_str(aChannel *chptr, long oldm, Cmode_t oldem, long oldl, int pcount,
-    char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf, char bounce);
-#else
-void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
-    char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf, char bounce);
-#endif
+    char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf,
+    size_t mode_buf_size, size_t para_buf_size, char bounce);
+
 static void mode_cutoff(char *s);
 static void mode_cutoff2(aClient *sptr, aChannel *chptr, int *parc_out, char *parv[]);
 
 static int samode_in_progress = 0;
 
 #define MSG_MODE 	"MODE"	
-#define TOK_MODE 	"G"	
 
 ModuleHeader MOD_HEADER(m_mode)
   = {
@@ -96,8 +92,8 @@ DLLFUNC int MOD_TEST(m_mode)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_mode)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_MODE, TOK_MODE, m_mode, MAXPARA, M_USER|M_SERVER);
-	CommandAdd(modinfo->handle, MSG_MLOCK, TOK_MLOCK, m_mlock, MAXPARA, M_SERVER);
+	CommandAdd(modinfo->handle, MSG_MODE, m_mode, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_MLOCK, m_mlock, MAXPARA, M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -152,15 +148,13 @@ CMD_FUNC(m_mode)
 
 	if (MyConnect(sptr))
 		clean_channelname(parv[1]);
-	if (check_channelmask(sptr, cptr, parv[1]))
-		return 0;
 
 	if (parc < 3)
 	{
 		*modebuf = *parabuf = '\0';
 		
 		modebuf[1] = '\0';
-		channel_modes(sptr, modebuf, parabuf, chptr);
+		channel_modes(sptr, modebuf, parabuf, sizeof(modebuf), sizeof(parabuf), chptr);
 		sendto_one(sptr, rpl_str(RPL_CHANNELMODEIS), me.name, parv[0],
 		    chptr->chname, modebuf, parabuf);
 		sendto_one(sptr, rpl_str(RPL_CREATIONTIME), me.name, parv[0],
@@ -308,7 +302,7 @@ CMD_FUNC(m_mode)
 		return 0;
 	}
 
-	if (IsServer(sptr) && (sendts = TS2ts(parv[parc - 1]))
+	if (IsServer(sptr) && (sendts = atol(parv[parc - 1]))
 	    && !IsULine(sptr) && chptr->creationtime
 	    && sendts > chptr->creationtime)
 	{
@@ -512,14 +506,12 @@ DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, c
 	{
 		if (tschange || isbounce) {	/* relay bounce time changes */
 			if (chptr->creationtime)
-				sendto_serv_butone_token(cptr, me.name,
-				    MSG_MODE, TOK_MODE, "%s %s+ %lu",
-				    chptr->chname, isbounce ? "&" : "",
+				sendto_server(cptr, 0, 0, ":%s MODE %s %s+ %lu",
+				    me.name, chptr->chname, isbounce ? "&" : "",
 				    chptr->creationtime);
 			else
-				sendto_serv_butone_token(cptr, me.name,
-				    MSG_MODE, TOK_MODE, "%s %s+ ",
-				    chptr->chname, isbounce ? "&" : "");
+				sendto_server(cptr, 0, 0, ":%s MODE %s %s+",
+				    me.name, chptr->chname, isbounce ? "&" : "");
 		return;		/* nothing to send */
 		}
 	}
@@ -547,8 +539,8 @@ DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, c
 		return;
 	if (IsPerson(sptr) && samode && MyClient(sptr))
 	{
-		sendto_serv_butone_token(NULL, me.name, MSG_GLOBOPS,
-		    TOK_GLOBOPS, ":%s used SAMODE %s (%s%s%s)", sptr->name,
+		sendto_server(NULL, 0, 0,
+		    ":%s GLOBOPS :%s used SAMODE %s (%s%s%s)", me.name, sptr->name,
 		    chptr->chname, modebuf, *parabuf ? " " : "", parabuf);
 		sendto_failops_whoare_opers
 		    ("from %s: %s used SAMODE %s (%s%s%s)", me.name, sptr->name,
@@ -561,15 +553,15 @@ DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, c
 	sendto_channel_butserv(chptr, sptr, ":%s MODE %s %s %s",
 	    sptr->name, chptr->chname, modebuf, parabuf);
 	if (IsServer(sptr) && sendts != -1)
-		sendto_serv_butone_token(cptr, sptr->name, MSG_MODE, TOK_MODE,
-		    "%s %s%s %s %lu", chptr->chname, isbounce ? "&" : "",
+		sendto_server(cptr, 0, 0, ":%s MODE %s %s%s %s%lu",
+		    sptr->name, chptr->chname, isbounce ? "&" : "",
 		    modebuf, parabuf, sendts);
 	else if (samode && IsMe(sptr)) /* SAMODE is a special case: always send a TS of 0 (omitting TS==desynch) */
-		sendto_serv_butone_token(cptr, sptr->name, MSG_MODE, TOK_MODE,
-		    "%s %s %s 0", chptr->chname, modebuf, parabuf);
+		sendto_server(cptr, 0, 0, ":%s MODE %s %s %s 0",
+		    sptr->name, chptr->chname, modebuf, parabuf);
 	else
-		sendto_serv_butone_token(cptr, sptr->name, MSG_MODE, TOK_MODE,
-		    "%s %s%s %s", chptr->chname, isbounce ? "&" : "",
+		sendto_server(cptr, 0, 0, ":%s MODE %s %s%s %s",
+		    sptr->name, chptr->chname, isbounce ? "&" : "",
 		    modebuf, parabuf);
 	/* tell them it's not a timestamp, in case the last param
 	   ** is a number. */
@@ -584,22 +576,15 @@ DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, c
  *  contain the +x-y stuff, and the parabuf will contain the parameters.
  *  If bounce is set to 1, it will make the string it needs for a bounce.
  */
-#ifdef EXTCMODE
 void make_mode_str(aChannel *chptr, long oldm, Cmode_t oldem, long oldl, int pcount, 
-	char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf, char bounce)
-#else
-void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount, 
-	char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf, char bounce)
-#endif
-{
+    char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf,
+    size_t mode_buf_size, size_t para_buf_size, char bounce) {
 
 	char tmpbuf[MODEBUFLEN+3], *tmpstr;
 	aCtab *tab = &cFlagTab[0];
 	char *x = mode_buf;
 	int  what, cnt, z;
-#ifdef EXTCMODE
 	int i;
-#endif
 	char *m;
 	what = 0;
 
@@ -625,7 +610,7 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 		}
 		tab++;
 	}
-#ifdef EXTCMODE
+
 	/* + paramless extmodes... */
 	for (i=0; i <= Channelmode_highest; i++)
 	{
@@ -643,7 +628,6 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 			*x++ = Channelmode_Table[i].flag;
 		}
 	}
-#endif
 
 	*x = '\0';
 	/* - param-less modes */
@@ -665,7 +649,6 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 		tab++;
 	}
 
-#ifdef EXTCMODE
 	/* - extmodes (both "param modes" and paramless don't have
 	 * any params when unsetting...
 	 */
@@ -685,7 +668,6 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 			*x++ = Channelmode_Table[i].flag;
 		}
 	}
-#endif
 
 	*x = '\0';
 	/* user limit */
@@ -713,7 +695,7 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 			*x++ = 'l';
 			if (bounce)
 				chptr->mode.limit = oldl;	/* set it back */
-			ircsprintf(para_buf, "%s%d ", para_buf, chptr->mode.limit);
+			ircsnprintf(para_buf, para_buf_size, "%s%d ", para_buf, chptr->mode.limit);
 		}
 	}
 	/* reconstruct bkov chain */
@@ -746,9 +728,7 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
 	if (bounce)
 	{
 		chptr->mode.mode = oldm;
-#ifdef EXTCMODE
 		chptr->mode.extmode = oldem;
-#endif
 	}
 	z = strlen(para_buf);
 	if (para_buf[z - 1] == ' ')
@@ -922,7 +902,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  else
 		  {
 			  chptr->mode.mode &= ~modetype;
-#ifdef NEWCHFLOODPROT
+
 			  /* reset joinflood on -i, reset msgflood on -m, etc.. */
 			  if (chptr->mode.floodprot)
 			  {
@@ -962,7 +942,6 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 					break;
 				}
 			  }
-#endif
 		  }
 		  break;
 
@@ -1032,7 +1011,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  if (IsServices(member->cptr) && MyClient(cptr) && !IsNetAdmin(cptr) && (what == MODE_DEL))
 		  {
 			char errbuf[NICKLEN+50];
-			ircsprintf(errbuf, "%s is a network service", member->cptr->name);
+			ircsnprintf(errbuf, sizeof(errbuf), "%s is a network service", member->cptr->name);
 			sendto_one(cptr, err_str(ERR_CANNOTCHANGECHANMODE), me.name, cptr->name,
 				   modechar, errbuf);
 			break;
@@ -1054,7 +1033,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 				if (!op_can_override(cptr))
 				{
 					char errbuf[NICKLEN+30];
-					ircsprintf(errbuf, "%s is a channel owner", member->cptr->name);
+					ircsnprintf(errbuf, sizeof(errbuf), "%s is a channel owner", member->cptr->name);
 					sendto_one(cptr, err_str(ERR_CANNOTCHANGECHANMODE), me.name, cptr->name,
 					   modechar, errbuf);
 					break;
@@ -1080,7 +1059,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 			  	if (!op_can_override(cptr))
 			  	{
 					char errbuf[NICKLEN+30];
-					ircsprintf(errbuf, "%s is a channel admin", member->cptr->name);
+					ircsnprintf(errbuf, sizeof(errbuf), "%s is a channel admin", member->cptr->name);
 					sendto_one(cptr, err_str(ERR_CANNOTCHANGECHANMODE), me.name, cptr->name,
 					   modechar, errbuf);
 					break;
@@ -1115,7 +1094,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 			  tc = 'v';
 		  /* Make sure membership->flags and member->flags is the same */
 		  membership->flags = member->flags;
-		  (void)ircsprintf(pvar[*pcount], "%c%c%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%c%c%s",
 		      what == MODE_ADD ? '+' : '-', tc, who->name);
 		  (*pcount)++;
 		  break;
@@ -1175,7 +1154,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 				    param[KEYLEN] = '\0';
 				  if (!strcmp(chptr->mode.key, param))
 					break;
-				  strncpyzt(chptr->mode.key, param,
+				  strlcpy(chptr->mode.key, param,
 				      sizeof(chptr->mode.key));
 			  }
 			  tmpstr = param;
@@ -1184,14 +1163,14 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  {
 			  if (!*chptr->mode.key)
 				  break;	/* no change */
-			  strncpyzt(tmpbuf, chptr->mode.key, sizeof(tmpbuf));
+			  strlcpy(tmpbuf, chptr->mode.key, sizeof(tmpbuf));
 			  tmpstr = tmpbuf;
 			  if (!bounce)
 				  strcpy(chptr->mode.key, "");
 		  }
 		  retval = 1;
 
-		  (void)ircsprintf(pvar[*pcount], "%ck%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%ck%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break;
@@ -1233,7 +1212,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		      ((what == MODE_ADD && add_listmode(&chptr->banlist, cptr, chptr, tmpstr))
 		      || (what == MODE_DEL && del_listmode(&chptr->banlist, chptr, tmpstr))))
 			  break;	/* already exists */
-		  (void)ircsprintf(pvar[*pcount], "%cb%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%cb%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break;
@@ -1274,7 +1253,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		      ((what == MODE_ADD && add_listmode(&chptr->exlist, cptr, chptr, tmpstr))
 		      || (what == MODE_DEL && del_listmode(&chptr->exlist, chptr, tmpstr))))
 			  break;	/* already exists */
-		  (void)ircsprintf(pvar[*pcount], "%ce%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%ce%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break;
@@ -1318,7 +1297,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		      ((what == MODE_ADD && add_listmode(&chptr->invexlist, cptr, chptr, tmpstr))
 		      || (what == MODE_DEL && del_listmode(&chptr->invexlist, chptr, tmpstr))))
 			  break;	/* already exists */
-		  (void)ircsprintf(pvar[*pcount], "%cI%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%cI%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break;
@@ -1388,7 +1367,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 			  }
 			  if (!bounce)	/* don't do the mode at all. */
 			  {
-				  strncpyzt(chptr->mode.link, tmpbuf,
+				  strlcpy(chptr->mode.link, tmpbuf,
 				      sizeof(chptr->mode.link));
 			      tmpstr = tmpbuf;
 			  } else
@@ -1398,7 +1377,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  {
 			  if (!*chptr->mode.link)
 				  break;	/* no change */
-			  strncpyzt(tmpbuf, chptr->mode.link, sizeof(tmpbuf));
+			  strlcpy(tmpbuf, chptr->mode.link, sizeof(tmpbuf));
 			  tmpstr = tmpbuf;
 			  if (!bounce)
 			  {
@@ -1411,7 +1390,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  }
 		  retval = 1;
 
-		  (void)ircsprintf(pvar[*pcount], "%cL%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%cL%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break;
@@ -1428,94 +1407,7 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  }
 		  if (retval == 0)	/* you can't break a case from loop */
 			  break;
-#ifndef NEWCHFLOODPROT
-		  if (what == MODE_ADD)
-		  {
-			  if (!bounce)	/* don't do the mode at all. */
-			  {
-				  if (!param || *pcount >= MAXMODEPARAMS)
-				  {
-					  retval = 0;
-					  break;
-				  }
 
-				  /* like 1:1 and if its less than 3 chars then ahem.. */
-				  if (strlen(param) < 3)
-				  {
-					  break;
-				  }
-				  /* may not contain other chars 
-				     than 0123456789: & NULL */
-				  hascolon = 0;
-				  for (xp = param; *xp; xp++)
-				  {
-					  if (*xp == ':')
-						hascolon++;
-					  /* fast alpha check */
-					  if (((*xp < '0') || (*xp > '9'))
-					      && (*xp != ':')
-					      && (*xp != '*'))
-						goto break_flood;
-					  /* uh oh, not the first char */
-					  if (*xp == '*' && (xp != param))
-						goto break_flood;
-				  }
-				  /* We can avoid 2 strchr() and a strrchr() like this
-				   * it should be much faster. -- codemastr
-				   */
-				  if (hascolon != 1)
-					break;
-				  if (*param == '*')
-				  {
-					  xzi = 1;
-					  //                      chptr->mode.kmode = 1;
-				  }
-				  else
-				  {
-					  xzi = 0;
-
-					  //                   chptr->mode.kmode = 0;
-				  }
-				  xp = index(param, ':');
-				  *xp = '\0';
-				  xxi =
-				      atoi((*param ==
-				      '*' ? (param + 1) : param));
-				  xp++;
-				  xyi = atoi(xp);
-				  if (xxi > 500 || xyi > 500)
-					break;
-				  xp--;
-				  *xp = ':';
-				  if ((xxi == 0) || (xyi == 0))
-					  break;
-				  if ((chptr->mode.msgs == xxi)
-				      && (chptr->mode.per == xyi)
-				      && (chptr->mode.kmode == xzi))
-					  break;
-				  chptr->mode.msgs = xxi;
-				  chptr->mode.per = xyi;
-				  chptr->mode.kmode = xzi;
-			  }
-			  tmpstr = param;
-			  retval = 1;
-		  }
-		  else
-		  {
-			  if (!chptr->mode.msgs || !chptr->mode.per)
-				  break;	/* no change */
-			  ircsprintf(tmpbuf,
-			      (chptr->mode.kmode > 0 ? "*%i:%i" : "%i:%i"),
-			      chptr->mode.msgs, chptr->mode.per);
-			  tmpstr = tmpbuf;
-			  if (!bounce)
-			  {
-				  chptr->mode.msgs = chptr->mode.per =
-				      chptr->mode.kmode = 0;
-			  }
-			  retval = 0;
-		  }
-#else
 		/* NEW */
 		if (what == MODE_ADD)
 		{
@@ -1773,9 +1665,8 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 			}
 			retval = 1;
 		}
-#endif
 
-		  (void)ircsprintf(pvar[*pcount], "%cf%s",
+		  ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "%cf%s",
 		      what == MODE_ADD ? '+' : '-', tmpstr);
 		  (*pcount)++;
 		  break_flood:
@@ -1784,7 +1675,6 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 	return retval;
 }
 
-#ifdef EXTCMODE
 /** Check access and if granted, set the extended chanmode to the requested value in memory.
   * note: if bounce is requested then the mode will not be set.
   * @returns amount of params eaten (0 or 1)
@@ -1843,7 +1733,7 @@ int x;
 			if (!(chptr->mode.extmode & Channelmode_Table[modeindex].mode))
 				return paracnt; /* There's nothing to remove! */
 			/* del means any parameter is ok, the one-who-is-set will be used */
-			ircsprintf(pvar[*pcount], "-%c", Channelmode_Table[modeindex].flag);
+			ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "-%c", Channelmode_Table[modeindex].flag);
 		} else {
 			/* add: is the parameter ok? */
 			if (Channelmode_Table[modeindex].is_ok(cptr, chptr, param, EXCHK_PARAM, what) == FALSE)
@@ -1857,7 +1747,7 @@ int x;
 				if (p && p2 && !strcmp(p, p2))
 					return paracnt; /* ignore... */
 			}
-				ircsprintf(pvar[*pcount], "+%c%s",
+				ircsnprintf(pvar[*pcount], MODEBUFLEN + 3, "+%c%s",
 					Channelmode_Table[modeindex].flag, Channelmode_Table[modeindex].conv_param(param));
 			(*pcount)++;
 		}
@@ -1892,7 +1782,6 @@ int x;
 	}
 	return paracnt;
 }
-#endif /* EXTCMODE */
 
 /*
  * ListBits(bitvalue, bitlength);
@@ -1941,19 +1830,15 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 	unsigned int htrig = 0;
 	long oldm, oldl;
 	int checkrestr = 0, warnrestr = 1;
-#ifdef EXTCMODE
 	int extm = 1000000; /* (default value not used but stops gcc from complaining) */
 	Cmode_t oldem;
-#endif
 	long my_access;
 	paracount = 1;
 	*pcount = 0;
 
 	oldm = chptr->mode.mode;
 	oldl = chptr->mode.limit;
-#ifdef EXTCMODE
 	oldem = chptr->mode.extmode;
-#endif
 	if (RESTRICT_CHANNELMODES && MyClient(cptr) && !IsAnOper(cptr) && !IsServer(cptr)) /* "cache" this */
 		checkrestr = 1;
 
@@ -2005,7 +1890,6 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 			  {
 				  modetype = foundat.mode;
 			  } else {
-#ifdef EXTCMODE
 					/* Maybe in extmodes */
 					for (extm=0; extm <= Channelmode_highest; extm++)
 					{
@@ -2015,7 +1899,6 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 							break;
 						}
 					}
-#endif
 			  }
 			  if (found == 0) /* Mode char unknown */
 			  {
@@ -2035,8 +1918,8 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 			  {
 				  if (warnrestr)
 				  {
-					sendto_one(cptr, ":%s %s %s :Setting/removing of channelmode(s) '%s' has been disabled.",
-						me.name, IsWebTV(cptr) ? "PRIVMSG" : "NOTICE", cptr->name, RESTRICT_CHANNELMODES);
+					sendnotice(cptr, "Setting/removing of channelmode(s) '%s' has been disabled.",
+						RESTRICT_CHANNELMODES);
 					warnrestr = 0;
 				  }
 				  paracount += foundat.parameters;
@@ -2059,13 +1942,11 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 				}
                           }
 				}
-#ifdef EXTCMODE
 				else if (found == 2) {
 					/* Extended mode: all override stuff is in do_extmode_char which will set
 					 * opermode if appropriate. -- Syzop
 					 */
 				}
-#endif /* EXTCMODE */
 #endif /* !NO_OPEROVERRIDE */
 
 			  /* We can afford to send off a param */
@@ -2081,22 +1962,16 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 			      parv[paracount], what, cptr, pcount, pvar,
 			      bounce, my_access);
 			}
-#ifdef EXTCMODE
 			else if (found == 2)
 			{
 				paracount += do_extmode_char(chptr, extm, parv[paracount],
 				                             what, cptr, pcount, pvar, bounce);
 			}
-#endif /* EXTCMODE */
 			  break;
 		}
 	}
 
-#ifdef EXTCMODE
-	make_mode_str(chptr, oldm, oldem, oldl, *pcount, pvar, modebuf, parabuf, bounce);
-#else
-	make_mode_str(chptr, oldm, oldl, *pcount, pvar, modebuf, parabuf, bounce);
-#endif
+	make_mode_str(chptr, oldm, oldem, oldl, *pcount, pvar, modebuf, parabuf, sizeof(modebuf), sizeof(parabuf), bounce);
 
 #ifndef NO_OPEROVERRIDE
         if (htrig == 1)
@@ -2185,8 +2060,8 @@ DLLFUNC CMD_FUNC(_m_umode)
 		{
 			if (!umode_restrict_err)
 			{
-				sendto_one(sptr, ":%s %s %s :Setting/removing of usermode(s) '%s' has been disabled.",
-					me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, RESTRICT_USERMODES);
+				sendnotice(sptr, "Setting/removing of usermode(s) '%s' has been disabled.",
+					RESTRICT_USERMODES);
 				umode_restrict_err = 1;
 			}
 			continue;
@@ -2235,7 +2110,7 @@ DLLFUNC CMD_FUNC(_m_umode)
 		  case 'O':
 			  if(sptr->from->flags & FLAGS_QUARANTINE)
 			  {
-			    sendto_serv_butone(NULL, ":%s KILL %s :%s (Quarantined: no global oper privileges allowed)", me.name, sptr->name, me.name);
+			    sendto_server(NULL, 0, 0, ":%s KILL %s :%s (Quarantined: no global oper privileges allowed)", me.name, sptr->name, me.name);
 			    return exit_client(cptr, sptr, &me, "Quarantined: no global oper privileges allowed");
 			  }
 			  /* A local user trying to set himself +o/+O is denied here.
@@ -2256,7 +2131,7 @@ DLLFUNC CMD_FUNC(_m_umode)
 					if (MyClient(sptr))
 					{
 						if (!modex_err) {
-							sendto_one(sptr, ":%s %s %s :*** Setting %cx is disabled", me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, what == MODE_ADD ? '+' : '-');
+							sendnotice(sptr, "*** Setting %cx is disabled", what == MODE_ADD ? '+' : '-');
 							modex_err = 1;
 						}
 						break;
@@ -2266,7 +2141,7 @@ DLLFUNC CMD_FUNC(_m_umode)
 					if (MyClient(sptr) && sptr->user->joined)
 					{
 						if (!modex_err) {
-							sendto_one(sptr, ":%s %s %s :*** Setting %cx can not be done while you are on channels", me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, what == MODE_ADD ? '+' : '-');
+							sendnotice(sptr, "*** Setting %cx can not be done while you are on channels", what == MODE_ADD ? '+' : '-');
 							modex_err = 1;
 						}
 						break;
@@ -2390,19 +2265,17 @@ DLLFUNC CMD_FUNC(_m_umode)
 		}
 		sptr->user->virthost = strdup(sptr->user->cloakedhost);
 		if (!dontspread)
-			sendto_serv_butone_token_opt(cptr, OPT_VHP, sptr->name,
-				MSG_SETHOST, TOK_SETHOST, "%s", sptr->user->virthost);
+			sendto_server(cptr, PROTO_VHP, 0, ":%s SETHOST :%s",
+				sptr->name, sptr->user->virthost);
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
 		{
-			DYN_LOCAL(char, did_parts, sptr->user->joined);
 			/* LOL, this is ugly ;) */
 			sptr->umodes &= ~UMODE_HIDE;
-			rejoin_doparts(sptr, did_parts);
+			rejoin_doquits(sptr);
 			sptr->umodes |= UMODE_HIDE;
-			rejoin_dojoinandmode(sptr, did_parts);
+			rejoin_dojoinandmode(sptr);
 			if (MyClient(sptr))
 				sptr->since += 7; /* Add fake lag */
-			DYN_FREE(did_parts);
 		}
 	}
 
@@ -2410,15 +2283,13 @@ DLLFUNC CMD_FUNC(_m_umode)
 	{
 		if (UHOST_ALLOWED == UHALLOW_REJOIN)
 		{
-			DYN_LOCAL(char, did_parts, sptr->user->joined);
 			/* LOL, this is ugly ;) */
 			sptr->umodes |= UMODE_HIDE;
-			rejoin_doparts(sptr, did_parts);
+			rejoin_doquits(sptr);
 			sptr->umodes &= ~UMODE_HIDE;
-			rejoin_dojoinandmode(sptr, did_parts);
+			rejoin_dojoinandmode(sptr);
 			if (MyClient(sptr))
 				sptr->since += 7; /* Add fake lag */
-			DYN_FREE(did_parts);
 		}
 		if (sptr->user->virthost)
 		{
@@ -2443,9 +2314,7 @@ DLLFUNC CMD_FUNC(_m_umode)
 	if ((setflags & (UMODE_OPER | UMODE_LOCOP)) && !IsAnOper(sptr) &&
 	    MyConnect(sptr))
 	{
-#ifndef NO_FDLIST
-		delfrom_fdlist(sptr->slot, &oper_fdlist);
-#endif
+		list_del(&sptr->special_node);
 		sptr->oflag = 0;
 		remove_oper_snomasks(sptr);
 		RunHook2(HOOKTYPE_LOCAL_OPER, sptr, 0);
@@ -2511,10 +2380,7 @@ CMD_FUNC(m_mlock)
 	if ((parc < 3) || BadPtr(parv[2]))
 		return 0;
 		
-	if (*parv[1] == '!')
-		chants = (TS) base64dec(parv[1] + 1);
-	else
-		chants = (TS) atol(parv[1]);
+	chants = (TS) atol(parv[1]);
 
 	/* Now, try to find the channel in question */
 	chptr = find_channel(parv[2], NullChn);

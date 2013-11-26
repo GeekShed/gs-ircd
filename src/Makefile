@@ -22,12 +22,12 @@
 CC = danger will robinson
 
 OBJS=timesynch.o res.o s_bsd.o auth.o aln.o channel.o cloak.o crule.o dbuf.o \
-	events.o fdlist.o hash.o help.o ircd.o ircsprintf.o list.o lusers.o \
-	match.o modules.o packet.o parse.o s_auth.o \
-	s_conf.o s_debug.o s_err.o s_extra.o s_kline.o \
+	events.o fdlist.o hash.o help.o ircd.o ircsprintf.o list.o \
+	match.o modules.o packet.o parse.o s_auth.o mempool.o \
+	s_conf.o s_debug.o s_dispatch.o s_err.o s_extra.o s_kline.o \
 	s_misc.o s_numeric.o s_serv.o s_svs.o $(STRTOUL) socket.o \
 	ssl.o s_user.o charsys.o scache.o send.o support.o umodes.o \
-	version.o whowas.o zip.o cidr.o random.o extcmodes.o \
+	version.o whowas.o cidr.o random.o extcmodes.o uid.o \
 	extbans.o md5.o api-isupport.o api-command.o $(URL)
 
 SRC=$(OBJS:%.o=%.c)
@@ -53,7 +53,7 @@ INCLUDES = ../include/auth.h ../include/badwords.h ../include/channel.h \
 	../include/resource.h ../include/setup.h ../include/sjoin.h \
 	../include/sock.h ../include/ssl.h ../include/struct.h ../include/sys.h \
 	../include/threads.h ../include/types.h ../include/url.h \
-	../include/version.h ../include/whowas.h ../include/zip.h
+	../include/version.h ../include/whowas.h
 
 all: build
 
@@ -97,7 +97,8 @@ parse.o: parse.c $(INCLUDES)
 socket.o: socket.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c socket.c
 
-
+s_dispatch.o: s_dispatch.c $(INCLUDES)
+	$(CC) $(CFLAGS) -c s_dispatch.c
 
 dbuf.o: dbuf.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c dbuf.c
@@ -110,9 +111,6 @@ aln.o: aln.c $(INCLUDES)
 
 auth.o: auth.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c auth.c
-
-zip.o: zip.c $(INCLUDES)
-	$(CC) $(CFLAGS) -c zip.c
 
 send.o: send.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c send.c
@@ -133,6 +131,9 @@ umodes.o: umodes.c $(INCLUDES)
 
 userload.o: userload.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c userload.c
+
+uid.o: uid.c $(INCLUDES)
+	$(CC) $(CFLAGS) -c uid.c
 
 s_svs.o: s_svs.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c s_svs.c
@@ -172,9 +173,6 @@ ircd.o: ircd.c $(INCLUDES)
 
 list.o: list.c $(INCLUDES)
 	$(CC) $(CFLAGS) -c list.c
-
-lusers.o: lusers.c $(INCLUDES)
-	$(CC) $(CFLAGS) -c lusers.c
 
 res.o: res.c $(INCLUDES) ../include/res.h
 	$(CC) $(CFLAGS) -c res.c

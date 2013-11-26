@@ -49,7 +49,6 @@ DLLFUNC CMD_FUNC(m_join);
 DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int flags);
 DLLFUNC CMD_FUNC(_do_join);
 DLLFUNC int _can_join(aClient *cptr, aClient *sptr, aChannel *chptr, char *key, char *link, char *parv[]);
-static int extended_operoverride(aClient *sptr, aChannel *chptr, char *key, int mval, char mchar);
 #define MAXBOUNCE   5 /** Most sensible */
 #ifdef JOINTHROTTLE
 static int isjthrottled(aClient *cptr, aChannel *chptr);
@@ -64,7 +63,6 @@ extern int find_invex(aChannel *chptr, aClient *sptr);
 static int bouncedtimes = 0;
 
 #define MSG_JOIN 	"JOIN"	
-#define TOK_JOIN 	"C"	
 
 ModuleHeader MOD_HEADER(m_join)
   = {
@@ -86,7 +84,7 @@ DLLFUNC int MOD_TEST(m_join)(ModuleInfo *modinfo)
 
 DLLFUNC int MOD_INIT(m_join)(ModuleInfo *modinfo)
 {
-	CommandAdd(modinfo->handle, MSG_JOIN, TOK_JOIN, m_join, MAXPARA, M_USER);
+	CommandAdd(modinfo->handle, MSG_JOIN, m_join, MAXPARA, M_USER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -100,45 +98,6 @@ DLLFUNC int MOD_UNLOAD(m_join)(int module_unload)
 {
 	return MOD_SUCCESS;
 }
-
-/* This function adds as an extra (weird) operoverride.
- * Currently it's only used if you try to operoverride for a +z channel,
- * if you then do '/join #chan override' it will put the channel -z and allow you directly in.
- * This is to avoid attackers from using 'race conditions' to prevent you from joining.
- * PARAMETERS: sptr = the client, chptr = the channel, mval = mode value (eg MODE_ONLYSECURE),
- *             mchar = mode char (eg 'z')
- * RETURNS: 1 if operoverride, 0 if not.
- */
-int extended_operoverride(aClient *sptr, aChannel *chptr, char *key, int mval, char mchar)
-{
-unsigned char invited = 0;
-Link *lp;
-
-	if (!IsAnOper(sptr) || !OPCanOverride(sptr))
-		return 0;
-
-	for (lp = sptr->user->invited; lp; lp = lp->next)
-		if (lp->value.chptr == chptr)
-		{
-			invited = 1;
-			break;
-		}
-	if (invited)
-	{
-		if (key && !strcasecmp(key, "override"))
-		{
-			sendto_channelprefix_butone(NULL, &me, chptr, PREFIX_OP|PREFIX_ADMIN|PREFIX_OWNER,
-				":%s NOTICE @%s :setting channel -%c due to OperOverride request from %s",
-				me.name, chptr->chname, mchar, sptr->name);
-			sendto_serv_butone(&me, ":%s MODE %s -%c 0", me.name, chptr->chname, mchar);
-			sendto_channel_butserv(chptr, &me, ":%s MODE %s -%c", me.name, chptr->chname, mchar);
-			chptr->mode.mode &= ~mval;
-			return 1;
-		}
-	}
-	return 0;
-}
-
 
 /* Now let _invited_ people join thru bans, +i and +l.
  * Checking if an invite exist could be done only if a block exists,
@@ -369,30 +328,17 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 		sendto_channel_butserv(chptr, sptr,
 		    ":%s JOIN :%s", sptr->name, chptr->chname);
 	
-	sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, sptr->name, MSG_JOIN,
-		    TOK_JOIN, "%s", chptr->chname);
+	sendto_server(cptr, 0, PROTO_SJ3, ":%s JOIN :%s", sptr->name, chptr->chname);
 
-#ifdef JOIN_INSTEAD_OF_SJOIN_ON_REMOTEJOIN
-	if ((MyClient(sptr) && !(flags & CHFL_CHANOP)) || !MyClient(sptr))
-		sendto_serv_butone_token_opt(cptr, OPT_SJ3, sptr->name, MSG_JOIN,
-		    TOK_JOIN, "%s", chptr->chname);
-	if (flags && !(flags & CHFL_DEOPPED))
-	{
-#endif
-		/* I _know_ that the "@%s " look a bit wierd
-		   with the space and all .. but its to get around
-		   a SJOIN bug --stskeeps */
-		sendto_serv_butone_token_opt(cptr, OPT_SJ3|OPT_SJB64,
-			me.name, MSG_SJOIN, TOK_SJOIN,
-			"%B %s :%s%s ", (long)chptr->creationtime, 
-			chptr->chname, chfl_to_sjoin_symbol(flags), sptr->name);
-		sendto_serv_butone_token_opt(cptr, OPT_SJ3|OPT_NOT_SJB64,
-			me.name, MSG_SJOIN, TOK_SJOIN,
-			"%li %s :%s%s ", chptr->creationtime, 
-			chptr->chname, chfl_to_sjoin_symbol(flags), sptr->name);
-#ifdef JOIN_INSTEAD_OF_SJOIN_ON_REMOTEJOIN
-	}
-#endif		
+	/* I _know_ that the "@%s " look a bit wierd
+	   with the space and all .. but its to get around
+	   a SJOIN bug --stskeeps */
+	sendto_server(cptr, PROTO_SID | PROTO_SJ3, 0, ":%s SJOIN %li %s :%s%s ",
+		me.id, chptr->creationtime,
+		chptr->chname, chfl_to_sjoin_symbol(flags), ID(sptr));
+	sendto_server(cptr, PROTO_SJ3, PROTO_SID, ":%s SJOIN %li %s :%s%s ",
+		me.name, chptr->creationtime,
+		chptr->chname, chfl_to_sjoin_symbol(flags), sptr->name);
 
 	if (MyClient(sptr))
 	{
@@ -404,9 +350,8 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 		if (chptr->creationtime == 0)
 		{
 			chptr->creationtime = TStime();
-			sendto_serv_butone_token(cptr, me.name,
-			    MSG_MODE, TOK_MODE, "%s + %lu",
-			    chptr->chname, chptr->creationtime);
+			sendto_server(cptr, 0, 0, ":%s MODE %s + %lu",
+			    me.name, chptr->chname, chptr->creationtime);
 		}
 		del_invite(sptr, chptr);
 		if (flags && !(flags & CHFL_DEOPPED))
@@ -415,17 +360,15 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 			if ((flags & CHFL_CHANOWNER) || (flags & CHFL_CHANPROT))
 			{
 				/* +ao / +qo for when PREFIX_AQ is off */
-				sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, 
+				sendto_server(cptr, 0, PROTO_SJ3, ":%s MODE %s +o%c %s %s %lu",
 				    me.name,
-				    MSG_MODE, TOK_MODE, "%s +o%c %s %s %lu",
 				    chptr->chname, chfl_to_chanmode(flags), sptr->name, sptr->name,
 				    chptr->creationtime);
 			} else {
 #endif
 				/* +v/+h/+o (and +a/+q if PREFIX_AQ is on) */
-				sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, 
+				sendto_server(cptr, 0, PROTO_SJ3, ":%s MODE %s +%c %s %lu",
 				    me.name,
-				    MSG_MODE, TOK_MODE, "%s +%c %s %lu",
 				    chptr->chname, chfl_to_chanmode(flags), sptr->name,
 				    chptr->creationtime);
 #ifndef PREFIX_AQ
@@ -441,13 +384,8 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 			    sptr->name, chptr->chname, chptr->topic_nick,
 			    chptr->topic_time);
 		}
-		if (chptr->users == 1 && (MODES_ON_JOIN
-#ifdef EXTCMODE
-		    || iConf.modes_on_join.extmodes)
-#endif
-		)
+		if (chptr->users == 1 && (MODES_ON_JOIN || iConf.modes_on_join.extmodes))
 		{
-#ifdef EXTCMODE
 			int i;
 			chptr->mode.extmode =  iConf.modes_on_join.extmodes;
 			/* Param fun */
@@ -462,25 +400,20 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 					AddListItem(p, chptr->mode.extmodeparam);
 				}
 			}
-#endif
+
 			chptr->mode.mode = MODES_ON_JOIN;
-#ifdef NEWCHFLOODPROT
+
 			if (iConf.modes_on_join.floodprot.per)
 			{
 				chptr->mode.floodprot = MyMalloc(sizeof(ChanFloodProt));
 				memcpy(chptr->mode.floodprot, &iConf.modes_on_join.floodprot, sizeof(ChanFloodProt));
 			}
-#else
-			chptr->mode.kmode = iConf.modes_on_join.kmode;
-			chptr->mode.per = iConf.modes_on_join.per;
-			chptr->mode.msgs = iConf.modes_on_join.msgs;
-#endif
+
 			*modebuf = *parabuf = 0;
-			channel_modes(sptr, modebuf, parabuf, chptr);
+			channel_modes(sptr, modebuf, parabuf, sizeof(modebuf), sizeof(parabuf), chptr);
 			/* This should probably be in the SJOIN stuff */
-			sendto_serv_butone_token(&me, me.name, MSG_MODE, TOK_MODE, 
-				"%s %s %s %lu", chptr->chname, modebuf, parabuf, 
-				chptr->creationtime);
+			sendto_server(&me, 0, 0, ":%s MODE %s %s %s %lu",
+			    me.name, chptr->chname, modebuf, parabuf, chptr->creationtime);
 			sendto_one(sptr, ":%s MODE %s %s %s", me.name, chptr->chname, modebuf, parabuf);
 		}
 		parv[0] = sptr->name;
@@ -491,7 +424,6 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 		RunHook4(HOOKTYPE_REMOTE_JOIN, cptr, sptr, chptr, parv); /* (rarely used) */
 	}
 
-#ifdef NEWCHFLOODPROT
 	/* I'll explain this only once:
 	 * 1. if channel is +f
 	 * 2. local client OR synced server
@@ -505,7 +437,6 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 	{
 		do_chanflood_action(chptr, FLD_JOIN, "join");
 	}
-#endif
 }
 
 /** User request to join a channel.
@@ -520,8 +451,9 @@ DLLFUNC CMD_FUNC(_do_join)
 	Membership *lp;
 	aChannel *chptr;
 	char *name, *key = NULL, *link = NULL;
-	int  i, flags = 0;
+	int  i, flags = 0, ishold;
 	char *p = NULL, *p2 = NULL;
+	aTKline *tklban;
 
 #define RET(x) { bouncedtimes--; return x; }
 
@@ -537,9 +469,9 @@ DLLFUNC CMD_FUNC(_do_join)
 	if (bouncedtimes > MAXBOUNCE)
 	{
 		/* bounced too many times */
-		sendto_one(sptr,
-		    ":%s %s %s :*** Couldn't join %s ! - Link setting was too bouncy",
-		    me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, parv[1]);
+		sendnotice(sptr,
+		    "*** Couldn't join %s ! - Link setting was too bouncy",
+		    parv[1]);
 		RET(0)
 	}
 
@@ -563,8 +495,6 @@ DLLFUNC CMD_FUNC(_do_join)
 
 		if (MyConnect(sptr))
 			clean_channelname(name);
-		if (check_channelmask(sptr, cptr, name) == -1)
-			continue;
 		if (*name == '0' && !atoi(name))
 		{
 			(void)strcpy(jbuf, "0");
@@ -613,8 +543,7 @@ DLLFUNC CMD_FUNC(_do_join)
 					RunHook4(HOOKTYPE_LOCAL_PART, cptr, sptr, chptr, "Left all channels");
 				remove_user_from_channel(sptr, chptr);
 			}
-			sendto_serv_butone_token(cptr, parv[0],
-			    MSG_JOIN, TOK_JOIN, "0");
+			sendto_server(cptr, 0, 0, ":%s JOIN 0", parv[0]);
 			continue;
 		}
 
@@ -657,26 +586,29 @@ DLLFUNC CMD_FUNC(_do_join)
 								get_client_name(sptr, 1), name);
 						}
 						if (d->reason)
-							sendto_one(sptr, 
-							":%s %s %s :*** Can not join %s: %s",
-							me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, name, d->reason);
+							sendto_one(sptr, err_str(ERR_FORBIDDENCHANNEL), me.name, BadPtr(parv[0]) ? "*" : parv[0], name, d->reason);
 						if (d->redirect)
 						{
-							sendto_one(sptr,
-							":%s %s %s :*** Redirecting you to %s",
-							me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, d->redirect);
+							sendnotice(sptr,
+							"*** Redirecting you to %s",
+							d->redirect);
 							parv[0] = sptr->name;
 							parv[1] = d->redirect;
 							do_join(cptr, sptr, 2, parv);
 						}
 						if (d->class) {
-							sendto_one(sptr,
-							":%s %s %s :*** Can not join %s: Your class is not allowed",
-							me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, name);
+							sendnotice(sptr,
+							"*** Can not join %s: Your class is not allowed",
+							name);
 						}
 						continue;
 					}
 				}
+			}
+			if (!IsOper(sptr) && !IsULine(sptr) && (tklban = find_qline(sptr, name, &ishold)))
+			{
+				sendto_one(sptr, err_str(ERR_FORBIDDENCHANNEL), me.name, BadPtr(parv[0]) ? "*" : parv[0], name, tklban->reason);
+				continue;
 			}
 			/* ugly set::spamfilter::virus-help-channel-deny hack.. */
 			if (SPAMFILTER_VIRUSCHANDENY && SPAMFILTER_VIRUSCHAN &&
@@ -733,9 +665,20 @@ DLLFUNC CMD_FUNC(_do_join)
 			if (i != HOOK_ALLOW && 
 			   (i = can_join(cptr, sptr, chptr, key, link, parv)))
 			{
+#ifndef NO_OPEROVERRIDE
+				if (i != -1 && !OPCanOverride(sptr))
+#else
 				if (i != -1)
+#endif
 					sendto_one(sptr, err_str(i),
 					    me.name, parv[0], name);
+#ifndef NO_OPEROVERRIDE
+				else if (i != -1 && OPCanOverride(sptr))
+				{
+					sendto_snomask(SNO_EYES, "*** OperOverride -- %s (%s@%s) JOIN %s",
+						sptr->name, sptr->user->username, sptr->user->realhost, chptr->chname);
+				}
+#endif
 				continue;
 			}
 #ifdef JOINTHROTTLE

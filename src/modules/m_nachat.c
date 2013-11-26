@@ -47,7 +47,6 @@ DLLFUNC int m_nachat(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 /* Place includes here */
 #define MSG_NACHAT      "NACHAT"        /* netadmin chat */
-#define TOK_NACHAT      "AC"    /* *beep* */
 
 ModuleHeader MOD_HEADER(m_nachat)
   = {
@@ -61,10 +60,7 @@ ModuleHeader MOD_HEADER(m_nachat)
 /* This is called on module init, before Server Ready */
 DLLFUNC int MOD_INIT(m_nachat)(ModuleInfo *modinfo)
 {
-	/*
-	 * We call our add_Command crap here
-	*/
-	add_Command(MSG_NACHAT, TOK_NACHAT, m_nachat, 1);
+	CommandAdd(modinfo->handle, MSG_NACHAT, m_nachat, 1, 0);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -78,13 +74,7 @@ DLLFUNC int MOD_LOAD(m_nachat)(int module_load)
 /* Called when module is unloaded */
 DLLFUNC int MOD_UNLOAD(m_nachat)(int module_unload)
 {
-	if (del_Command(MSG_NACHAT, TOK_NACHAT, m_nachat) < 0)
-	{
-		sendto_realops("Failed to delete commands when unloading %s",
-				MOD_HEADER(m_nachat).name);
-	}
-	return MOD_SUCCESS;
-	
+	return MOD_SUCCESS;	
 }
 
 /*
@@ -116,8 +106,8 @@ DLLFUNC int m_nachat(aClient *cptr, aClient *sptr, int parc, char *parv[])
 		return 0;
 	}
 
-	sendto_serv_butone_token(IsServer(cptr) ? cptr : NULL, parv[0],
-	   MSG_NACHAT, TOK_NACHAT, ":%s", message);
+	sendto_server(IsServer(cptr) ? cptr : NULL, 0, 0, ":%s NACHAT :%s",
+	    parv[0], message);
 #ifdef ADMINCHAT
 	sendto_umode(UMODE_NETADMIN, "*** NetAdmin.Chat -- from %s: %s",
 	    parv[0], message);
