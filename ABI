@@ -4,4 +4,4 @@
 
 10000		-	Nonexistant, gs-ircd 1.0 is the initial version without GSVERSION or GSREV defined.
 10001		-	Release of 1.1:  Merge back of HOOKTYPE_LOCAL_PRE_DNS. the aClient ABI is unchanged, and some options don't exist.
-20000		-	First revision, introduction of HOOKTYPE_LOCAL_PRE_DNS, addition of several new fields to aClient, sctp support, and other fixes.
+15000		-	First revision, introduction of HOOKTYPE_LOCAL_PRE_DNS, addition of several new fields to aClient, sctp support, and other fixes. Import of 3.2.10.2
