@@ -61,7 +61,7 @@
 #define PATCH2  		"." macro_to_str(UNREAL_VERSION_MAJOR)
 #define PATCH3  		"." macro_to_str(UNREAL_VERSION_MINOR)
 #define PATCH4  		UNREAL_VERSION_SUFFIX
-#define PATCH5  		""
+#define PATCH5  		"-gs"
 #define PATCH6  		""
 #define PATCH7  		""
 #define PATCH8  		COMPILEINFO
