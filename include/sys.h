@@ -16,11 +16,14 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *   
- *   $Id: sys.h,v 1.1.1.1.2.24 2009/04/13 11:03:58 syzop Exp $
+ *   $Id$
  */
 
 #ifndef	__sys_include__
 #define __sys_include__
+
+/* PATH_MAX */
+#include <limits.h>
 
 /* alloca stuff */
 #ifdef _WIN32
@@ -43,11 +46,7 @@
 #ifdef ISC202
 #include <net/errno.h>
 #else
-# ifndef _WIN32
-#include <sys/errno.h>
-# else
 #include <errno.h>
-# endif
 #endif
 #include "setup.h"
 #include <stdio.h>
@@ -71,17 +70,27 @@
 # include <string.h>
 # endif
 #endif
+
+/* get intptr_t if the system provides it -- otherwise, ./configure will define it for us */
+#ifdef HAVE_STDINT_H
+#include <stdint.h>
+#else
+#ifdef HAVE_INTTYPES_H
+#include <inttypes.h>
+#endif /* HAVE_INTTYPES_H */
+#endif /* HAVE_STDINT_H */
+
 #ifdef SSL
 #include <openssl/ssl.h>
 #endif
 #ifdef INET6
-#ifndef _WIN32
 #include <netinet/in.h>
 #include <sys/socket.h>
-#else
+#endif
+#ifdef _WIN32
+#define _WIN32_WINNT 0x0501
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#endif
 #endif
 #ifndef GOT_STRCASECMP
 #define	strcasecmp	mycmp
@@ -135,7 +144,7 @@ extern	char	*rindex(char *, char);
 /*
  * Mac OS X Tiger Support (Intel Only)
  */
-#if defined(macosx) || (defined(__APPLE__) && defined(__MACH__))
+#if defined(macosx) || defined(__APPLE__)
 #define OSXTIGER
 #endif
 

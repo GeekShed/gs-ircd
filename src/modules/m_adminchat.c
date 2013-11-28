@@ -53,7 +53,7 @@ DLLFUNC int m_admins(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_adminchat)
   = {
 	"adminchat",	/* Name of module */
-	"$Id: m_adminchat.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /adchat", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

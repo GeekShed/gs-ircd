@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: support.c,v 1.1.1.1.2.24 2009/04/13 11:03:59 syzop Exp $
+ * $Id$
  */
 
 #ifndef CLEAN_COMPILE
@@ -191,128 +191,6 @@ int  inet_netof(struct IN_ADDR in)
 
 #endif /* NEED_INET_NETOF */
 #endif
-/*
- * -1 - error on read *     >0 - number of bytes returned (<=num) *
- * After opening a fd, it is necessary to init dgets() by calling it as *
- * dgets(x,y,0); * to mark the buffer as being empty.
- * 
- * cleaned up by - Dianora aug 7 1997 *argh*
- */
-int  dgets(int fd, char *buf, int num)
-{
-	static char dgbuf[8192];
-	static char *head = dgbuf, *tail = dgbuf;
-	char *s, *t;
-	int  n, nr;
-
-	/*
-	 * * Sanity checks.
-	 */
-	if (head == tail)
-		*head = '\0';
-
-	if (!num)
-	{
-		head = tail = dgbuf;
-		*head = '\0';
-		return 0;
-	}
-
-	if (num > sizeof(dgbuf) - 1)
-		num = sizeof(dgbuf) - 1;
-
-	for (;;)		/* FOREVER */
-	{
-		if (head > dgbuf)
-		{
-			for (nr = tail - head, s = head, t = dgbuf; nr > 0;
-			    nr--)
-				*t++ = *s++;
-			tail = t;
-			head = dgbuf;
-		}
-		/*
-		 * * check input buffer for EOL and if present return string.
-		 */
-		if (head < tail &&
-		    ((s = (char *)strchr(head, '\n'))
-		    || (s = (char *)strchr(head, '\r'))) && s < tail)
-		{
-			n = MIN(s - head + 1, num);	/*
-							 * at least 1 byte 
-							 */
-			memcpy(buf, head, n);
-			head += n;
-			if (head == tail)
-				head = tail = dgbuf;
-			return n;
-		}
-
-		if (tail - head >= num)
-		{		/*
-				 * dgets buf is big enough 
-				 */
-			n = num;
-			memcpy(buf, head, n);
-			head += n;
-			if (head == tail)
-				head = tail = dgbuf;
-			return n;
-		}
-
-		n = sizeof(dgbuf) - (tail - dgbuf) - 1;
-		nr = read(fd, tail, n);
-		if (nr == -1)
-		{
-			head = tail = dgbuf;
-			return -1;
-		}
-
-		if (!nr)
-		{
-			if (tail > head)
-			{
-				n = MIN(tail - head, num);
-				memcpy(buf, head, n);
-				head += n;
-				if (head == tail)
-					head = tail = dgbuf;
-				return n;
-			}
-			head = tail = dgbuf;
-			return 0;
-		}
-
-		tail += nr;
-		*tail = '\0';
-
-		for (t = head; (s = (char *)strchr(t, '\n'));)
-		{
-			if ((s > head) && (s > dgbuf))
-			{
-				t = s - 1;
-				for (nr = 0; *t == '\\'; nr++)
-					t--;
-				if (nr & 1)
-				{
-					t = s + 1;
-					s--;
-					nr = tail - t;
-					while (nr--)
-						*s++ = *t++;
-					tail -= 2;
-					*tail = '\0';
-				}
-				else
-					s++;
-			}
-			else
-				s++;
-			t = s;
-		}
-		*tail = '\0';
-	}
-}
 
 /*
  * inetntop: return the : notation of a given IPv6 internet number.
@@ -1691,7 +1569,7 @@ int file_exists(char* file)
  * using the specified suffix. The returned value will
  * be of the form <dir>/<random-hex>.<suffix>
  */
-char *unreal_mktemp(char *dir, char *suffix)
+char *unreal_mktemp(const char *dir, const char *suffix)
 {
 	FILE *fd;
 	unsigned int i;
@@ -1760,10 +1638,28 @@ char *unreal_getfilename(char *path)
         return end;
 }
 
+/* Returns a consistent filename for the cache/ directory.
+ * Returned value will be like: cache/<hash of url>
+ */
+char *unreal_mkcache(const char *url)
+{
+	static char tempbuf[PATH_MAX+1];
+	char tmp2[33];
+	
+	snprintf(tempbuf, PATH_MAX, "cache/%s", md5hash(tmp2, url, strlen(url)));
+	return tempbuf;
+}
+
+/* Returns 1 if a cached version of the url exists, otherwise 0. */
+int has_cached_version(const char *url)
+{
+	return file_exists(unreal_mkcache(url));
+}
+
 /* Copys the contents of the src file to the dest file.
  * The dest file will have permissions r-x------
  */
-int unreal_copyfile(char *src, char *dest)
+int unreal_copyfile(const char *src, const char *dest)
 {
 	char buf[2048];
 	time_t mtime;
@@ -1784,10 +1680,14 @@ int unreal_copyfile(char *src, char *dest)
 	}
 
 #ifndef _WIN32
+#if DEFAULT_PERMISSIONS
 	destfd  = open(dest, O_WRONLY|O_CREAT, DEFAULT_PERMISSIONS);
 #else
+	destfd  = open(dest, O_WRONLY|O_CREAT, S_IRUSR | S_IXUSR);
+#endif /* DEFAULT_PERMISSIONS */
+#else
 	destfd = open(dest, _O_BINARY|_O_WRONLY|_O_CREAT, _S_IWRITE);
-#endif
+#endif /* _WIN32 */
 	if (destfd < 0)
 	{
 		config_error("Unable to create file '%s': %s", dest, strerror(errno));
@@ -1824,7 +1724,7 @@ fail:
 }
 
 /* Same as unreal_copyfile, but with an option to try hardlinking first */
-int unreal_copyfileex(char *src, char *dest, int tryhardlink)
+int unreal_copyfileex(const char *src, const char *dest, int tryhardlink)
 {
 #ifndef _WIN32
 	/* Try a hardlink first... */
@@ -1835,7 +1735,7 @@ int unreal_copyfileex(char *src, char *dest, int tryhardlink)
 }
 
 
-void unreal_setfilemodtime(char *filename, time_t mtime)
+void unreal_setfilemodtime(const char *filename, time_t mtime)
 {
 #ifndef _WIN32
 	struct utimbuf utb;
@@ -1857,7 +1757,7 @@ void unreal_setfilemodtime(char *filename, time_t mtime)
 #endif
 }
 
-time_t unreal_getfilemodtime(char *filename)
+time_t unreal_getfilemodtime(const char *filename)
 {
 #ifndef _WIN32
 	struct stat sb;
@@ -1870,7 +1770,7 @@ time_t unreal_getfilemodtime(char *filename)
 	SYSTEMTIME sTime, lTime;
 	ULARGE_INTEGER fullTime;
 	time_t result;
-	HANDLE hFile = CreateFile(filename, GENERIC_READ, 0, NULL, OPEN_EXISTING,
+	HANDLE hFile = CreateFile(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING,
 				  FILE_ATTRIBUTE_NORMAL, NULL);
 	if (hFile == INVALID_HANDLE_VALUE)
 		return 0;
@@ -1921,8 +1821,7 @@ char	*encode_ip(u_char *ip)
 	else
 	{
 		ia.s_addr = inet_addr(ip);
-		cp = (u_char *)ia.s_addr;
-		b64_encode((char *)&cp, sizeof(struct in_addr), buf, 25);
+		b64_encode((char *)&ia.s_addr, sizeof(struct in_addr), buf, 25);
 	}
 	return buf;
 }

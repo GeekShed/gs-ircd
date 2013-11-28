@@ -61,7 +61,7 @@ ModuleHeader l_commands_Header
 #endif
   = {
 	"commands",	/* Name of module */
-	"$Id: l_commands.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $", /* Version */
+	"3.2.10.2", /* Version */
 	"Wrapper library for m_ commands", /* Short description of module */
 	"3.2-b8-1",
 	NULL 
@@ -75,7 +75,8 @@ ModuleHeader l_commands_Header
 extern int m_htm_Test(ModuleInfo *modinfo), m_join_Test(ModuleInfo *modinfo);
 extern int m_mode_Test(ModuleInfo *modinfo), m_nick_Test(ModuleInfo *modinfo);
 extern int m_tkl_Test(ModuleInfo *modinfo), m_list_Test(ModuleInfo *modinfo);
-extern int m_message_Test(ModuleInfo *modinfo);
+extern int m_message_Test(ModuleInfo *modinfo), m_server_Test(ModuleInfo *modinfo);
+extern int m_nopost_Test(ModuleInfo *modinfo), m_issecure_Test(ModuleInfo *modinfo);
 
 extern int m_sethost_Init(ModuleInfo *modinfo), m_setname_Init(ModuleInfo *modinfo), m_chghost_Init(ModuleInfo *modinfo);
 extern int m_chgident_Init(ModuleInfo *modinfo), m_setident_Init(ModuleInfo *modinfo), m_sdesc_Init(ModuleInfo *modinfo);
@@ -103,7 +104,7 @@ extern int m_pass_Init(ModuleInfo *modinfo), m_userhost_Init(ModuleInfo *modinfo
 extern int m_ison_Init(ModuleInfo *modinfo), m_silence_Init(ModuleInfo *modinfo);
 extern int m_knock_Init(ModuleInfo *modinfo), m_umode2_Init(ModuleInfo *modinfo);
 extern int m_squit_Init(ModuleInfo *modinfo), m_protoctl_Init(ModuleInfo *modinfo);
-extern int m_addline_Init(ModuleInfo *modinfo), m_addmotd_Init(ModuleInfo *modinfo);
+extern int m_addmotd_Init(ModuleInfo *modinfo);
 extern int m_addomotd_Init(ModuleInfo *modinfo), m_wallops_Init(ModuleInfo *modinfo);
 extern int m_admin_Init(ModuleInfo *modinfo), m_globops_Init(ModuleInfo *modinfo);
 extern int m_locops_Init(ModuleInfo *modinfo), m_chatops_Init(ModuleInfo *modinfo);
@@ -122,6 +123,11 @@ extern int m_motd_Init(ModuleInfo *modinfo), m_opermotd_Init(ModuleInfo *modinfo
 extern int m_botmotd_Init(ModuleInfo *modinfo), m_lusers_Init(ModuleInfo *modinfo);
 extern int m_names_Init(ModuleInfo *modinfo);
 extern int m_svsnolag_Init(ModuleInfo *modinfo);
+extern int m_starttls_Init(ModuleInfo *modinfo);
+extern int m_nopost_Init(ModuleInfo *modinfo);
+extern int m_issecure_Init(ModuleInfo *modinfo);
+extern int m_cap_Init(ModuleInfo *modinfo);
+extern int m_sasl_Init(ModuleInfo *modinfo);
 #ifdef GUEST
 extern int m_guest_Init(ModuleInfo *modinfo);
 #endif
@@ -152,7 +158,7 @@ extern int m_pass_Load(int module_load), m_userhost_Load(int module_load);
 extern int m_ison_Load(int module_load), m_silence_Load(int module_load);
 extern int m_knock_Load(int module_load), m_umode2_Load(int module_load);
 extern int m_squit_Load(int module_load), m_protoctl_Load(int module_load);
-extern int m_addline_Load(int module_load), m_addmotd_Load(int module_load);
+extern int m_addmotd_Load(int module_load);
 extern int m_addomotd_Load(int module_load), m_wallops_Load(int module_load);
 extern int m_admin_Load(int module_load), m_globops_Load(int module_load);
 extern int m_locops_Load(int module_load), m_chatops_Load(int module_load);
@@ -171,6 +177,11 @@ extern int m_motd_Load(int module_load), m_opermotd_Load(int module_load);
 extern int m_botmotd_Load(int module_load), m_lusers_Load(int module_load);
 extern int m_names_Load(int module_load);
 extern int m_svsnolag_Load(int module_load);
+extern int m_starttls_Load(int module_load);
+extern int m_nopost_Load(int module_load);
+extern int m_issecure_Load(int module_load);
+extern int m_cap_Load(int module_load);
+extern int m_sasl_Load(int module_load);
 #ifdef GUEST
 extern int m_guest_Load(int module_load);
 #endif
@@ -192,9 +203,10 @@ extern int m_sajoin_Unload(), m_sapart_Unload();
 extern int m_kick_Unload(), m_topic_Unload(), m_umode2_Unload();
 extern int m_invite_Unload(), m_list_Unload(), m_squit_Unload();
 extern int m_samode_Unload(), m_sjoin_Unload(), m_protoctl_Unload();
+extern int m_addmotd_Unload();
+extern int m_addomotd_Unload();
 extern int m_pass_Unload(), m_userhost_Unload(), m_knock_Unload();
 extern int m_ison_Unload(), m_silence_Unload();
-extern int m_addline_Unload(), m_addmotd_Unload(), m_addomotd_Unload();
 extern int m_wallops_Unload(), m_admin_Unload(), m_globops_Unload();
 extern int m_locops_Unload(), m_chatops_Unload(), m_trace_Unload();
 extern int m_netinfo_Unload(), m_links_Unload(), m_help_Unload();
@@ -206,6 +218,11 @@ extern int m_nick_Unload(), m_user_Unload(), m_mode_Unload();
 extern int m_watch_Unload(), m_part_Unload(), m_join_Unload();
 extern int m_motd_Unload(), m_opermotd_Unload(), m_botmotd_Unload();
 extern int m_lusers_Unload(), m_names_Unload(), m_svsnolag_Unload();
+extern int m_starttls_Unload();
+extern int m_nopost_Unload();
+extern int m_issecure_Unload();
+extern int m_cap_Unload();
+extern int m_sasl_Unload();
 #ifdef GUEST
 extern int m_guest_Unload();
 #endif
@@ -228,6 +245,8 @@ int l_commands_Test(ModuleInfo *modinfo)
 	m_tkl_Test(ModCmdsInfo);
 	m_list_Test(ModCmdsInfo);
 	m_message_Test(ModCmdsInfo);
+	m_server_Test(ModCmdsInfo);
+	m_nopost_Test(ModCmdsInfo);
 	return MOD_SUCCESS;
 }
 
@@ -310,7 +329,6 @@ int    l_commands_Init(ModuleInfo *modinfo)
 	m_umode2_Init(ModCmdsInfo);
 	m_squit_Init(ModCmdsInfo);
 	m_protoctl_Init(ModCmdsInfo);
-	m_addline_Init(ModCmdsInfo);
 	m_addmotd_Init(ModCmdsInfo);
 	m_addomotd_Init(ModCmdsInfo);
 	m_wallops_Init(ModCmdsInfo);
@@ -347,6 +365,11 @@ int    l_commands_Init(ModuleInfo *modinfo)
 	m_lusers_Init(ModCmdsInfo);
 	m_names_Init(ModCmdsInfo);
 	m_svsnolag_Init(ModCmdsInfo);
+	m_starttls_Init(ModCmdsInfo);
+	m_nopost_Init(ModCmdsInfo);
+	m_issecure_Init(ModCmdsInfo);
+	m_cap_Init(ModCmdsInfo);
+	m_sasl_Init(ModCmdsInfo);
 #ifdef GUEST
 	m_guest_Init(ModCmdsInfo);
 #endif
@@ -423,7 +446,6 @@ int    l_commands_Load(int module_load)
 	m_umode2_Load(module_load);
 	m_squit_Load(module_load);
 	m_protoctl_Load(module_load);
-	m_addline_Load(module_load);
 	m_addmotd_Load(module_load);
 	m_addomotd_Load(module_load);
 	m_wallops_Load(module_load);
@@ -460,6 +482,11 @@ int    l_commands_Load(int module_load)
 	m_lusers_Load(module_load);
 	m_names_Load(module_load);
 	m_svsnolag_Load(module_load);
+	m_starttls_Load(module_load);
+	m_nopost_Load(module_load);
+	m_issecure_Load(module_load);
+	m_cap_Load(module_load);
+	m_sasl_Load(module_load);
 #ifdef GUEST
 	m_guest_Load(module_load);
 #endif
@@ -536,7 +563,6 @@ int	l_commands_Unload(int module_unload)
 	m_umode2_Unload();
 	m_squit_Unload();
 	m_protoctl_Unload();
-	m_addline_Unload();
 	m_addmotd_Unload();
 	m_addomotd_Unload();
 	m_wallops_Unload();
@@ -573,6 +599,11 @@ int	l_commands_Unload(int module_unload)
 	m_lusers_Unload();
 	m_names_Unload();
 	m_svsnolag_Unload();
+	m_starttls_Unload();
+	m_nopost_Unload();
+	m_issecure_Unload();
+	m_cap_Unload();
+	m_sasl_Unload();
 #ifdef GUEST
 	m_guest_Unload();
 #endif

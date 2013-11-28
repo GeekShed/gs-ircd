@@ -47,6 +47,7 @@
 
 /* Forward declarations */
 DLLFUNC CMD_FUNC(m_mode);
+DLLFUNC CMD_FUNC(m_mlock);
 DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, char *parv[], time_t sendts, int samode);
 DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u_int *pcount,
     char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], int bounce);
@@ -68,6 +69,7 @@ void make_mode_str(aChannel *chptr, long oldm, long oldl, int pcount,
     char pvar[MAXMODEPARAMS][MODEBUFLEN + 3], char *mode_buf, char *para_buf, char bounce);
 #endif
 static void mode_cutoff(char *s);
+static void mode_cutoff2(aClient *sptr, aChannel *chptr, int *parc_out, char *parv[]);
 
 static int samode_in_progress = 0;
 
@@ -77,7 +79,7 @@ static int samode_in_progress = 0;
 ModuleHeader MOD_HEADER(m_mode)
   = {
 	"m_mode",
-	"$Id: m_mode.c,v 1.1.4.7 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /mode", 
 	"3.2-b8-1",
 	NULL 
@@ -95,6 +97,7 @@ DLLFUNC int MOD_TEST(m_mode)(ModuleInfo *modinfo)
 DLLFUNC int MOD_INIT(m_mode)(ModuleInfo *modinfo)
 {
 	CommandAdd(modinfo->handle, MSG_MODE, TOK_MODE, m_mode, MAXPARA, M_USER|M_SERVER);
+	CommandAdd(modinfo->handle, MSG_MLOCK, TOK_MLOCK, m_mlock, MAXPARA, M_SERVER);
 	MARK_AS_OFFICIAL_MODULE(modinfo);
 	return MOD_SUCCESS;
 }
@@ -337,7 +340,10 @@ CMD_FUNC(m_mode)
 
 	/* This is to prevent excess +<whatever> modes. -- Syzop */
 	if (MyClient(sptr) && parv[2])
+	{
 		mode_cutoff(parv[2]);
+		mode_cutoff2(sptr, chptr, &parc, parv);
+	}
 
 	/* Filter out the unprivileged FIRST. *
 	 * Now, we can actually do the mode.  */
@@ -362,6 +368,66 @@ unsigned short modesleft = MAXMODEPARAMS * 2; /* be generous... */
 	*s = '\0';
 }
 
+/** Another mode cutoff routine - this one for the server-side
+ * amplification/enlargement problem that happens with bans/exempts/invex
+ * as explained in #2837. -- Syzop
+ */
+static void mode_cutoff2(aClient *sptr, aChannel *chptr, int *parc_out, char *parv[])
+{
+int modes = 0;
+char *s;
+int len, i;
+int parc = *parc_out;
+
+	if (parc-2 <= 3)
+		return; /* Less than 3 mode parameters? Then we don't even have to check */
+
+	/* Calculate length of MODE if it would go through fully as-is */
+	/* :nick!user@host MODE #channel +something param1 param2 etc... */
+	len = strlen(sptr->name) + strlen(sptr->user->username) + strlen(GetHost(sptr)) +
+	      strlen(chptr->chname) + 11;
+	
+	len += strlen(parv[2]);
+
+	if (*parv[2] != '+' && *parv[2] != '-')
+		len++;
+	
+	for (i = 3; parv[i]; i++)
+	{
+		len += strlen(parv[i]) + 1; /* (+1 for the space character) */
+		/* +4 is another potential amplification (per-param).
+		 * If we were smart we would only check this for b/e/I and only for
+		 * relevant cases (not for all extended), but this routine is dumb,
+		 * so we just +4 for any case where the full mask is missing.
+		 * It's better than assuming +4 for all cases, though...
+		 */
+		if (match("*!*@*", parv[i]))
+			len += 4;
+	}
+
+	/* Now check if the result is acceptable... */	
+	if (len < 510)
+		return; /* Ok, no problem there... */
+
+	/* Ok, we have a potential problem...
+	 * we just dump the last parameter... check how much space we saved...
+	 * and try again if that did not help
+	 */
+	for (i = parc-1; parv[i] && (i > 3); i--)
+	{
+		len -= strlen(parv[i]);
+		if (match("*!*@*", parv[i]))
+			len -= 4; /* must adjust accordingly.. */
+		parv[i] = NULL;
+		*parc_out--;
+		if (len < 510)
+			break;
+	}
+	/* This may be reached if like the first parameter is really insane long..
+	 * which is no problem, as other layers (eg: ban) takes care of that.
+	 * We're done...
+	 */
+}
 
 /* bounce_mode -- written by binary
  *	User or server is NOT authorized to change the mode.  This takes care
@@ -417,14 +483,15 @@ DLLFUNC void _do_mode(aChannel *chptr, aClient *cptr, aClient *sptr, int parc, c
 					sendto_snomask(SNO_EYES, "*** TS fix for %s - %lu(ours) %lu(theirs)",
 					chptr->chname, chptr->creationtime, sendts);			
 					*/
-				chptr->
-creationtime = sendts;
-#if 0
+				chptr->creationtime = sendts;
 				if (sendts < 750000)
+				{
 					sendto_realops(
-						"Warning! Possible desynch: MODE for channel %s ('%s %s') has fishy timestamp (%ld) (from %s/%s)"
+						"Warning! Possible desynch: MODE for channel %s ('%s %s') has fishy timestamp (%ld) (from %s/%s)",
 						chptr->chname, modebuf, parabuf, sendts, cptr->name, sptr->name);
-#endif
+					ircd_log(LOG_ERROR, "Possible desynch: MODE for channel %s ('%s %s') has fishy timestamp (%ld) (from %s/%s)",
+						chptr->chname, modebuf, parabuf, sendts, cptr->name, sptr->name);
+				}
 				/* new chan or our timestamp is wrong */
 				/* now works for double-bounce prevention */
 
@@ -776,6 +843,10 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 				   chptr->chname);
 			break;
 		  }
+		  if (op_can_override(cptr) && !is_chanowner(cptr, chptr))
+		  {
+		  	opermode = 1;
+		  }
 
 		auditorium_ok:
 		  goto setthephuckingmode;
@@ -827,25 +898,6 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		}
 		goto setthephuckingmode;
 	  case MODE_ONLYSECURE:
-	  	notsecure = 0;
-	  	if (what == MODE_ADD && modetype == MODE_ONLYSECURE && !(IsServer(cptr) || IsULine(cptr)))
-		{
-		  for (member = chptr->members; member; member = member->next)
-		  {
-		    if (!IsSecureConnect(member->cptr) && !IsULine(member->cptr))
-		    {
-			sendto_one(cptr, err_str(ERR_CANNOTCHANGECHANMODE), 
-				   me.name, cptr->name, 'z', 
-				   "all members must be connected via SSL");
-			notsecure = 1;
-			break;
-		    }
-		  }
-		  member = NULL;
-		  /* first break nailed the for loop, this one nails switch() */
-		  if (notsecure == 1) break;
-		}
-		goto setthephuckingmode;
 	  case MODE_NOCTCP:
 	  case MODE_NONICKCHANGE:
 	  case MODE_NOINVITE:
@@ -1236,6 +1288,29 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 		  tmpstr = clean_ban_mask(param, what, cptr);
 		  if (BadPtr(tmpstr))
 		     break; /* ignore except, but eat param */
+		  if ((tmpstr[0] == '~') && MyClient(cptr) && !bounce)
+		  {
+		      /* extban: check access if needed */
+		      Extban *p = findmod_by_bantype(tmpstr[1]);
+		      if (p)
+       		      {
+       		        if (!(p->options & EXTBOPT_INVEX))
+				break; /* this extended ban type does not support INVEX */
+       		        
+			if (p->is_ok && !p->is_ok(cptr, chptr, tmpstr, EXBCHK_ACCESS, what, EXBTYPE_EXCEPT))
+		        {
+		            if (IsAnOper(cptr))
+		            {
+		                /* TODO: send operoverride notice */
+		            } else {
+		                p->is_ok(cptr, chptr, tmpstr, EXBCHK_ACCESS_ERR, what, EXBTYPE_EXCEPT);
+		                break;
+		            }
+		        }
+			if (p->is_ok && !p->is_ok(cptr, chptr, tmpstr, EXBCHK_PARAM, what, EXBTYPE_EXCEPT))
+		            break;
+		     }
+		  }
 		  /* For bounce, we don't really need to worry whether
 		   * or not it exists on our server.  We'll just always
 		   * bounce it. */
@@ -1329,6 +1404,10 @@ int  do_mode_char(aChannel *chptr, long modetype, char modechar, char *param,
 			  {
 				  strcpy(chptr->mode.link, "");
 			  }
+		  }
+		  if (!IsULine(cptr) && IsPerson(cptr) && op_can_override(cptr) && !is_chanowner(cptr, chptr))
+		  {
+		  	opermode = 1;
 		  }
 		  retval = 1;
 
@@ -1721,6 +1800,10 @@ int x;
 	if (paracnt && (!param || (*pcount >= MAXMODEPARAMS)))
 		return 0;
 
+	/* Prevent remote users from setting local channel modes */
+	if ((Channelmode_Table[modeindex].local) && !MyClient(cptr))
+		return paracnt;
+
 	if (MyClient(cptr))
 	{
 		x = Channelmode_Table[modeindex].is_ok(cptr, chptr, param, EXCHK_ACCESS, what);
@@ -1854,6 +1937,7 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 	aCtab *tab = &cFlagTab[0];
 	aCtab foundat;
 	int  found = 0;
+	int  sent_mlock_warning = 0;
 	unsigned int htrig = 0;
 	long oldm, oldl;
 	int checkrestr = 0, warnrestr = 1;
@@ -1897,6 +1981,15 @@ DLLFUNC void _set_mode(aChannel *chptr, aClient *cptr, int parc, char *parv[], u
 			  break;
 #endif
 		  default:
+			  if (MyClient(cptr) && chptr->mode_lock && strchr(chptr->mode_lock, *curchr) != NULL)
+			  {
+				  if (!sent_mlock_warning)
+				  {
+					  sendto_one(cptr, err_str(ERR_MLOCKRESTRICTED), me.name, cptr->name, chptr->chname, *curchr, chptr->mode_lock);
+					  sent_mlock_warning++;
+				  }
+				  continue;
+			  }
 			  found = 0;
 			  tab = &cFlagTab[0];
 			  while ((tab->mode != 0x0) && found == 0)
@@ -2390,6 +2483,10 @@ DLLFUNC CMD_FUNC(_m_umode)
 		IRCstats.invisible++;
 	if ((setflags & UMODE_INVISIBLE) && !IsInvisible(sptr))
 		IRCstats.invisible--;
+
+	if (MyConnect(sptr) && !IsAnOper(sptr))
+		remove_oper_modes(sptr);
+
 	/*
 	 * compare new flags with old flags and send string which
 	 * will cause servers to update correctly.
@@ -2402,6 +2499,34 @@ DLLFUNC CMD_FUNC(_m_umode)
 	if (MyConnect(sptr) && setsnomask != sptr->user->snomask)
 		sendto_one(sptr, rpl_str(RPL_SNOMASK),
 			me.name, parv[0], get_sno_str(sptr));
+
+	return 0;
+}
+
+CMD_FUNC(m_mlock)
+{
+	aChannel *chptr = NULL;
+	TS chants;
+
+	if ((parc < 3) || BadPtr(parv[2]))
+		return 0;
+		
+	if (*parv[1] == '!')
+		chants = (TS) base64dec(parv[1] + 1);
+	else
+		chants = (TS) atol(parv[1]);
+
+	/* Now, try to find the channel in question */
+	chptr = find_channel(parv[2], NullChn);
+	if (chptr == NULL)
+		return 0;
+
+	/* Senders' Channel TS is higher, drop it. */
+	if (chants > chptr->creationtime)
+		return 0;
+
+	if (IsServer(sptr))
+		set_channel_mlock(cptr, sptr, chptr, parv[3], TRUE);
 
 	return 0;
 }

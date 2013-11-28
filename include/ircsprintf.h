@@ -1,7 +1,7 @@
 /*
  * sprintf_irc.h
  *
- * $Id: ircsprintf.h,v 1.1.6.24 2009/04/13 11:03:57 syzop Exp $
+ * $Id$
  */
 
 #ifndef IRCSPRINTF_H

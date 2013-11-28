@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # UnrealIRCD Crontab v2.1
-# $Id: ircdchk.in,v 1.1.6.11 2009/04/13 11:03:58 syzop Exp $
+# $Id$
 #
 # This is a script suitable for use in a crontab.  It checks to make sure
 # your ircd is running.  YOU NEED A SEPARATE CRON JOB FOR EACH IRCD.  If your

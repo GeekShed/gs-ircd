@@ -29,7 +29,7 @@
  * frozen beta revision 2.6.1
  *
  * th+hybrid rcs version
- * $Id: whowas.h,v 1.1.1.1.2.24 2009/04/13 11:03:58 syzop Exp $
+ * $Id$
  */
 
 #ifndef	__whowas_include__

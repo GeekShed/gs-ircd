@@ -1,5 +1,5 @@
 
-/* $Id: scache.c,v 1.1.6.24 2009/04/13 11:03:59 syzop Exp $ */
+/* $Id$ */
 
 #include "struct.h"
 #include "common.h"

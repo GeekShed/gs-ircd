@@ -58,6 +58,9 @@ anAuthStruct MODVAR AuthTypes[] = {
 	/* sure, this is ugly, but it's our fault. -- Syzop */
 	{"ripemd-160",	AUTHTYPE_RIPEMD160},
 #endif
+#ifdef AUTHENABLE_SSL_CLIENTCERTFP
+	{"sslclientcertfp", AUTHTYPE_SSL_CLIENTCERTFP},
+#endif
 	{NULL,		0}
 };
 
@@ -147,6 +150,13 @@ int		Auth_CheckError(ConfigEntry *ce)
 				default: ;
 			}
 		}
+	}
+	
+	if ((type == AUTHTYPE_PLAINTEXT) && (strlen(ce->ce_vardata) > PASSWDLEN))
+	{
+		config_error("%s:%i: passwords length may not exceed %d",
+			ce->ce_fileptr->cf_filename, ce->ce_varlinenum, PASSWDLEN);
+		return -1;
 	}
 	return 1;	
 }
@@ -316,9 +326,9 @@ char *saltstr, *hashstr;
 		SHA1_Update(&hash, para, strlen(para));
 		SHA1_Final(result1, &hash);
 #else
-		if (!CryptCreateHash(hProv, CALG_SHA1, 0, 0, &hHash)) return NULL;
-		if (!CryptHashData(hHash, para, strlen(para), 0)) return NULL;
-		if (!CryptGetHashParam(hHash, HP_HASHVAL, result1, &size, 0)) return NULL;
+		if (!CryptCreateHash(hProv, CALG_SHA1, 0, 0, &hHash)) return -1;
+		if (!CryptHashData(hHash, para, strlen(para), 0)) return -1;
+		if (!CryptGetHashParam(hHash, HP_HASHVAL, result1, &size, 0)) return -1;
 		CryptDestroyHash(hHash);
 #endif
 		/* Add salt to result */
@@ -330,9 +340,9 @@ char *saltstr, *hashstr;
 		SHA1_Update(&hash, result1, rsaltlen+20);
 		SHA1_Final(result2, &hash);
 #else
-		if (!CryptCreateHash(hProv, CALG_SHA1, 0, 0, &hHash)) return NULL;
-		if (!CryptHashData(hHash, result1, 20+rsaltlen, 0)) return NULL;
-		if (!CryptGetHashParam(hHash, HP_HASHVAL, result2, &size, 0)) return NULL;
+		if (!CryptCreateHash(hProv, CALG_SHA1, 0, 0, &hHash)) return -1;
+		if (!CryptHashData(hHash, result1, 20+rsaltlen, 0)) return -1;
+		if (!CryptGetHashParam(hHash, HP_HASHVAL, result2, &size, 0)) return -1;
 		CryptDestroyHash(hHash);
 		CryptReleaseContext(hProv, 0);
 #endif		
@@ -460,10 +470,23 @@ int	Auth_Check(aClient *cptr, anAuthStruct *as, char *para)
 	extern	char *crypt();
 #endif
 
-#ifdef AUTHENABLE_SSL_CLIENTCERT
+#if defined(AUTHENABLE_SSL_CLIENTCERT) || defined(AUTHENABLE_SSL_CLIENTCERTFP)
 	X509 *x509_clientcert = NULL;
+#endif
+#ifdef AUTHENABLE_SSL_CLIENTCERT
 	X509 *x509_filecert = NULL;
 	FILE *x509_f = NULL;
+#endif
+#ifdef AUTHENABLE_SSL_CLIENTCERTFP
+	unsigned int n;
+	unsigned int i;
+	unsigned int j;
+	unsigned int k;
+	unsigned char md[EVP_MAX_MD_SIZE];
+	char hex[EVP_MAX_MD_SIZE * 2 + 1];
+	char hexc[EVP_MAX_MD_SIZE * 3 + 1];
+	char hexchars[16] = "0123456789abcdef";
+	const EVP_MD *digest = EVP_sha256();
 #endif
 
 	if (!as)
@@ -535,6 +558,37 @@ int	Auth_Check(aClient *cptr, anAuthStruct *as, char *para)
 			X509_free(x509_clientcert);
 			X509_free(x509_filecert);
 			return 2;	
+#endif
+#ifdef AUTHENABLE_SSL_CLIENTCERTFP
+		case AUTHTYPE_SSL_CLIENTCERTFP:
+			if (!para)
+				return -1;
+			if (!cptr->ssl)
+				return -1;
+			x509_clientcert = SSL_get_peer_certificate((SSL *)cptr->ssl);
+			if (!x509_clientcert)
+				return -1;
+			if (!X509_digest(x509_clientcert, digest, md, &n)) {
+				X509_free(x509_clientcert);
+				return -1;
+			}
+			j = 0;
+			k = 0;
+			for (i=0; i<n; i++) {
+				hex[j++] = hexchars[(md[i] >> 4) & 0xF];
+				hex[j++] = hexchars[md[i] & 0xF];
+				hexc[k++] = hexchars[(md[i] >> 4) & 0xF];
+				hexc[k++] = hexchars[md[i] & 0xF];
+				hexc[k++] = ':';
+			}
+			hex[j] = '\0';
+			hexc[--k] = '\0';
+			if (strcasecmp(as->data, hex) && strcasecmp(as->data, hexc)) {
+				X509_free(x509_clientcert);
+				return -1;
+			}
+			X509_free(x509_clientcert);
+			return 2;
 #endif
 	}
 	return -1;

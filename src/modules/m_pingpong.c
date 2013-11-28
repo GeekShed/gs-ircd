@@ -57,7 +57,7 @@ DLLFUNC int m_nospoof(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_pingpong)
   = {
 	"pingpong",	/* Name of module */
-	"$Id: m_pingpong.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"ping, pong and nospoof", /* Short description of module */
 	"3.2-b8-1",
 	NULL 
@@ -154,12 +154,9 @@ DLLFUNC int  m_ping(aClient *cptr, aClient *sptr, int parc, char *parv[])
 */
 DLLFUNC int  m_nospoof(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
-#ifdef NOSPOOF
 	unsigned long result;
-#endif
 Debug((DEBUG_NOTICE, "NOSPOOF"));
 
-#ifdef NOSPOOF
 	if (IsNotSpoof(cptr))
 		return 0;
 	if (IsRegistered(cptr))
@@ -183,7 +180,7 @@ Debug((DEBUG_NOTICE, "NOSPOOF"));
 		sendto_one(sptr, ":IRC!IRC@%s PRIVMSG %s :\1VERSION\1",
 			   me.name, sptr->name);
 
-	if (sptr->user && sptr->name[0])
+	if (sptr->user && sptr->name[0] && !CHECKPROTO(sptr, PROTO_CLICAP))
 		return register_user(cptr, sptr, sptr->name,
 		    sptr->user->username, NULL, NULL, NULL);
 	return 0;
@@ -191,7 +188,6 @@ Debug((DEBUG_NOTICE, "NOSPOOF"));
 	/* Homer compatibility */
 	sendto_one(cptr, ":%X!nospoof@%s PRIVMSG %s :\1VERSION\1",
 	    cptr->nospoof, me.name, cptr->name);
-#endif
 	return 0;
 }
 
@@ -206,10 +202,8 @@ DLLFUNC int m_pong(aClient *cptr, aClient *sptr, int parc, char *parv[])
 	aClient *acptr;
 	char *origin, *destination;
 
-#ifdef NOSPOOF
 	if (!IsRegistered(cptr))
 		return m_nospoof(cptr, sptr, parc, parv);
-#endif
 
 	if (parc < 2 || *parv[1] == '\0')
 	{

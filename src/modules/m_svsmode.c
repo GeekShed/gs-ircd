@@ -58,7 +58,7 @@ DLLFUNC int m_svs2mode(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_svsmode)
   = {
 	"m_svsmode",
-	"$Id: m_svsmode.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /svsmode and svs2mode", 
 	"3.2-b8-1",
 	NULL 
@@ -369,12 +369,26 @@ int channel_svsmode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 				}
 			}
 			break;
+
+#ifdef DEBUGMODE
+		default:
+			sendto_realops("Warning! Invalid mode `%c' used with 'SVSMODE %s %s %s' (from %s %s)",
+				       *m, chptr->chname, parv[2], parv[3] ? parv[3] : "",
+				       cptr->name, sptr->name);
+			break;
+#endif
 		}
 	}
+
+	/* only send message if modes have changed */
 	if (*parabuf) {
 		sendto_channel_butserv(chptr, sptr, ":%s MODE %s %s %s", sptr->name, chptr->chname, 
 			modebuf, parabuf);
 		sendto_serv_butone(NULL, ":%s MODE %s %s %s", sptr->name, chptr->chname, modebuf, parabuf);
+
+		/* Activate this hook just like m_mode.c */
+		RunHook7(HOOKTYPE_REMOTE_CHANMODE, cptr, sptr, chptr, modebuf, parabuf, ts, 0);
+
 		*parabuf = 0;
 	}
 	return 0;
@@ -412,13 +426,11 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 	if (!(acptr = find_person(parv[1], NULL)))
 		return 0;
 
+	/* initialize setflag to be the user's pre-SVSMODE flags */
 	setflags = 0;
-	if (show_change) /* only used if show_change is set */
-	{
-		for (i = 0; i <= Usermode_highest; i++)
+	for (i = 0; i <= Usermode_highest; i++)
 		if (Usermode_Table[i].flag && (acptr->umodes & Usermode_Table[i].mode))
 			setflags |= Usermode_Table[i].mode;
-	}
 
 	/* parse mode change string(s) */
 	for (m = parv[2]; *m; m++)
@@ -501,11 +513,14 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 					IRCstats.operators++;
 				goto setmodex;
 			case 'd':
-				if (parv[3] && isdigit(*parv[3]))
+				if (parv[3])
 				{
-					acptr->user->servicestamp = strtoul(parv[3], NULL, 10);
-					break;
+					strlcpy(acptr->user->svid, parv[3], sizeof(acptr->user->svid));
+					sendto_common_channels_local_butone(acptr, PROTO_ACCOUNT_NOTIFY, ":%s ACCOUNT %s",
+									    acptr->name,
+									    !isdigit(*acptr->user->svid) ? acptr->user->svid : "*");
 				}
+				break;
 			case 'x':
 				if (what == MODE_DEL)
 				{
@@ -538,6 +553,10 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 						sendto_serv_butone_token_opt(NULL, OPT_VHP, acptr->name,
 							MSG_SETHOST, TOK_SETHOST, "%s", acptr->user->virthost);
 				}
+				goto setmodex;
+			case 'z':
+				/* Setting and unsetting user mode 'z' remotely is not supported */
+				break;
 			default:
 				setmodex:
 				for (i = 0; i <= Usermode_highest; i++)
@@ -562,6 +581,12 @@ char *xtok = show_change ? TOK_SVS2MODE : TOK_SVSMODE;
 	else
 		sendto_serv_butone_token(cptr, parv[0], xmsg, xtok,
 			"%s %s", parv[1], parv[2]);
+
+	/* Here we trigger the same hooks that m_mode does and, likewise,
+	   only if the old flags (setflags) are different than the newly-
+	   set ones */
+	if (setflags != acptr->umodes)
+		RunHook3(HOOKTYPE_UMODE_CHANGE, sptr, setflags, acptr->umodes);
 
 	if (show_change)
 	{

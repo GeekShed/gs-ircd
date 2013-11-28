@@ -42,6 +42,7 @@ static char sccsid[] =
 
 void vsendto_one(aClient *to, char *pattern, va_list vl);
 void sendbufto_one(aClient *to, char *msg, unsigned int quick);
+int vmakebuf_local_withprefix(char *buf, struct Client *from, const char *pattern, va_list vl);
 
 #define ADD_CRLF(buf, len) { if (len > 510) len = 510; \
                              buf[len++] = '\r'; buf[len++] = '\n'; buf[len] = '\0'; } while(0)
@@ -120,11 +121,19 @@ void flush_connections(aClient* cptr)
 	{
 		for (i = LastSlot; i >= 0; i--)
 			if ((acptr = local[i]) && !(acptr->flags & FLAGS_BLOCKED)
-			    && DBufLength(&acptr->sendQ) > 0)
+			    && ((DBufLength(&acptr->sendQ) > 0)
+#ifdef ZIP_LINKS
+				|| (IsZipped(acptr) && acptr->zip->outcount)
+#endif /* ZIP_LINKS */
+				) )
 				send_queued(acptr);
 	}
 	else if (cptr->fd >= 0 && !(cptr->flags & FLAGS_BLOCKED)
-	    && DBufLength(&cptr->sendQ) > 0)
+	    && ((DBufLength(&cptr->sendQ) > 0)
+#ifdef ZIP_LINKS
+		|| (IsZipped(cptr) && cptr->zip->outcount)
+#endif /* ZIP_LINKS */
+		) )
 		send_queued(cptr);
 
 }
@@ -259,6 +268,7 @@ void vsendto_one(aClient *to, char *pattern, va_list vl)
 void sendbufto_one(aClient *to, char *msg, unsigned int quick)
 {
 	int  len;
+	Hook *h;
 	
 	Debug((DEBUG_ERROR, "Sending [%s] to %s", msg, to->name));
 
@@ -309,6 +319,10 @@ void sendbufto_one(aClient *to, char *msg, unsigned int quick)
 		ircd_log(LOG_ERROR, "%s", tmp_msg);
 		sendto_ops("%s", tmp_msg); /* recursion? */
 		return;
+	}
+        for(h = Hooks[HOOKTYPE_PACKET]; h; h = h->next) {
+		(*(h->func.intfunc))(&me, to, &msg, &len);
+		if(!msg) return;
 	}
 	if (DBufLength(&to->sendQ) > get_sendq(to))
 	{
@@ -1129,8 +1143,13 @@ void sendto_common_channels(aClient *user, char *pattern, ...)
 	Membership *channels;
 	Member *users;
 	aClient *cptr;
+	int sendlen;
 
+	/* We now create the buffer _before_ we send it to the clients. -- Syzop */
+	*sendbuf = '\0';
 	va_start(vl, pattern);
+	sendlen = vmakebuf_local_withprefix(sendbuf, user, pattern, vl);
+	va_end(vl);
 
 	++sentalong_marker;
 	if (user->fd >= 0)
@@ -1146,18 +1165,59 @@ void sendto_common_channels(aClient *user, char *pattern, ...)
 				    !(is_chanownprotop(user, channels->chptr) || is_chanownprotop(cptr, channels->chptr)))
 					continue;
 				sentalong[cptr->slot] = sentalong_marker;
-				va_start(vl, pattern);
-				vsendto_prefix_one(cptr, user, pattern, vl);
-				va_end(vl);
+				sendbufto_one(cptr, sendbuf, sendlen);
 			}
+
 	if (MyConnect(user))
-	{
-		va_start(vl, pattern);
-		vsendto_prefix_one(user, user, pattern, vl);
-	}
-	va_end(vl);
+		sendbufto_one(user, sendbuf, sendlen);
+
 	return;
 }
+
+/*
+ * sendto_common_channels_local_butone()
+ *
+ * Sends a message to all people on local server who are
+ * in same channel with user and have the specified capability.
+ */
+void sendto_common_channels_local_butone(aClient *user, int cap, char *pattern, ...)
+{
+	va_list vl;
+
+	Membership *channels;
+	Member *users;
+	aClient *cptr;
+	int sendlen;
+
+	/* We now create the buffer _before_ we send it to the clients. -- Syzop */
+	*sendbuf = '\0';
+	va_start(vl, pattern);
+	sendlen = vmakebuf_local_withprefix(sendbuf, user, pattern, vl);
+	va_end(vl);
+
+	++sentalong_marker;
+	if (user->fd >= 0)
+		sentalong[user->slot] = sentalong_marker;
+	if (user->user)
+	{
+		for (channels = user->user->channel; channels; channels = channels->next)
+			for (users = channels->chptr->members; users; users = users->next)
+			{
+				cptr = users->cptr;
+				if (!MyConnect(cptr) || (cptr->slot < 0) || (sentalong[cptr->slot] == sentalong_marker) ||
+				    !CHECKPROTO(cptr, cap))
+					continue;
+				if ((channels->chptr->mode.mode & MODE_AUDITORIUM) &&
+				    !(is_chanownprotop(user, channels->chptr) || is_chanownprotop(cptr, channels->chptr)))
+					continue;
+				sentalong[cptr->slot] = sentalong_marker;
+				sendbufto_one(cptr, sendbuf, sendlen);
+			}
+	}
+
+	return;
+}
+
 /*
  * sendto_channel_butserv
  *
@@ -1165,21 +1225,25 @@ void sendto_common_channels(aClient *user, char *pattern, ...)
  * server.
  */
 
-//STOPPED HERE
 void sendto_channel_butserv(aChannel *chptr, aClient *from, char *pattern, ...)
 {
 	va_list vl;
 	Member *lp;
 	aClient *acptr;
+	int sendlen;
 
-	for (va_start(vl, pattern), lp = chptr->members; lp; lp = lp->next)
-		if (MyConnect(acptr = lp->cptr))
-		{
-			va_start(vl, pattern);
-			vsendto_prefix_one(acptr, from, pattern, vl);
-			va_end(vl);
-		}
+	/* We now create the buffer _before_ we send it to the clients. Rather than
+	 * rebuilding the buffer 1000 times for a 1000 local-users channel. -- Syzop
+	 */
+	*sendbuf = '\0';
+	va_start(vl, pattern);
+	sendlen = vmakebuf_local_withprefix(sendbuf, from, pattern, vl);
 	va_end(vl);
+
+	for (lp = chptr->members; lp; lp = lp->next)
+		if (MyConnect(acptr = lp->cptr))
+			sendbufto_one(acptr, sendbuf, sendlen);
+
 	return;
 }
 
@@ -1737,53 +1801,65 @@ void sendto_ops_butme(aClient *from, char *pattern, ...)
 	return;
 }
 
+/* Prepare buffer based on format string and 'from' for LOCAL delivery.
+ * The prefix (:<something>) will be expanded to :nick!user@host if 'from'
+ * is a person, taking into account the rules for hidden/cloaked host.
+ * NOTE: Do not send this prepared buffer to remote clients or servers,
+ *       they do not want or need the expanded prefix. In that case, simply
+ *       use ircvsprintf() directly.
+ */
+int vmakebuf_local_withprefix(char *buf, struct Client *from, const char *pattern, va_list vl)
+{
+int len;
+
+	if (from && from->user)
+	{
+		char *par;
+
+		par = va_arg(vl, char *); /* eat first parameter */
+
+		*buf = ':';
+		strcpy(buf+1, from->name);
+
+		if (IsPerson(from))
+		{
+			char *username = from->user->username;
+			char *host = GetHost(from);
+
+			if (*username)
+			{
+				strcat(buf, "!");
+				strcat(buf, username);
+			}
+			if (*host)
+			{
+				strcat(buf, "@");
+				strcat(buf, host);
+			}
+		}
+
+		/* Assuming 'pattern' always starts with ":%s ..." */
+		if (!strcmp(&pattern[3], "%s"))
+			strcpy(buf + strlen(buf), va_arg(vl, char *)); /* This can speed things up by 30% -- Syzop */
+		else
+			ircvsprintf(buf + strlen(buf), &pattern[3], vl);
+	}
+	else
+		ircvsprintf(buf, pattern, vl);
+
+	len = strlen(buf);
+	ADD_CRLF(buf, len);
+	return len;
+}
+
 void vsendto_prefix_one(struct Client *to, struct Client *from,
     const char *pattern, va_list vl)
 {
 	if (to && from && MyClient(to) && from->user)
-	{
-		static char sender[HOSTLEN + NICKLEN + USERLEN + 5];
-		char *par;
-		int  flag = 0;
-		struct User *user = from->user;
-
-		par = va_arg(vl, char *);
-		strcpy(sender, from->name);
-		if (user)
-		{
-			if (*user->username)
-			{
-				strcat(sender, "!");
-				strcat(sender, user->username);
-			}
-			if ((IsHidden(from) ? *user->virthost : *user->realhost)
-			    && !MyConnect(from))
-			{
-				strcat(sender, "@");
-				(void)strcat(sender, GetHost(from));
-				flag = 1;
-			}
-		}
-		/*
-		 * Flag is used instead of strchr(sender, '@') for speed and
-		 * also since username/nick may have had a '@' in them. -avalon
-		 */
-		if (!flag && MyConnect(from)
-		    && (IsHidden(from) ? *user->virthost : *user->realhost))
-		{
-			strcat(sender, "@");
-			strcat(sender, GetHost(from));
-		}
-		*sendbuf = ':';
-		strcpy(&sendbuf[1], sender);
-		/* Assuming 'pattern' always starts with ":%s ..." */
-		if (!strcmp(&pattern[3], "%s"))
-			strcpy(sendbuf + strlen(sendbuf), va_arg(vl, char *)); /* This can speed things up by 30% -- Syzop */
-		else
-			ircvsprintf(sendbuf + strlen(sendbuf), &pattern[3], vl);
-	}
+		vmakebuf_local_withprefix(sendbuf, from, pattern, vl);
 	else
 		ircvsprintf(sendbuf, pattern, vl);
+
 	sendbufto_one(to, sendbuf, 0);
 }
 
@@ -1937,7 +2013,7 @@ void sendto_fconnectnotice(char *nick, anUser *user, aClient *sptr, int disconne
 void sendto_serv_butone_nickcmd(aClient *one, aClient *sptr,
 			char *nick, int hopcount,
     long lastnick, char *username, char *realhost, char *server,
-    long servicestamp, char *info, char *umodes, char *virthost)
+    char *svid, char *info, char *umodes, char *virthost)
 {
 	int  i;
 	aClient *cptr;
@@ -1979,14 +2055,14 @@ void sendto_serv_butone_nickcmd(aClient *one, aClient *sptr,
 					sendto_one(cptr,
 						(cptr->proto & PROTO_SJB64) ?
 					    /* Ugly double %s to prevent excessive spaces */
-					    "%s %s %d %B %s %s %b %lu %s %s %s%s%s%s:%s"
+					    "%s %s %d %B %s %s %b %s %s %s %s%s%s%s:%s"
 					    :
-					    "%s %s %d %lu %s %s %b %lu %s %s %s%s%s%s:%s"
+					    "%s %s %d %lu %s %s %b %s %s %s %s%s%s%s:%s"
 					    ,
 					    (IsToken(cptr) ? TOK_NICK : MSG_NICK), nick,
 					    hopcount, (long)lastnick, username, realhost,
 					    (long)(sptr->srvptr->serv->numeric),
-					    servicestamp, umodes, vhost,
+					    svid, umodes, vhost,
 					    SupportCLK(cptr) ? getcloak(sptr) : "",
 					    SupportCLK(cptr) ? " " : "",
 					    SupportNICKIP(cptr) ? encode_ip(sptr->user->ip_str) : "",
@@ -1994,11 +2070,11 @@ void sendto_serv_butone_nickcmd(aClient *one, aClient *sptr,
 					    info);
 				else
 					sendto_one(cptr,
-					    "%s %s %d %d %s %s %s %lu %s %s %s%s%s%s:%s",
+					    "%s %s %d %d %s %s %s %s %s %s %s%s%s%s:%s",
 					    (IsToken(cptr) ? TOK_NICK : MSG_NICK), nick,
 					    hopcount, lastnick, username, realhost,
 					    SupportNS(cptr) && sptr->srvptr->serv->numeric ? base64enc(sptr->srvptr->serv->numeric) : server,
-					    servicestamp, umodes, vhost,
+					    svid, umodes, vhost,
 					    SupportCLK(cptr) ? getcloak(sptr) : "",
 					    SupportCLK(cptr) ? " " : "",
 					    SupportNICKIP(cptr) ? encode_ip(sptr->user->ip_str) : "",
@@ -2008,11 +2084,11 @@ void sendto_serv_butone_nickcmd(aClient *one, aClient *sptr,
 			}
 			else
 			{
-				sendto_one(cptr, "%s %s %d %d %s %s %s %lu :%s",
+				sendto_one(cptr, "%s %s %d %d %s %s %s %s :%s",
 				    (IsToken(cptr) ? TOK_NICK : MSG_NICK),
 				    nick, hopcount, lastnick, username,
 				    realhost,
-				    server, servicestamp, info);
+				    server, svid, info);
 				if (strcmp(umodes, "+"))
 				{
 					sendto_one(cptr, ":%s %s %s :%s",
@@ -2068,14 +2144,14 @@ void sendto_one_nickcmd(aClient *cptr, aClient *sptr, char *umodes)
 			sendto_one(cptr,
 				(cptr->proto & PROTO_SJB64) ?
 			    /* Ugly double %s to prevent excessive spaces */
-			    "%s %s %d %B %s %s %b %lu %s %s %s%s:%s"
+			    "%s %s %d %B %s %s %b %s %s %s %s%s:%s"
 			    :
-			    "%s %s %d %lu %s %s %b %lu %s %s %s%s:%s"
+			    "%s %s %d %lu %s %s %b %s %s %s %s%s:%s"
 			    ,
 			    (IsToken(cptr) ? TOK_NICK : MSG_NICK), sptr->name,
 			    sptr->hopcount+1, (long)sptr->lastnick, sptr->user->username, 
 			    sptr->user->realhost, (long)(sptr->srvptr->serv->numeric),
-			    sptr->user->servicestamp, umodes, vhost,
+			    sptr->user->svid, umodes, vhost,
 			    SupportNICKIP(cptr) ? encode_ip(sptr->user->ip_str) : "",
 			    SupportNICKIP(cptr) ? " " : "", sptr->info);
 		else
@@ -2085,16 +2161,16 @@ void sendto_one_nickcmd(aClient *cptr, aClient *sptr, char *umodes)
 			    sptr->hopcount+1, sptr->lastnick, sptr->user->username, 
 			    sptr->user->realhost, SupportNS(cptr) && 
 			    sptr->srvptr->serv->numeric ? base64enc(sptr->srvptr->serv->numeric)
-			    : sptr->user->server, sptr->user->servicestamp, umodes, vhost,
+			    : sptr->user->server, sptr->user->svid, umodes, vhost,
 			    SupportNICKIP(cptr) ? encode_ip(sptr->user->ip_str) : "",
 			    SupportNICKIP(cptr) ? " " : "", sptr->info);
 	}
 	else
 	{
-		sendto_one(cptr, "%s %s %d %d %s %s %s %lu :%s",
+		sendto_one(cptr, "%s %s %d %d %s %s %s %s :%s",
 		    (IsToken(cptr) ? TOK_NICK : MSG_NICK),
 		    sptr->name, sptr->hopcount+1, sptr->lastnick, sptr->user->username,
-		    sptr->user->realhost, sptr->user->server, sptr->user->servicestamp, 
+		    sptr->user->realhost, sptr->user->server, sptr->user->svid, 
 		    sptr->info);
 		if (strcmp(umodes, "+"))
 		{

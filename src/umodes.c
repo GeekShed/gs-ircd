@@ -78,6 +78,7 @@ long UMODE_SETHOST = 0L;       /* Used sethost */
 long UMODE_STRIPBADWORDS = 0L; /* Strip badwords */
 long UMODE_HIDEWHOIS = 0L;     /* Hides channels in /whois */
 long UMODE_NOCTCP = 0L;	       /* Blocks ctcp (except dcc and action) */
+long UMODE_HIDLE = 0L;         /* Hides the idle time of opers */
 
 long SNO_KILLS = 0L;
 long SNO_CLIENT = 0L;
@@ -156,6 +157,7 @@ void	umode_init(void)
 	UmodeAdd(NULL, 't', UMODE_GLOBAL, NULL, &UMODE_SETHOST);
 	UmodeAdd(NULL, 'G', UMODE_GLOBAL, NULL, &UMODE_STRIPBADWORDS);
 	UmodeAdd(NULL, 'p', UMODE_GLOBAL, NULL, &UMODE_HIDEWHOIS);
+	UmodeAdd(NULL, 'I', UMODE_GLOBAL, umode_allow_opers, &UMODE_HIDLE);
 	SnomaskAdd(NULL, 'k', umode_allow_all, &SNO_KILLS);
 	SnomaskAdd(NULL, 'c', umode_allow_opers, &SNO_CLIENT);
 	SnomaskAdd(NULL, 'f', umode_allow_opers, &SNO_FLOOD);
@@ -486,17 +488,56 @@ int umode_delete(char ch, long val)
 	return -1;
 }
 
-/* Simply non-perfect function to remove all oper-snomasks, 
+/**
+ * Simply non-perfect function to remove all oper-snomasks, 
  * it's at least better than manually doing a .. &= ~SNO_BLAH everywhere.
+ *
+ * Also unsets all snomasks and UMODE_SERVNOTICE if it would seem the
+ * user doesn't deserve to have snomask after being deopered. This is
+ * simpler, but hackier, than actually recording whether or not the
+ * user already had some snomasks set before OPERing and then reset
+ * his stuff to that... --binki
  */
 void remove_oper_snomasks(aClient *sptr)
 {
 int i;
+	/*
+	 * See #3329
+	 */
+	if (sptr->umodes & UMODE_SERVNOTICE
+	    && RESTRICT_USERMODES
+	    && strchr(RESTRICT_USERMODES, 's')
+	    && !(CONN_MODES & UMODE_SERVNOTICE))
+	{
+		sptr->umodes &= ~UMODE_SERVNOTICE;
+		sptr->user->snomask = 0;
+		/* we unset all snomasks, so short-circuit */
+		return;
+	}
+
 	for (i = 0; i <= Snomask_highest; i++)
 	{
 		if (!Snomask_Table[i].flag)
 			continue;
 		if (Snomask_Table[i].allowed == umode_allow_opers)
 			sptr->user->snomask &= ~Snomask_Table[i].mode;
+	}
+}
+
+/*
+ * Strip all 'oper only modes' from the user.
+ * This function is NOT PERFECT, see comments from the
+ * remove_oper_snomasks above.
+ */
+void remove_oper_modes(aClient *sptr)
+{
+int i;
+
+	for (i = 0; i <= Usermode_highest; i++)
+	{
+		if (!Usermode_Table[i].flag)
+			continue;
+		if (Usermode_Table[i].allowed == umode_allow_opers)
+			sptr->umodes &= ~Usermode_Table[i].mode;
 	}
 }

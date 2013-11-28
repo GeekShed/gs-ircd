@@ -298,8 +298,8 @@ static char *replies[] = {
 /* 262 */ NULL, /* rfc2812 */
 /* 263 */ NULL, /* rfc2812 */
 /* 264 */ NULL,
-/* 265    RPL_LOCALUSERS */ ":%s 265 %s :Current Local Users: %d  Max: %d",
-/* 266    RPL_GLOBALUSERS */ ":%s 266 %s :Current Global Users: %d  Max: %d",
+/* 265    RPL_LOCALUSERS */ ":%s 265 %s %d %d :Current local users %d, max %d",
+/* 266    RPL_GLOBALUSERS */ ":%s 266 %s %d %d :Current global users %d, max %d",
 /* 267 */ NULL, /* aircd */
 /* 268 */ NULL, /* aircd */
 /* 269 */ NULL, /* aircd */
@@ -340,7 +340,7 @@ static char *replies[] = {
 /* 304 */ NULL, /* RPL_TEXT */
 /* 305    RPL_UNAWAY */ ":%s 305 %s :You are no longer marked as being away",
 /* 306    RPL_NOWAWAY */ ":%s 306 %s :You have been marked as being away",
-/* 307    RPL_WHOISREGNICK */ ":%s 307 %s %s :is a registered nick",
+/* 307    RPL_WHOISREGNICK */ ":%s 307 %s %s :is identified for this nick",
 /* 308    RPL_RULESSTART */ ":%s 308 %s :- %s Server Rules - ",
 /* 309    RPL_ENDOFRULES */ ":%s 309 %s :End of RULES command.",
 /* 310    RPL_WHOISHELPOP */ ":%s 310 %s %s :is available for help.",
@@ -367,7 +367,7 @@ static char *replies[] = {
 /* 327 */ NULL, /* Used */
 /* 328 */ NULL, /* bahamut, austhex */
 /* 329    RPL_CREATIONTIME */ ":%s 329 %s %s %lu",
-/* 330 */ NULL, /* Used */
+/* 330    RPL_WHOISLOGGEDIN */ ":%s 330 %s %s %s :is logged in as", 
 /* 331    RPL_NOTOPIC */ ":%s 331 %s %s :No topic is set.",
 /* 332    RPL_TOPIC */ ":%s 332 %s %s :%s",
 /* 333    RPL_TOPICWHOTIME */ ":%s 333 %s %s %s %lu",
@@ -454,7 +454,7 @@ static char *replies[] = {
 /* 407    ERR_TOOMANYTARGETS */ ":%s 407 %s %s :Duplicate recipients. No message delivered",
 /* 408 */ NULL, /* rfc2812, bahamut */
 /* 409    ERR_NOORIGIN */ ":%s 409 %s :No origin specified",
-/* 410 */ NULL, 
+/* 410    ERR_INVALIDCAPCMD */ ":%s 410 %s %s :Invalid CAP subcommand", 
 /* 411    ERR_NORECIPIENT */ ":%s 411 %s :No recipient given (%s)",
 /* 412    ERR_NOTEXTTOSEND */ ":%s 412 %s :No text to send",
 /* 413    ERR_NOTOPLEVEL */ ":%s 413 %s %s :No toplevel domain specified",
@@ -726,7 +726,7 @@ static char *replies[] = {
 /* 667 */ NULL,
 /* 668 */ NULL,
 /* 669 */ NULL,
-/* 670 */ NULL, /* kineircd */
+/* 670 RPL_STARTTLS */ ":%s 670 %s :STARTTLS successful, go ahead with TLS handshake", /* kineircd */
 /* 671 RPL_WHOISSECURE */ ":%s 671 %s %s :%s", /* our variation on the kineircd numeric */
 /* 672 */ NULL, /* ithildin */
 /* 673 */ NULL, /* ithildin */
@@ -747,7 +747,7 @@ static char *replies[] = {
 /* 688 */ NULL, /* kineircd */
 /* 689 */ NULL, /* kineircd */
 /* 690 */ NULL, /* kineircd */
-/* 691 */ NULL,
+/* 691 ERR_STARTTLS */ ":%s 691 %s :%s",
 /* 692 */ NULL,
 /* 693 */ NULL,
 /* 694 */ NULL,
@@ -798,7 +798,7 @@ static char *replies[] = {
 /* 739 */ NULL,
 /* 740 */ NULL,
 /* 741 */ NULL,
-/* 742 */ NULL,
+/* 742 ERR_MLOCKRESTRICTED */ ":%s 742 %s %s %c %s :MODE cannot be set due to channel having an active MLOCK restriction policy",
 /* 743 */ NULL,
 /* 744 */ NULL,
 /* 745 */ NULL,
@@ -956,14 +956,14 @@ static char *replies[] = {
 /* 897 */ NULL,
 /* 898 */ NULL,
 /* 899 */ NULL,
-/* 900 */ NULL,
-/* 901 */ NULL,
-/* 902 */ NULL,
-/* 903 */ NULL,
-/* 904 */ NULL,
-/* 905 */ NULL,
-/* 906 */ NULL,
-/* 907 */ NULL,
+/* 900 RPL_LOGGEDIN */          ":%s 900 %s %s!%s@%s %s :You are now logged in as %s.",
+/* 901 RPL_LOGGEDOUT */         ":%s 901 %s %s!%s@%s :You are now logged out.",
+/* 902 ERR_NICKLOCKED */        ":%s 902 %s :You must use a nick assigned to you.",
+/* 903 RPL_SASLSUCCESS */       ":%s 903 %s :SASL authentication successful",
+/* 904 ERR_SASLFAIL */          ":%s 904 %s :SASL authentication failed",
+/* 905 ERR_SASLTOOLONG */       ":%s 905 %s :SASL message too long",
+/* 906 ERR_SASLABORTED */       ":%s 906 %s :SASL authentication aborted",
+/* 907 ERR_SASLALREADY */       ":%s 907 %s :You have already completed SASL authentication",
 /* 908 */ NULL,
 /* 909 */ NULL,
 /* 910 */ NULL,

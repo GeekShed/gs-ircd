@@ -52,7 +52,7 @@ static Hook *GuestHook = NULL;
 ModuleHeader MOD_HEADER(m_guest)
   = {
 	"guest",	/* Name of module */
-	"$Id: m_guest.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /guest", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

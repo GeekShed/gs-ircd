@@ -16,7 +16,7 @@
 #*   along with this program; if not, write to the Free Software
 #*   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 #*  
-#*   $Id: Makefile.in,v 1.1.6.13 2009/04/13 11:03:55 syzop Exp $
+#*   $Id$
 #*/
 
 CC=@CC@
@@ -34,11 +34,11 @@ FROMDOS=/home/cmunk/bin/4dos
 #
 
 #XCFLAGS=-O -g -export-dynamic
-IRCDLIBS=@IRCDLIBS@ @TRELIBS@ @CARESLIBS@
+IRCDLIBS=@IRCDLIBS@ @TRE_LIBS@ @CARES_LIBS@
 CRYPTOLIB=@CRYPTOLIB@
 OPENSSLINCLUDES=
 
-XCFLAGS=-I@TREINCDIR@ -I@CARESINCDIR@ @CARESLIBDIR@ @CFLAGS@
+XCFLAGS=@TRE_CFLAGS@ @CARES_CFLAGS@ @CFLAGS@
 #
 # use the following on MIPS:
 #CFLAGS= -systype bsd43 -DSYSTYPE_BSD43 -I$(INCLUDEDIR)
@@ -104,9 +104,11 @@ URL=@URL@
 STRTOUL=@STRTOUL@
 
 # [CHANGEME]
-# If you get crashes around a specific number of clients, and that client
-# load comes close or a little over the system-defined value of FD_SETSIZE,
-# override it here and see what happens.
+# If you get crashes around a specific number of clients, and that
+# client load comes close or a little over the system-defined value of
+# FD_SETSIZE, override it here and see what happens. You may override
+# the system FD_SETSIZE by setting the FD_SETSIZE Makefile variable to
+# -DFD_SETSIZE=<some number>.
 FD_SETSIZE=@FD_SETSIZE@
 
 # Where is your openssl binary
@@ -135,16 +137,17 @@ MAKEARGS =	'CFLAGS=${CFLAGS}' 'CC=${CC}' 'IRCDLIBS=${IRCDLIBS}' \
 		'URL=${URL}'
 
 custommodule:
-	cd src; ${MAKE} ${MAKEARGS} MODULEFILE=${MODULEFILE} 'EXLIBS=${EXLIBS}' custommodule
+	@if test -z "${MODULEFILE}"; then echo "Please set MODULEFILE when calling \`\`make custommodule''. For example, \`\`make custommodule MODULEFILE=callerid''." >&2; exit 1; fi
+	+cd src; ${MAKE} ${MAKEARGS} MODULEFILE=${MODULEFILE} 'EXLIBS=${EXLIBS}' custommodule
 
-server:
-build:
+server: Makefile
+build: Makefile
 	-@if [ ! -f include/setup.h ] ; then \
 		echo "Hmm...doesn't look like you've run Config..."; \
 		echo "Doing so now."; \
 		sh Config; \
 	fi
-	@for i in $(SUBDIRS); do \
+	@+for i in $(SUBDIRS); do \
 		echo "Building $$i";\
 		( cd $$i; ${MAKE} ${MAKEARGS} build; ) \
 	done
@@ -164,7 +167,7 @@ build:
 
 clean:
 	$(RM) -f *~ \#* core *.orig include/*.orig
-	@for i in $(SUBDIRS); do \
+	@+for i in $(SUBDIRS); do \
 		echo "Cleaning $$i";\
 		( cd $$i; ${MAKE} ${MAKEARGS} clean; ) \
 	done
@@ -173,7 +176,7 @@ clean:
 	fi
 
 cleandir: clean
-	rm -rf include/networks.h include/setup.h Makefile Settings
+	rm -rf include/setup.h Makefile Settings
 
 makex:
 	chmod +x Config newnet ircd ircdcron/ircdchk killircd
@@ -196,18 +199,14 @@ stamp: makedist
 	echo "" >> include/stamp.h
 
 depend:
-	@for i in $(SUBDIRS); do \
+	@+for i in $(SUBDIRS); do \
 		echo "Making dependencies in $$i";\
 		( cd $$i; ${MAKE} ${MAKEARGS} depend; ) \
 	done
 
 install: all
 	$(INSTALL) -m 0700 -d $(IRCDDIR)
-	$(INSTALL) -m 0700 src/ircd $(BINDIR)
-	$(INSTALL) -m 0700 -d $(IRCDDIR)/networks
-	$(INSTALL) -m 0600 networks/*.network $(IRCDDIR)/networks
-	$(INSTALL) -m 0700 networks/makenet $(IRCDDIR)/networks
-	$(INSTALL) -m 0600 networks/networks.ndx $(IRCDDIR)/networks
+	$(INSTALL) -m 0700 src/ircd $(BINDIR) 2>/dev/null || { $(INSTALL) -m 0700 -d "$$(dirname '$(BINDIR)')"; $(INSTALL) -m 0700 src/ircd $(BINDIR); }
 	$(INSTALL) -m 0700 -d $(IRCDDIR)/doc
 	$(INSTALL) -m 0600 doc/Authors doc/example.conf doc/coding-guidelines doc/tao.of.irc doc/unreal32docs.html $(IRCDDIR)/doc
 	$(INSTALL) -m 0700 -d $(IRCDDIR)/aliases
@@ -219,8 +218,16 @@ install: all
 	$(INSTALL) -m 0700 unreal $(IRCDDIR)
 	$(INSTALL) -m 0700 -d $(IRCDDIR)/modules
 	$(INSTALL) -m 0700 src/modules/*.so $(IRCDDIR)/modules
+	$(INSTALL) -m 0700 -d $(IRCDDIR)/ircdcron
+	$(INSTALL) -m 0600 ircdcron/ircd.cron $(IRCDDIR)/ircdcron
+	$(INSTALL) -m 0700 ircdcron/ircdchk $(IRCDDIR)/ircdcron
 	-@if [ ! -f "$(IRCDDIR)/curl-ca-bundle.crt" ] ; then \
 		$(INSTALL) -m 0700 curl-ca-bundle.crt $(IRCDDIR) ; \
+	fi
+	-@if [ server.cert.pem -nt "$(IRCDDIR)/server.cert.pem" ] ; then \
+		$(INSTALL) -m 0600 server.req.pem $(IRCDDIR) ; \
+		$(INSTALL) -m 0600 server.key.pem $(IRCDDIR) ; \
+		$(INSTALL) -m 0600 server.cert.pem $(IRCDDIR) ; \
 	fi
 
 pem:	src/ssl.cnf
@@ -249,3 +256,5 @@ encpem: server.key.pem
 		rm -f server.key.c.pem ; \
 	fi
 
+Makefile: config.status Makefile.in
+	./config.status

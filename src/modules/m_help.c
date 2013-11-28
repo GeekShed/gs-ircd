@@ -53,7 +53,7 @@ DLLFUNC int m_help(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_help)
   = {
 	"m_help",
-	"$Id: m_help.c,v 1.1.6.10 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /help", 
 	"3.2-b8-1",
 	NULL 

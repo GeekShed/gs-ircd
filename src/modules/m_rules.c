@@ -52,7 +52,7 @@ DLLFUNC int m_rules(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_rules)
   = {
 	"m_rules",
-	"$Id: m_rules.c,v 1.1.6.10 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /rules", 
 	"3.2-b8-1",
 	NULL 
@@ -87,8 +87,11 @@ DLLFUNC int MOD_UNLOAD(m_rules)(int module_unload)
 DLLFUNC CMD_FUNC(m_rules)
 {
 	ConfigItem_tld *ptr;
-	aMotd *temp;
+	aMotdLine *temp;
 	char userhost[USERLEN + HOSTLEN + 6];
+
+	temp = NULL;
+
 	if (IsServer(sptr))
 		return 0;
 		
@@ -98,7 +101,7 @@ DLLFUNC CMD_FUNC(m_rules)
 #ifndef TLINE_Remote
 	if (!MyConnect(sptr))
 	{
-		temp = rules;
+		temp = rules.lines;
 		goto playrules;
 	}
 #endif
@@ -106,12 +109,9 @@ DLLFUNC CMD_FUNC(m_rules)
 	ptr = Find_tld(sptr, userhost);
 
 	if (ptr)
-	{
-		temp = ptr->rules;
-
-	}
-	else
-		temp = rules;
+		temp = ptr->rules.lines;
+	if(!temp)
+		temp = rules.lines;
 
       playrules:
 	if (temp == NULL)

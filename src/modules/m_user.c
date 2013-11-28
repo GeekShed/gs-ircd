@@ -52,7 +52,7 @@ DLLFUNC CMD_FUNC(m_user);
 ModuleHeader MOD_HEADER(m_user)
   = {
 	"m_user",
-	"$Id: m_user.c,v 1.1.4.7 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /user", 
 	"3.2-b8-1",
 	NULL 
@@ -91,7 +91,7 @@ DLLFUNC CMD_FUNC(m_user)
 #define	UFLAGS	(UMODE_INVISIBLE|UMODE_WALLOP|UMODE_SERVNOTICE)
 	char *username, *host, *server, *realname, *umodex = NULL, *virthost =
 	    NULL, *ip = NULL;
-	u_int32_t sstamp = 0;
+	char *sstamp = NULL;
 	anUser *user;
 	aClient *acptr;
 
@@ -129,23 +129,20 @@ DLLFUNC CMD_FUNC(m_user)
 
 	if (parc == 6 && IsServer(cptr))
 	{
-		if (isdigit(*parv[4]))
-			sstamp = strtoul(parv[4], NULL, 10);
+		sstamp = (BadPtr(parv[4])) ? "0" : parv[4];
 		realname = (BadPtr(parv[5])) ? "<bad-realname>" : parv[5];
 		umodex = NULL;
 	}
 	else if (parc == 8 && IsServer(cptr))
 	{
-		if (isdigit(*parv[4]))
-			sstamp = strtoul(parv[4], NULL, 10);
+		sstamp = (BadPtr(parv[4])) ? "0" : parv[4];
 		realname = (BadPtr(parv[7])) ? "<bad-realname>" : parv[7];
 		umodex = parv[5];
 		virthost = parv[6];
 	}
 	else if (parc == 9 && IsServer(cptr))
 	{
-		if (isdigit(*parv[4]))
-			sstamp = strtoul(parv[4], NULL, 10);
+		sstamp = (BadPtr(parv[4])) ? "0" : parv[4];
 		realname = (BadPtr(parv[8])) ? "<bad-realname>" : parv[8];
 		umodex = parv[5];
 		virthost = parv[6];
@@ -202,9 +199,13 @@ DLLFUNC CMD_FUNC(m_user)
 		user->ip_str = strdup(Inet_ia2p(&sptr->ip));
 	user->server = me_hash;
       user_finish:
-	user->servicestamp = sstamp;
+	if (sstamp != NULL)
+		strlcpy(user->svid, sstamp, sizeof(user->svid));
+
 	strlcpy(sptr->info, realname, sizeof(sptr->info));
-	if (sptr->name[0] && (IsServer(cptr) ? 1 : IsNotSpoof(sptr)))
+	if (*sptr->name &&
+		(IsServer(cptr) || (IsNotSpoof(sptr) && !CHECKPROTO(sptr, PROTO_CLICAP)))
+           )
 		/* NICK and no-spoof already received, now we have USER... */
 	{
 		if (USE_BAN_VERSION && MyConnect(sptr))

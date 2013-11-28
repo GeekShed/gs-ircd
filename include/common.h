@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: common.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 #ifndef	__common_include__
@@ -265,7 +265,8 @@ extern struct SLink *find_user_link( /* struct SLink *, struct Client * */ );
 
 
 /* Server-Server PROTOCTL -Stskeeps
- * Please check send_proto() for more. -- Syzop
+ * This is the FIRST line only, please check send_proto() for more. -- Syzop
+ * Also take MAXPARA into account !
  */
 #define PROTOCTL_SERVER "NOQUIT" \
                         " TOKEN" \
@@ -278,7 +279,8 @@ extern struct SLink *find_user_link( /* struct SLink *, struct Client * */ );
                         " NS" \
                         " SJB64" \
                         " TKLEXT" \
-			" NICKIP"
+                        " NICKIP" \
+                        " ESVID"
 
 #ifdef _WIN32
 /*

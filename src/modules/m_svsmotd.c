@@ -45,8 +45,7 @@
 #ifdef _WIN32
 #include "version.h"
 #endif
-extern MODVAR aMotd *svsmotd;
-extern aMotd *read_file(char *, aMotd **);
+
 DLLFUNC int m_svsmotd(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 
 #define MSG_SVSMOTD 	"SVSMOTD"	
@@ -55,7 +54,7 @@ DLLFUNC int m_svsmotd(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_svsmotd)
   = {
 	"m_svsmotd",
-	"$Id: m_svsmotd.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /svsmotd", 
 	"3.2-b8-1",
 	NULL 
@@ -113,14 +112,13 @@ int  m_svsmotd(aClient *cptr, aClient *sptr, int parc, char *parv[])
         switch (*parv[1])
         {
           case '#':
-                  conf = fopen(VPATH, "a");
+                  conf = fopen(conf_files->svsmotd_file, "a");
                   sendto_ops("Added '%s' to services motd", parv[2]);
                   break;
           case '!':
           {
-                  remove(VPATH);
-                  free_motd(svsmotd);
-                  svsmotd = NULL;
+                  remove(conf_files->svsmotd_file);
+                  free_motd(&svsmotd);
                   sendto_ops("Wiped out services motd data");
                   break;
           }
@@ -150,6 +148,6 @@ int  m_svsmotd(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
         fclose(conf);
         /* We editted it, so rehash it -- codemastr */
-        svsmotd = read_file(VPATH, &svsmotd);
+        read_motd(conf_files->svsmotd_file, &svsmotd);
         return 1;
 }

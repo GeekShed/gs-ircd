@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: numeric.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 /*
@@ -52,6 +52,8 @@
 #define ERR_TOOMANYTARGETS   407
 #define ERR_NOSUCHSERVICE    408
 #define	ERR_NOORIGIN         409
+
+#define ERR_INVALIDCAPCMD    410
 
 #define ERR_NORECIPIENT      411
 #define ERR_NOTEXTTOSEND     412
@@ -180,6 +182,9 @@
 #define RPL_LISTEND          323
 #define RPL_CHANNELMODEIS    324
 #define RPL_CREATIONTIME     329
+
+#define RPL_WHOISLOGGEDIN    330	/* ircu/charybdis-family --nenolod */
+
 #define RPL_NOTOPIC          331
 #define RPL_TOPIC            332
 #define RPL_TOPICWHOTIME     333
@@ -361,8 +366,25 @@
 
 #define RPL_SPAMCMDFWD       659
 
+#define RPL_STARTTLS         670
+
 #define RPL_WHOISSECURE      671
+
+#define ERR_MLOCKRESTRICTED	742
 
 #define ERR_CANNOTDOCOMMAND 972
 #define ERR_CANNOTCHANGECHANMODE 974
+
+#define ERR_STARTTLS            691
+
+#define RPL_LOGGEDIN            900
+#define RPL_LOGGEDOUT           901
+#define ERR_NICKLOCKED          902
+
+#define RPL_SASLSUCCESS         903
+#define ERR_SASLFAIL            904
+#define ERR_SASLTOOLONG         905
+#define ERR_SASLABORTED         906
+#define ERR_SASLALREADY         907
+
 #define ERR_NUMERICERR       999

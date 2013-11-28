@@ -52,7 +52,7 @@ DLLFUNC CMD_FUNC(m_watch);
 ModuleHeader MOD_HEADER(m_watch)
   = {
 	"m_watch",
-	"$Id: m_watch.c,v 1.1.4.7 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /watch", 
 	"3.2-b8-1",
 	NULL 
@@ -121,7 +121,7 @@ static void show_watch(aClient *cptr, char *name, int rpl1, int rpl2, int awayno
 				cptr->name, name);
 		else	
 			sendto_one(cptr, rpl_str(rpl2), me.name, cptr->name,
-			    name, "*", "*", 0);
+			    name, "*", "*", 0L);
 	}
 }
 

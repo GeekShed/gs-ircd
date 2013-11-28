@@ -38,7 +38,7 @@ ModuleInfo DefizzerModInfo;
 ModuleHeader MOD_HEADER(defizzer)
   = {
 	"defizzer",	/* Name of module */
-	"$Id: defizzer.c,v 1.1.6.13 2009/04/13 11:03:57 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"de-Fizzer", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

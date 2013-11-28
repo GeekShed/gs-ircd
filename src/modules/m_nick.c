@@ -53,7 +53,7 @@ DLLFUNC int _register_user(aClient *cptr, aClient *sptr, char *nick, char *usern
 ModuleHeader MOD_HEADER(m_nick)
   = {
 	"m_nick",
-	"$Id: m_nick.c,v 1.1.4.7 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /nick", 
 	"3.2-b8-1",
 	NULL 
@@ -692,22 +692,24 @@ DLLFUNC CMD_FUNC(m_nick)
 	}
 	else if (!sptr->name[0])
 	{
-#ifdef NOSPOOF
-		/*
-		 * Client setting NICK the first time.
-		 *
-		 * Generate a random string for them to pong with.
-		 */
-		sptr->nospoof = getrandom32();
+		if (iConf.ping_cookie)
+		{
+			/*
+			 * Client setting NICK the first time.
+			 *
+			 * Generate a random string for them to pong with.
+			 */
+			sptr->nospoof = getrandom32();
 
-		if (PINGPONG_WARNING)
-			sendto_one(sptr, ":%s NOTICE %s :*** If you are having problems"
-			    " connecting due to ping timeouts, please"
-			    " type /quote pong %X or /raw pong %X now.",
-			    me.name, nick, sptr->nospoof, sptr->nospoof);
+			if (PINGPONG_WARNING)
+				sendto_one(sptr, ":%s NOTICE %s :*** If you are having problems"
+				    " connecting due to ping timeouts, please"
+				    " type /quote pong %X or /raw pong %X now.",
+				    me.name, nick, sptr->nospoof, sptr->nospoof);
 
-		sendto_one(sptr, "PING :%X", sptr->nospoof);
-#endif /* NOSPOOF */
+			sendto_one(sptr, "PING :%X", sptr->nospoof);
+		}
+
 #ifdef CONTACT_EMAIL
 		sendto_one(sptr,
 		    ":%s NOTICE %s :*** If you need assistance with a"
@@ -736,7 +738,7 @@ DLLFUNC CMD_FUNC(m_nick)
 		}
 		/* This had to be copied here to avoid problems.. */
 		(void)strcpy(sptr->name, nick);
-		if (sptr->user && IsNotSpoof(sptr))
+		if (sptr->user && IsNotSpoof(sptr) && !CHECKPROTO(sptr, PROTO_CLICAP))
 		{
 			/*
 			   ** USER already received, now we have NICK.
@@ -746,11 +748,10 @@ DLLFUNC CMD_FUNC(m_nick)
 			   ** may reject the client and call exit_client for it
 			   ** --must test this and exit m_nick too!!!
 			 */
-#ifndef NOSPOOF
-			if (USE_BAN_VERSION && MyConnect(sptr))
+			if (!iConf.ping_cookie && USE_BAN_VERSION && MyConnect(sptr))
 				sendto_one(sptr, ":IRC!IRC@%s PRIVMSG %s :\1VERSION\1",
 					me.name, nick);
-#endif
+
 			sptr->lastnick = TStime();	/* Always local client */
 			if (register_user(cptr, sptr, nick,
 			    sptr->user->username, NULL, NULL, NULL) == FLUSH_BUFFER)
@@ -863,6 +864,8 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 	
 	if (MyConnect(sptr))
 	{
+	        char temp[USERLEN + 1];
+	        
 		if ((i = check_client(sptr, username))) {
 			/* This had return i; before -McSkaf */
 			if (i == -5)
@@ -883,14 +886,15 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 
 		if (sptr->hostp)
 		{
-			/* reject ascci < 32 and ascii >= 127 (note: upper resolver might be even more strict) */
+			/* reject ASCII < 32 and ASCII >= 127 (note: upper resolver might be even more strict). */
 			for (tmpstr = sptr->sockhost; *tmpstr > ' ' && *tmpstr < 127; tmpstr++);
 			
 			/* if host contained invalid ASCII _OR_ the DNS reply is an IP-like reply
-			 * (like: 1.2.3.4), then reject it and use IP instead.
+			 * (like: 1.2.3.4 or ::ffff:1.2.3.4), then reject it and use IP instead.
 			 */
-			if (*tmpstr || !*user->realhost || (isdigit(*sptr->sockhost) && isdigit(*tmpstr - 1)))
-				strncpyzt(sptr->sockhost, (char *)Inet_ia2p((struct IN_ADDR*)&sptr->ip), sizeof(sptr->sockhost));
+			if (*tmpstr || !*user->realhost || (isdigit(*sptr->sockhost) && (sptr->sockhost > tmpstr && isdigit(*(tmpstr - 1))) )
+			    || (sptr->sockhost[0] == ':'))
+				strncpyzt(sptr->sockhost, Inet_ia2p(&sptr->ip), sizeof(sptr->sockhost));
 		}
 		strncpyzt(user->realhost, sptr->sockhost, sizeof(sptr->sockhost)); /* SET HOSTNAME */
 
@@ -907,16 +911,16 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 		 *
 		 * Moved the noident stuff here. -OnyxDragon
 		 */
+
+		/* because username may point to user->username */
+		strncpyzt(temp, username, USERLEN + 1);
+
 		if (!(sptr->flags & FLAGS_DOID)) 
-			strncpyzt(user->username, username, USERLEN + 1);
+			strncpyzt(user->username, temp, USERLEN + 1);
 		else if (sptr->flags & FLAGS_GOTID) 
 			strncpyzt(user->username, sptr->username, USERLEN + 1);
 		else
 		{
-
-			/* because username may point to user->username */
-			char temp[USERLEN + 1];
-			strncpyzt(temp, username, USERLEN + 1);
 			if (IDENT_CHECK == 0) {
 				strncpyzt(user->username, temp, USERLEN + 1);
 			}
@@ -1069,7 +1073,6 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 				    me.name, parv[0],
 				    me.name, version, umodestring, cmodestring);
 		{
-			extern MODVAR char *IsupportStrings[];
 			int i;
 			for (i = 0; IsupportStrings[i]; i++)
 				sendto_one(sptr, rpl_str(RPL_ISUPPORT), me.name, nick, IsupportStrings[i]);
@@ -1099,7 +1102,6 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 			    sptr->name, olduser, userbad, stripuser);
 #endif
 		nextping = TStime();
-		sendto_connectnotice(nick, user, sptr, 0, NULL);
 		if (IsSecure(sptr))
 			sptr->umodes |= UMODE_SECURE;
 	}
@@ -1169,17 +1171,20 @@ int _register_user(aClient *cptr, aClient *sptr, char *nick, char *username, cha
 	/* NICKv2 Servers ! */
 	sendto_serv_butone_nickcmd(cptr, sptr, nick,
 	    sptr->hopcount + 1, sptr->lastnick, user->username, user->realhost,
-	    user->server, user->servicestamp, sptr->info,
+	    user->server, user->svid, sptr->info,
 	    (!buf || *buf == '\0' ? "+" : buf),
 	    sptr->umodes & UMODE_SETHOST ? sptr->user->virthost : NULL);
 
-	/* Send password from sptr->passwd to NickServ for identification,
-	 * if passwd given and if NickServ is online.
-	 * - by taz, modified by Wizzu
-	 */
 	if (MyConnect(sptr))
 	{
 		char userhost[USERLEN + HOSTLEN + 6];
+
+		sendto_connectnotice(nick, user, sptr, 0, NULL); /* moved down, for modules. */
+
+		/* Send password from sptr->passwd to NickServ for identification,
+		 * if passwd given and if NickServ is online.
+		 * - by taz, modified by Wizzu
+		 */
 		if (sptr->passwd && (nsptr = find_person(NickServ, NULL)))
 		{
 			int do_identify = 1;

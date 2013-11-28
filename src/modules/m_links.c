@@ -52,7 +52,7 @@ DLLFUNC int m_links(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_links)
   = {
 	"m_links",
-	"$Id: m_links.c,v 1.1.6.10 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /links", 
 	"3.2-b8-1",
 	NULL 

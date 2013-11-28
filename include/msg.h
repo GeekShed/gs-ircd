@@ -18,7 +18,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: msg.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 #ifndef	__msg_include__
@@ -296,6 +296,9 @@
 
 #define MSG_EOS		"EOS"
 #define TOK_EOS		"ES"
+
+#define MSG_MLOCK	"MLOCK"
+#define TOK_MLOCK	"ML"
 
 #define MAXPARA    	15
 

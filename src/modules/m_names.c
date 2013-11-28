@@ -52,7 +52,7 @@ DLLFUNC CMD_FUNC(m_names);
 ModuleHeader MOD_HEADER(m_names)
   = {
 	"m_names",
-	"$Id: m_names.c,v 1.1.4.5 2009/04/13 11:04:37 syzop Exp $",
+	"$Id$",
 	"command /names", 
 	"3.2-b8-1",
 	NULL 
@@ -206,7 +206,7 @@ DLLFUNC CMD_FUNC(m_names)
 				buf[idx++] = '+';
 		}
 
-		if (!uhnames) {
+		if (lifesux || !uhnames) {
 			s = acptr->name;
 		} else {
 			strlcpy(nuhBuffer,

@@ -1,7 +1,7 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Developer Studio generated include file.
 // Used by GENERIC.RC
-// $Id: resource.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+// $Id$
 #define IDC_USERID                      1051
 #define IDC_REALNAME                    1052
 #define IDC_PNICK                       1053

@@ -69,7 +69,7 @@ static int bouncedtimes = 0;
 ModuleHeader MOD_HEADER(m_join)
   = {
 	"m_join",
-	"$Id: m_join.c,v 1.1.4.7 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /join", 
 	"3.2-b8-1",
 	NULL 
@@ -154,10 +154,17 @@ Ban *banned;
 
 	if ((chptr->mode.mode & MODE_ONLYSECURE) && !(sptr->umodes & UMODE_SECURE))
 	{
-		if (!extended_operoverride(sptr, chptr, key, MODE_ONLYSECURE, 'z'))
-			return (ERR_SECUREONLYCHAN);
-		else
-			return 0;
+		if (IsAnOper(sptr))
+		{
+			/* Yeah yeah.. duplicate code..
+			 * Anyway: if the channel is +z we still allow an ircop to bypass it
+			 * if they are invited.
+			 */
+			for (lp = sptr->user->invited; lp; lp = lp->next)
+				if (lp->value.chptr == chptr)
+					return 0;
+		}
+		return (ERR_SECUREONLYCHAN);
 	}
 
 	if ((chptr->mode.mode & MODE_OPERONLY) && !IsAnOper(sptr))
@@ -369,7 +376,7 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 	if ((MyClient(sptr) && !(flags & CHFL_CHANOP)) || !MyClient(sptr))
 		sendto_serv_butone_token_opt(cptr, OPT_SJ3, sptr->name, MSG_JOIN,
 		    TOK_JOIN, "%s", chptr->chname);
-	if (flags & CHFL_CHANOP)
+	if (flags && !(flags & CHFL_DEOPPED))
 	{
 #endif
 		/* I _know_ that the "@%s " look a bit wierd
@@ -378,11 +385,11 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 		sendto_serv_butone_token_opt(cptr, OPT_SJ3|OPT_SJB64,
 			me.name, MSG_SJOIN, TOK_SJOIN,
 			"%B %s :%s%s ", (long)chptr->creationtime, 
-			chptr->chname, flags & CHFL_CHANOP ? "@" : "", sptr->name);
+			chptr->chname, chfl_to_sjoin_symbol(flags), sptr->name);
 		sendto_serv_butone_token_opt(cptr, OPT_SJ3|OPT_NOT_SJB64,
 			me.name, MSG_SJOIN, TOK_SJOIN,
 			"%li %s :%s%s ", chptr->creationtime, 
-			chptr->chname, flags & CHFL_CHANOP ? "@" : "", sptr->name);
+			chptr->chname, chfl_to_sjoin_symbol(flags), sptr->name);
 #ifdef JOIN_INSTEAD_OF_SJOIN_ON_REMOTEJOIN
 	}
 #endif		
@@ -402,12 +409,29 @@ DLLFUNC void _join_channel(aChannel *chptr, aClient *cptr, aClient *sptr, int fl
 			    chptr->chname, chptr->creationtime);
 		}
 		del_invite(sptr, chptr);
-		if (flags & CHFL_CHANOP)
-			sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, 
-			    me.name,
-			    MSG_MODE, TOK_MODE, "%s +o %s %lu",
-			    chptr->chname, sptr->name,
-			    chptr->creationtime);
+		if (flags && !(flags & CHFL_DEOPPED))
+		{
+#ifndef PREFIX_AQ
+			if ((flags & CHFL_CHANOWNER) || (flags & CHFL_CHANPROT))
+			{
+				/* +ao / +qo for when PREFIX_AQ is off */
+				sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, 
+				    me.name,
+				    MSG_MODE, TOK_MODE, "%s +o%c %s %s %lu",
+				    chptr->chname, chfl_to_chanmode(flags), sptr->name, sptr->name,
+				    chptr->creationtime);
+			} else {
+#endif
+				/* +v/+h/+o (and +a/+q if PREFIX_AQ is on) */
+				sendto_serv_butone_token_opt(cptr, OPT_NOT_SJ3, 
+				    me.name,
+				    MSG_MODE, TOK_MODE, "%s +%c %s %lu",
+				    chptr->chname, chfl_to_chanmode(flags), sptr->name,
+				    chptr->creationtime);
+#ifndef PREFIX_AQ
+			}
+#endif
+		}
 		if (chptr->topic)
 		{
 			sendto_one(sptr, rpl_str(RPL_TOPIC),
@@ -625,7 +649,7 @@ DLLFUNC CMD_FUNC(_do_join)
 				if (!IsOper(sptr) && !IsULine(sptr))
 				{
 					ConfigItem_deny_channel *d;
-					if ((d = Find_channel_allowed(name)))
+					if ((d = Find_channel_allowed(cptr, name)))
 					{
 						if (d->warn)
 						{
@@ -644,6 +668,11 @@ DLLFUNC CMD_FUNC(_do_join)
 							parv[0] = sptr->name;
 							parv[1] = d->redirect;
 							do_join(cptr, sptr, 2, parv);
+						}
+						if (d->class) {
+							sendto_one(sptr,
+							":%s %s %s :*** Can not join %s: Your class is not allowed",
+							me.name, IsWebTV(sptr) ? "PRIVMSG" : "NOTICE", sptr->name, name);
 						}
 						continue;
 					}

@@ -52,7 +52,7 @@ DLLFUNC int m_rakill(aClient *cptr, aClient *sptr, int parc, char *parv[]);
 ModuleHeader MOD_HEADER(m_rakill)
   = {
 	"rakill",	/* Name of module */
-	"$Id: m_rakill.c,v 1.1.6.12 2009/04/13 11:04:37 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"command /rakill", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

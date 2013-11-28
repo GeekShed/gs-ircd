@@ -52,7 +52,7 @@ DLLFUNC CMD_FUNC(m_lusers);
 ModuleHeader MOD_HEADER(m_lusers)
   = {
 	"m_lusers",
-	"$Id: m_lusers.c,v 1.1.4.7 2009/04/13 11:04:36 syzop Exp $",
+	"$Id$",
 	"command /lusers", 
 	"3.2-b8-1",
 	NULL 
@@ -111,9 +111,9 @@ char flatmap;
 	sendto_one(sptr, rpl_str(RPL_LUSERME),
 	    me.name, parv[0], IRCstats.me_clients, flatmap ? 0 : IRCstats.me_servers);
 	sendto_one(sptr, rpl_str(RPL_LOCALUSERS),
-	    me.name, parv[0], IRCstats.me_clients, IRCstats.me_max);
+	    me.name, parv[0], IRCstats.me_clients, IRCstats.me_max, IRCstats.me_clients, IRCstats.me_max);
 	sendto_one(sptr, rpl_str(RPL_GLOBALUSERS),
-	    me.name, parv[0], IRCstats.clients, IRCstats.global_max);
+	    me.name, parv[0], IRCstats.clients, IRCstats.global_max, IRCstats.clients, IRCstats.global_max);
 	if ((IRCstats.me_clients + IRCstats.me_servers) > max_connection_count)
 	{
 		max_connection_count =

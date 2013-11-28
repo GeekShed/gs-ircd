@@ -19,7 +19,7 @@
  *
  * "s_zip.h". - Headers file.
  *
- * $Id: zip.h,v 1.1.6.20 2009/04/13 11:03:58 syzop Exp $
+ * $Id$
  *
  */
 #ifndef INCLUDED_s_zip_h

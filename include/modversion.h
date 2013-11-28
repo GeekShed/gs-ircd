@@ -16,7 +16,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- *   $Id: modversion.h,v 1.1.6.7 2009/04/13 11:03:57 syzop Exp $
+ *   $Id$
  */
 
 #include "version.h"
@@ -48,11 +48,6 @@
   #define MYTOKEN_ZIP "/ZIP"
  #else
   #define MYTOKEN_ZIP ""
- #endif
- #if defined(NOSPOOF)
-  #define MYTOKEN_NOSPOOF "/NOSPF"
- #else
-  #define MYTOKEN_NOSPOOF ""
  #endif
  #if !defined(EXTCMODE)
   #define MYTOKEN_EXTCMODE "/NOEXTC"
@@ -93,12 +88,12 @@
 
 #ifdef UNREALCORE
   char our_mod_version[] = BASE_VERSION PATCH1 PATCH2 PATCH3 PATCH4 PATCH6 PATCH7 PATCH8 PATCH9 \
-                               MYTOKEN_SSL MYTOKEN_ZIP MYTOKEN_NOSPOOF MYTOKEN_EXTCMODE MYTOKEN_JOINTHROTTLE \
+                               MYTOKEN_SSL MYTOKEN_ZIP MYTOKEN_EXTCMODE MYTOKEN_JOINTHROTTLE \
                                MYTOKEN_NOFLDAWAY MYTOKEN_NEWCHF MYTOKEN_INET6;
   unsigned int our_compiler_version = GCCVER;
 #else
   DLLFUNC char Mod_Version[] = BASE_VERSION PATCH1 PATCH2 PATCH3 PATCH4 PATCH6 PATCH7 PATCH8 PATCH9 \
-                               MYTOKEN_SSL MYTOKEN_ZIP MYTOKEN_NOSPOOF MYTOKEN_EXTCMODE MYTOKEN_JOINTHROTTLE \
+                               MYTOKEN_SSL MYTOKEN_ZIP MYTOKEN_EXTCMODE MYTOKEN_JOINTHROTTLE \
                                MYTOKEN_NOFLDAWAY MYTOKEN_NEWCHF MYTOKEN_INET6;
   DLLFUNC unsigned int compiler_version = GCCVER;
 #endif

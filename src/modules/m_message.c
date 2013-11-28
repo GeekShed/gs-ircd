@@ -66,7 +66,7 @@ extern int webtv_parse(aClient *sptr, char *string);
 ModuleHeader MOD_HEADER(m_message)
   = {
 	"message",	/* Name of module */
-	"$Id: m_message.c,v 1.1.6.12 2009/04/13 11:04:36 syzop Exp $", /* Version */
+	"$Id$", /* Version */
 	"private message and notice", /* Short description of module */
 	"3.2-b8-1",
 	NULL 

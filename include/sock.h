@@ -20,15 +20,9 @@
  */
 
 /*
- * $Id: sock.h,v 1.1.1.1.2.24 2009/04/13 11:03:57 syzop Exp $
+ * $Id$
  *
- * $Log: sock.h,v $
- * Revision 1.1.1.1.2.24  2009/04/13 11:03:57  syzop
- * 3.2.8.1
- *
- * Revision 1.1.1.1.6.1.2.1  2000/07/14 20:22:57  stskeeps
- * +- Indentation and more SJ3 fixes
- *
+ * $Log$
  * Revision 1.1.1.1.6.1  2000/05/28 08:55:24  cmunk
  * Import of Unreal3.1-beta3
  *

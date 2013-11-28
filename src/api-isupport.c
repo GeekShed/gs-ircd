@@ -19,7 +19,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: api-isupport.c,v 1.1.4.8 2009/04/13 11:03:58 syzop Exp $
+ * $Id$
  */
 
 #include "struct.h"
@@ -150,7 +150,8 @@ void isupport_init(void)
 	IsupportAdd(NULL, "HCN", NULL);
 	IsupportAdd(NULL, "SAFELIST", NULL);
 	IsupportAdd(NULL, "NAMESX", NULL);
-	IsupportAdd(NULL, "UHNAMES", NULL);
+	if (UHNAMES_ENABLED)
+		IsupportAdd(NULL, "UHNAMES", NULL);
 	if (cmdstr)
 		IsupportAdd(NULL, "CMDS", cmdstr);
 }

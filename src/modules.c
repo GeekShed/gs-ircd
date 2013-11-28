@@ -19,7 +19,7 @@
  *   along with this program; if not, write to the Free Software
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * $Id: modules.c,v 1.1.6.12 2009/04/13 11:03:58 syzop Exp $
+ * $Id$
  */
 
 #include "struct.h"
@@ -116,6 +116,9 @@ unsigned char *(*StripColors)(unsigned char *text);
 const char *(*StripControlCodes)(unsigned char *text);
 void (*spamfilter_build_user_string)(char *buf, char *nick, aClient *acptr);
 int (*is_silenced)(aClient *sptr, aClient *acptr);
+void (*send_protoctl_servers)(aClient *sptr, int response);
+int (*verify_link)(aClient *cptr, aClient *sptr, char *servername, ConfigItem_link **link_out);
+void (*send_server_message)(aClient *sptr);
 
 static const EfunctionsList efunction_table[MAXEFUNCTIONS] = {
 /* 00 */	{NULL, NULL},
@@ -153,7 +156,10 @@ static const EfunctionsList efunction_table[MAXEFUNCTIONS] = {
 /* 32 */	{"StripControlCodes", (void *)&StripControlCodes},
 /* 33 */	{"spamfilter_build_user_string", (void *)&spamfilter_build_user_string},
 /* 34 */	{"is_silenced", (void *)&is_silenced},
-/* 35 */	{NULL, NULL}
+/* 35 */	{"send_protoctl_servers", (void *)&send_protoctl_servers},
+/* 36 */	{"verify_link", (void *)&verify_link},
+/* 37 */	{"send_server_message", (void *)&send_server_message},
+/* 38 */	{NULL, NULL}
 };
 
 
@@ -342,14 +348,11 @@ char  *Module_Create(char *path_)
 		snprintf(errorbuf, sizeof(errorbuf), "Cannot open module file: %s", strerror(errno));
 		return errorbuf;
 	}
-#ifdef __OpenBSD__
 	/* For OpenBSD, do not do a hardlinkink attempt first because it checks inode
 	 * numbers to see if a certain module is already loaded. -- Syzop
+	 * EDIT (2009): Looks like Linux got smart too, from now on we always copy....
 	 */
 	ret = unreal_copyfileex(path, tmppath, 0);
-#else
-	ret = unreal_copyfileex(path, tmppath, 1);
-#endif
 	if (!ret)
 	{
 		snprintf(errorbuf, sizeof(errorbuf), "Failed to copy module file.");
@@ -383,7 +386,7 @@ char  *Module_Create(char *path_)
 			make_compiler_string(theyhad, *compiler_version);
 			make_compiler_string(wehave, expectedcompilerversion);
 			snprintf(errorbuf, sizeof(errorbuf),
-			         "Module was compiled with GCC %s, core was compiled with GCC %s. SOLUTION: Recompile your UnrealIRCd and all it's modules by doing a 'make clean; ./Config -quick && make'.",
+			         "Module was compiled with GCC %s, core was compiled with GCC %s. SOLUTION: Recompile your UnrealIRCd and all its modules by doing a 'make clean; ./Config -quick && make'.",
 			         theyhad, wehave);
 			irc_dlclose(Mod);
 			remove(tmppath);
@@ -1634,9 +1637,6 @@ int i;
 #else
 		config_error("ERROR: No cloaking module loaded. (hint: you probably want to load modules\\cloak.dll)");
 #endif
-		/* TEMPORARY! */
-		config_error("If you are upgrading from 3.2 (or any older version), be sure to read the release notes "
-		             "or www.vulnscan.org/tmp/newcloak.txt regarding the cloaking change!");
 		return -1;
 	}
 
@@ -1751,6 +1751,10 @@ const char *our_dlerror(void)
 	DWORD err = GetLastError();
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS, NULL, err,
 		0, errbuf, 512, NULL);
+	if (err == 126) /* FIXME: find the correct code for 126  */
+		strlcat(errbuf, " This could be because the DLL depends on another DLL, for example if you "
+		               "are trying to load a 3rd party module which was compiled with a different compiler version.",
+		               sizeof(errbuf));
 	return errbuf;
 }
 #endif
