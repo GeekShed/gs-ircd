@@ -174,7 +174,6 @@ static LongNumStruct _ClientFlagsTable[] =
     { FLAGS_SQUIT,	"SQUIT"		},
     { FLAGS_PROTOCTL,	"PROTOCTL"	},
     { FLAGS_PING,	"PING"		},
-    { FLAGS_ASKEDPING,	"ASKEDPING"	},
     { FLAGS_NETINFO,	"NETINFO"	},
     { FLAGS_HYBNOTICE,	"HYBNOTICE"	},
     { FLAGS_QUARANTINE,	"QUARANTINE"	},
