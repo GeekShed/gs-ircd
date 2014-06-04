@@ -637,3 +637,78 @@ more proper fix will be made later.
 [2013-11-24] Bram Matthys <syzop@vulnscan.org> (a5a26ba9e626):
 - Added tag unreal3_2_10_2 for changeset ab013c6c5a79
 
+[2013-11-25] Bram Matthys <syzop@vulnscan.org> (e7727c6f8564):
+- Fix curlinstall script (updated c-ares version)
+
+[2013-12-19] Bram Matthys <syzop@vulnscan.org> (477094113ca2):
+- added two donators
+
+[2013-12-05] Nathan Phillip Brink <ohnobinki@ohnopublishing.net> (8533651cac02):
+- Update .hgignore to cover more of autotools and support testing unrealircd by running it out of the repository directory directly.
+
+[2013-12-05] Nathan Phillip Brink <ohnobinki@ohnopublishing.net> (c5ef6da4f4b5):
+- Allow set::channel-command-prefix to be an empty string.
+
+[2013-12-05] Nathan Phillip Brink <ohnobinki@ohnopublishing.net> (0330b0b3f486):
+- Describe how channel mode +d (Deaf) still intentionally allows bot commands through, thanks Dan39.
+
+[2013-12-19] Bram Matthys <syzop@vulnscan.org> (2a83d4586219):
+- added two donators
+
+[2014-01-09] Bram Matthys <syzop@vulnscan.org> (399505ae224b):
+- Secure server to server links were previously hardcoded at SSLv3. This has
+been fixed to be 'SSLv3 or later'.  In practice this means that you will now
+see a lot more server-to-server links using TLSv1.2.
+
+[2014-01-12] Bram Matthys <syzop@vulnscan.org> (05dcf4fd18ab):
+- Fix compile problem on OS X 10.9, reported and patch provided by
+JustinTArthur (#4251).
+
+[2014-01-12] Bram Matthys <syzop@vulnscan.org> (a3d24860fff3):
+- Fix possible SASL crash caused by remote server, reported by grawity
+(#4219).
+
+[2014-01-12] Bram Matthys <syzop@vulnscan.org> (a94a055923ed):
+- For silenced users we will now only check the current nick!user@host,
+suggested by Stevie (#2226).
+
+[2014-01-12] Bram Matthys <syzop@vulnscan.org> (17c8debe44d7):
+- When you specified more than 4 servers in set::timesynch::server you could
+experience weird issues such as a flood of 'Cannot accept connections:
+invalid argument' messages. Reported by hyper_threader (#4242).
+
+[2014-01-12] Bram Matthys <syzop@vulnscan.org> (e09d960ccc93):
+- Added SVIDLEN so this value is now separate from NICKLEN. Previously if you
+would lower NICKLEN to 9 then services timestamps would be cut off. Reported
+by Jobe (#4248).
+
+[2014-01-20] Bram Matthys <syzop@vulnscan.org> (dfb1baf37097):
+- Added set::spamfilter::stop-on-first-match [yes|no]:
+By default this is set to 'yes' which means that once a spamfilter matches
+UnrealIRCd will take action immediately and any additional (other)
+spamfilters will not be processed.
+When this is set to 'no' then after the first spamfilter match other
+spamfilters will still be checked. All of these matches will be logged and a
+message will go to IRCOps (snomask +S) for each one. The affected user,
+however, will only see one spamfilter action (eg: block or kill) which will
+be the spamfilter with the 'gravest action' (gzline is highest, block and
+warn are lowest).
+
+[2014-02-01] Bram Matthys <syzop@vulnscan.org> (cf52d6a55d1d):
+- Add donator
+
+[2014-03-30] Bram Matthys <syzop@vulnscan.org> (a52da57c9366):
+- Fix './unreal backtrace': on more recent gdb versions or in languages other
+than English not always all tmp/*.so files were added. Therefore the
+backtrace was often (much) less informative. We now use a different method.
+
+[2014-05-30] Bram Matthys <syzop@vulnscan.org> (3eab9c2baa85):
+- Fix crash if SASL is enabled and ping-cookie is disabled (neither are the
+default). Reported by fbi (#4307).
+
+[2014-05-31] Bram Matthys <syzop@vulnscan.org> (54abaf1fb873):
+- Prepare for 3.2.10.3
+
+[2014-05-31] Bram Matthys <syzop@vulnscan.org> (b474a485c9ea):
+- update version to .3
+
