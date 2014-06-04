@@ -490,13 +490,10 @@ static TS try_connections(TS currenttime)
 				if (!match(deny->mask, aconf->servername)
 				    && crule_eval(deny->rule))
 					break;
-			
-			sendto_realops("Server connect flags3: (0x%x) (0x%x)", aconf->options, CONNECT_SCTP);
 			if (!deny && connect_server(aconf, (aClient *)NULL,
 			    (struct hostent *)NULL) == 0)
 				    ("Connection to %s[%s] activated.",
 				    aconf->servername, aconf->hostname);
- 
 		}
 		if ((next > aconf->hold) || (next == 0))
 			next = aconf->hold;
@@ -1576,14 +1573,8 @@ int OldUnreal_main(int argc, char *argv[])
 	/*
 	 * We accept the first listen record 
 	 */
-	
 	portnum = conf_listen->port;
 
-	if (conf_listen->options & LISTENER_SCTP) {
-		me.transport_protocol = IPPROTO_SCTP;
-	} else {
-		me.transport_protocol = IPPROTO_TCP;
-	}
 /*
  *      This is completely unneeded-Sts
    	me.ip.S_ADDR =

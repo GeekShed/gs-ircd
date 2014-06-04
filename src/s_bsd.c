@@ -454,13 +454,10 @@ int  inetport(aClient *cptr, char *name, int port)
 		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
 	}
 
-	cptr->network_protocol = AFINET;
-	cptr->sock_type = SOCK_STREAM;
-
 
 	if (cptr->fd == -1)
 	{
-		cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
+		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
 	}
 	if (cptr->fd < 0)
 	{
@@ -484,13 +481,13 @@ int  inetport(aClient *cptr, char *name, int port)
 	 */
 	if (port)
 	{
-		server.SIN_FAMILY = cptr->network_protocol;
+		server.SIN_FAMILY = AFINET;
 		/* per-port bindings, fixes /stats l */
 
 #ifndef INET6
 			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
-			inet_pton(cptr->network_protocol, ipname, server.SIN_ADDR.S_ADDR);
+			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
 #endif
 		server.SIN_PORT = htons(port);
 		/*
@@ -557,7 +554,6 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->from = cptr;
 	SetMe(cptr);
 	strncpyzt(cptr->name, conf->ip, sizeof(cptr->name));
-	cptr->transport_protocol = conf->protocol;
 	if (inetport(cptr, conf->ip, conf->port))
 		cptr->fd = -2;
 	cptr->class = (ConfigItem_class *)conf;
@@ -1317,9 +1313,6 @@ aClient *add_connection(aClient *cptr, int fd)
 	int i, j;
 	acptr = make_client(NULL, &me);
 
-	acptr->network_protocol = cptr->network_protocol;
-	acptr->transport_protocol = cptr->transport_protocol;
-	acptr->sock_type = cptr->sock_type;
 	/* Removed preliminary access check. Full check is performed in
 	 * m_server and m_user instead. Also connection time out help to
 	 * get rid of unwanted connections.
@@ -2409,18 +2402,8 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * with it so if it fails its useless.
 	 */
 
-	cptr->network_protocol = AFINET;
 
-	if (aconf->options & CONNECT_SCTP) {
-		cptr->transport_protocol = IPPROTO_SCTP;
-		cptr->sock_type = SOCK_STREAM;
-	} else {
-		cptr->transport_protocol = IPPROTO_TCP;
-		cptr->sock_type = SOCK_STREAM;
-
-	}
-
-	cptr->fd = socket(cptr->network_protocol, cptr->sock_type, cptr->transport_protocol);
+	cptr->fd = socket(AFINET, SOCK_STREAM, 0);
 	if (cptr->fd < 0)
 	{
 		if (ERRNO == P_EMFILE)
@@ -2444,24 +2427,22 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	if (aconf->bindip && strcmp("*", aconf->bindip))
 	{
 		bzero((char *)&server, sizeof(server));
-		server.SIN_FAMILY = cptr->network_protocol;
+		server.SIN_FAMILY = AFINET;
 		server.SIN_PORT = 0;
 #ifndef INET6
 		server.SIN_ADDR.S_ADDR = inet_addr(aconf->bindip);	
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
-		if (cptr->transport_protocol != IPPROTO_SCTP) {		
 			if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
 			{
 				report_baderror("error binding to local port for %s:%s", cptr);
 				return NULL;
 			}
-		}
 	}
 
 	bzero((char *)&server, sizeof(server));
-	server.SIN_FAMILY = cptr->network_protocol;
+	server.SIN_FAMILY = AFINET;
 	/*
 	 * By this point we should know the IP# of the host listed in the
 	 * conf line, whether as a result of the hostname lookup or the ip#

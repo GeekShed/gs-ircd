@@ -1066,9 +1066,6 @@ struct Client {
 	ConfigItem_class *class;		/* Configuration record associated */
 	int authfd;		/* fd for rfc931 authentication */
         short slot;         /* my offset in the local fd table */
-	int network_protocol;		/* network protocol type (ipv4, or ipv6)*/
-	int transport_protocol;		/* transport protocol type (TCP, or SCTP)*/
-	int sock_type;			/* socket type (STREAM, or SEQPACKET)*/
 	struct IN_ADDR ip;	/* keep real ip# too */
 	struct sockaddr_in6 newip;
 	u_short port;		/* and the remote port# too :-) */
