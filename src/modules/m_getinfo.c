@@ -623,15 +623,6 @@ static int m_getinfo(aClient *cptr, aClient *sptr, int parc, char *parv[])
 			sendto_one(sptr, ":%s 339 %s :Flags: %s",
 				me.name, sptr->name,
 				get_flag_names(acptr->flags));
-			sendto_one(sptr, ":%s 339 %s :Network Protocol: %d",
-				me.name, sptr->name,
-				acptr->network_protocol);
-			sendto_one(sptr, ":%s 339 %s :Transport Protocol: %d",
-				me.name, sptr->name,
-				acptr->transport_protocol);
-			sendto_one(sptr, ":%s 339 %s :Socket Type: %d",
-				me.name, sptr->name,
-				acptr->sock_type);
 
 			if (!IsMe(acptr))
 			{
