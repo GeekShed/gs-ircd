@@ -30,7 +30,7 @@ Spanish
 <br><br>
 <div align="center"><b><font size="7">UnrealIRCd</font></b><br>
   <font size="4"><a href="http://www.unrealircd.com">http://www.unrealircd.com</a></font><br>
-  <font size="4">Version: 3.2.10.2</font><br>
+  <font size="4">Version: 3.2.10.3</font><br>
   <b>Ultima actualizacion del doc:</b> 2013-04-05</div>
 <br>
   <b>Programador jefe/mantenimiento:</b> Syzop<br>
@@ -2574,6 +2574,16 @@ set {
   Si un spamfilter tarda más de esta cantidad de milisegundos para ejecutarse
   (1000ms = 1 segundo), a continuacion el spamfilter sera removido (predeterminado: 500).
   Vea tambien <a href="#feature_spamfilter_slow">Deteccion Lenta de Spamfilter</a>.</p>
+  <p><font class="set">set::spamfilter::stop-on-first-match &lt;yes|no&gt;</font><br>
+  Por defecto es 'yes' lo que significa que una vez el filtro de spam
+  lo encuentre UnrealIRCd tomara una accion inmediata y cualquier otro filtro adicional
+  no sera procesado.<br>
+  Si esta seteado a 'no' despues de que se encuentre el primer filtro de spam
+  otros filtros pueden ser revisados. Todos los que coincidan seran logeados
+  y el mensaje sera enviado a los IRCOps con (snomask +S). Sin embargo el usuario afectado,
+  solo vera la accion del filtro de spam (eg: block o kill)
+  sera el filtro de spam con 'accion mas grave' (gzline es el mas alto,
+  block y warn los mas leves).</p>
  <p><font class="set">set::check-target-nick-bans &lt;yes|no&gt;</font><br>
   Si un usuario se cambia de nick, comprueba si el nuevo nick se relaciona con algún ban.
   Si es así, no permite el cambio de nick. Por defecto 'yes'.</p>

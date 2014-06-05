@@ -177,6 +177,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define	NICKLEN		30
 #define	USERLEN		10
 #define	REALLEN	 	50
+#define SVIDLEN		30
 #define	TOPICLEN	307
 #define	CHANNELLEN	32
 #define	PASSWDLEN 	100	/* was 20, then 32, now 48. */
@@ -817,7 +818,7 @@ struct User {
 	 * which is less useful in the modern world of IRC where nicks are grouped to
 	 * accounts, so it is now a string.
 	 */
-	char svid[NICKLEN + 1];
+	char svid[SVIDLEN + 1];
 
 	signed char refcnt;	/* Number of times this block is referenced */
 	unsigned short joined;		/* number of channels joined */
@@ -1153,18 +1154,18 @@ struct _configflag_tld
 #define CONF_BAN_TYPE_AKILL	1
 #define CONF_BAN_TYPE_TEMPORARY 2
 
-#define BAN_ACT_KILL		1
-#define BAN_ACT_TEMPSHUN	2
-#define BAN_ACT_SHUN		3
-#define BAN_ACT_KLINE		4
-#define BAN_ACT_ZLINE		5
-#define BAN_ACT_GLINE		6
-#define BAN_ACT_GZLINE		7
-/* below are pretty much spamfilter only */
-#define BAN_ACT_BLOCK		8
-#define BAN_ACT_DCCBLOCK	9
-#define BAN_ACT_VIRUSCHAN	10
-#define BAN_ACT_WARN		11
+/* Ban actions. These must be ordered by severity (!) */
+#define BAN_ACT_GZLINE		1100
+#define BAN_ACT_GLINE		1000
+#define BAN_ACT_ZLINE		 900
+#define BAN_ACT_KLINE		 800
+#define BAN_ACT_SHUN		 700
+#define BAN_ACT_KILL		 600
+#define BAN_ACT_TEMPSHUN	 500
+#define BAN_ACT_VIRUSCHAN	 400
+#define BAN_ACT_DCCBLOCK	 300
+#define BAN_ACT_BLOCK		 200
+#define BAN_ACT_WARN		 100
 
 
 #define CRULE_ALL		0

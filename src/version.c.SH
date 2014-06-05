@@ -4,7 +4,7 @@ echo "Extracting src/version.c..."
 
 #id=`grep '$Id: Changes,v' ../Changes`
 #id=`echo $id |sed 's/.* Changes\,v \(.*\) .* Exp .*/\1/'`
-id="3.2.10.2"
+id="3.2.10.3"
 echo "$id"
 
 if test -r version.c
@@ -117,7 +117,8 @@ char *unrealcredits[] =
 	"Grandview Landscape and Masonry - www.grandviewoutdoor.com,",
 	"Saibot Technologies - http://saibottechnologies.com/,",
 	"IRC-IRC.de Community - irc.irc-irc.de,",
-	"Mike Meisner - www.hottubcoverdepot.com, CubaChat - irc.cubachat.org",
+	"Mike Meisner - www.hottubcoverdepot.com, CubaChat - irc.cubachat.org,",
+	"BluePromoCode - www.bluepromocode.com, DontPayFull - www.dontpayfull.com",
 	"=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=",
 	"The UnrealIRCd Team would like to thank:",
 	" ",
