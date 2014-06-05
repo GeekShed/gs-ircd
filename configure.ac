@@ -10,7 +10,7 @@ dnl Unreal.nfo
 dnl .CHANGES.NEW
 dnl src/version.c.SH
 
-AC_INIT([unrealircd], [3.2.10.2], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
+AC_INIT([unrealircd], [3.2.10.3], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
 AC_CONFIG_SRCDIR([src/ircd.c])
 AC_CONFIG_HEADER([include/setup.h])
 AC_CONFIG_AUX_DIR([autoconf])
@@ -119,7 +119,7 @@ if test "$ac_cv_prog_gcc" = "yes"; then
 	ac_cv_pic="-fPIC -DPIC -shared"
 	case `uname -s` in
 		Darwin*[)]
-		ac_cv_pic="-bundle -flat_namespace -undefined suppress"
+		ac_cv_pic="-std=gnu89 -bundle -flat_namespace -undefined suppress"
 		;;
 		HP-UX*[)]
 		ac_cv_pic="-fPIC"

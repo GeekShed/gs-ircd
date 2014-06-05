@@ -797,9 +797,9 @@ extern int iplist_onlist(IPList *iplist, char *ip);
 extern struct hostent *unreal_create_hostent(char *name, struct IN_ADDR *addr);
 extern char *unreal_time_synch_error(void);
 
-#define _GSREV	15000
+#define _GSREV	15001
 #define _GSCODENAME "FireStorm"
-#define _GSVERSION_STRING "1.5.0"
+#define _GSVERSION_STRING "1.5.1"
 #define GSVERSION _GSREV
 
 extern long GSREV;
