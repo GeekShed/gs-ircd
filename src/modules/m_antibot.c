@@ -81,6 +81,8 @@ DLLFUNC int m_lconnect(aClient *cptr)
 {
 	time_t now;
 
+	if (!MyClient(cptr))
+               return 0;
 	sendto_one(cptr, "NOTICE AUTH :*** Please wait while we scan your connection for open proxies...", me.name, cptr->name);
 	sendto_snomask_global(SNO_BOPM, "BOPM unknown unknown %s %s", Inet_ia2p(&cptr->ip), Inet_ia2p(&cptr->ip));
 	now = TStime();
