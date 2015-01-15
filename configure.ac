@@ -10,7 +10,7 @@ dnl Unreal.nfo
 dnl .CHANGES.NEW
 dnl src/version.c.SH
 
-AC_INIT([unrealircd], [3.2.10.3], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
+AC_INIT([unrealircd], [3.2.10.4], [http://bugs.unrealircd.org/], [], [http://unrealircd.org/])
 AC_CONFIG_SRCDIR([src/ircd.c])
 AC_CONFIG_HEADER([include/setup.h])
 AC_CONFIG_AUX_DIR([autoconf])
@@ -107,7 +107,7 @@ AC_DEFINE(STATIC_LINKING)
 ])])
 
 hold_cflags=$CFLAGS
-CFLAGS="$CFLAGS -export-dynamic"
+CFLAGS="$CFLAGS -Wl,-export-dynamic"
 AC_CACHE_CHECK(if we need the -export-dynamic flag, ac_cv_export_dynamic, [
 AC_TRY_LINK(, [int i];, ac_cv_export_dynamic=yes, ac_cv_export_dynamic=no)])
 if test "$ac_cv_export_dynamic" = "no"; then

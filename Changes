@@ -637,12 +637,6 @@ more proper fix will be made later.
 [2013-11-24] Bram Matthys <syzop@vulnscan.org> (a5a26ba9e626):
 - Added tag unreal3_2_10_2 for changeset ab013c6c5a79
 
-[2013-11-25] Bram Matthys <syzop@vulnscan.org> (e7727c6f8564):
-- Fix curlinstall script (updated c-ares version)
-
-[2013-12-19] Bram Matthys <syzop@vulnscan.org> (477094113ca2):
-- added two donators
-
 [2013-12-05] Nathan Phillip Brink <ohnobinki@ohnopublishing.net> (8533651cac02):
 - Update .hgignore to cover more of autotools and support testing unrealircd by running it out of the repository directory directly.
 
@@ -651,6 +645,12 @@ more proper fix will be made later.
 
 [2013-12-05] Nathan Phillip Brink <ohnobinki@ohnopublishing.net> (0330b0b3f486):
 - Describe how channel mode +d (Deaf) still intentionally allows bot commands through, thanks Dan39.
+
+[2013-11-25] Bram Matthys <syzop@vulnscan.org> (e7727c6f8564):
+- Fix curlinstall script (updated c-ares version)
+
+[2013-12-19] Bram Matthys <syzop@vulnscan.org> (477094113ca2):
+- added two donators
 
 [2013-12-19] Bram Matthys <syzop@vulnscan.org> (2a83d4586219):
 - added two donators
@@ -711,4 +711,32 @@ default). Reported by fbi (#4307).
 
 [2014-05-31] Bram Matthys <syzop@vulnscan.org> (b474a485c9ea):
 - update version to .3
+
+[2014-07-05] Bram Matthys <syzop@vulnscan.org> (e25a31250723):
+- For services who allow you to log in by account name but still allow you to
+use a different nick: when you're logged in you are now considered
+registered as far as channel mode +M (only registered users may speak and
++R (only registered users may join) are concerned. Same for user mode +R
+(only allow private messages from registered users).
+Tech: whenever services set SVID and it's not * and does not start with a
+      number, then we consider this user to be 'logged in'.
+      Whenever a user is set +r (s)he is also considered 'logged in'.
+      This way it's compatible with both older and new services and doesn't
+      introduce security issues with older services using servicetimestamp
+      for nick tracking or other means.
+This issue was reported by ShawnSmith (#4318).
+
+[2014-07-06] Bram Matthys <syzop@vulnscan.org> (1070c09c1dc2):
+- Fix compile errors when building with clang instead of gcc, which is more
+and more becoming the default nowadays such as on FreeBSD.
+Reported by QIXOZL (#4239). Backported the patch from Heero.
+
+[2014-07-26] Bram Matthys <syzop@vulnscan.org> (52bbe71eb9f6):
+- 3.2.10.4
+
+[2014-07-26] Bram Matthys <syzop@vulnscan.org> (f33ccaf7ef0b):
+- Update curl-ca-bundle from Dec 29 20:03:40 2012 to Tue Jul 15 08:33:20 2014
+
+[2014-07-26] Bram Matthys <syzop@vulnscan.org> (ecb65d385bc9):
+- report as 3.2.10.4 on windows
 
