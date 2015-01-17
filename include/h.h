@@ -121,7 +121,7 @@ extern void       ipport_seperate(char *string, char **ip, char **port);
 ConfigItem_class	*Find_class(char *name);
 ConfigItem_deny_dcc	*Find_deny_dcc(char *name);
 ConfigItem_oper		*Find_oper(char *name);
-ConfigItem_listen	*Find_listen(char *ipmask, int port);
+ConfigItem_listen	*Find_listen(char *ipmask, int port, int protocol);
 ConfigItem_ulines	*Find_uline(char *host);
 ConfigItem_except	*Find_except(aClient *, char *host, short type);
 ConfigItem_tld		*Find_tld(aClient *cptr, char *host);
@@ -465,6 +465,7 @@ extern MODVAR long SNO_QLINE;
 extern MODVAR long SNO_SNOTICE;
 extern MODVAR long SNO_SPAMF;
 extern MODVAR long SNO_OPER;
+extern MODVAR long SNO_BOPM;
 
 #ifdef EXTCMODE
 /* Extended chanmodes... */
@@ -795,6 +796,15 @@ extern int match_esc(const char *mask, const char *name);
 extern int iplist_onlist(IPList *iplist, char *ip);
 extern struct hostent *unreal_create_hostent(char *name, struct IN_ADDR *addr);
 extern char *unreal_time_synch_error(void);
+
+#define _GSREV	15001
+#define _GSCODENAME "FireStorm"
+#define _GSVERSION_STRING "1.5.1"
+#define GSVERSION _GSREV
+
+extern long GSREV;
+extern char * GSVERSION_STRING;
+extern char * GSCODENAME;
 extern int unreal_time_synch(int timeout);
 extern int extban_is_banned_helper(char *buf);
 extern char *getcloak(aClient *sptr);

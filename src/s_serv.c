@@ -193,6 +193,8 @@ CMD_FUNC(m_version)
 		    serveropts, extraflags ? extraflags : "",
 		    tainted ? "3" : "",
 		    (IsAnOper(sptr) ? MYOSNAME : "*"), UnrealProtocol);
+	            sendto_one(sptr, ":%s NOTICE %s :gs-ircd v%s (%s) %u", me.name, sptr->name, GSVERSION_STRING, GSCODENAME, GSREV);
+
 #ifdef USE_SSL
 		if (IsAnOper(sptr))
 			sendto_one(sptr, ":%s NOTICE %s :%s", me.name, sptr->name, OPENSSL_VERSION_TEXT);
@@ -467,6 +469,8 @@ char *get_cptr_status(aClient *acptr)
 			*p++ = 'R';
 		if (acptr->umodes & LISTENER_JAVACLIENT)
 			*p++ = 'J';
+		if (acptr->umodes & LISTENER_SCTP)
+			*p++ = 't';
 	}
 	else
 	{

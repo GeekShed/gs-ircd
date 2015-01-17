@@ -66,6 +66,8 @@ Computing Center and Jarkko Oikarinen";
 #include "version.h"
 #ifndef _WIN32
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <netdb.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/resource.h>
@@ -344,7 +346,7 @@ void report_error(char *text, aClient *cptr)
 	int errtmp = ERRNO, origerr = ERRNO;
 	char *host, xbuf[256];
 	int  err, len = sizeof(err), n;
-	
+
 	host = (cptr) ? get_client_name(cptr, FALSE) : "";
 
 	Debug((DEBUG_ERROR, text, host, STRERROR(errtmp)));
@@ -425,6 +427,7 @@ int  inetport(aClient *cptr, char *name, int port)
 	int  ad[4], len = sizeof(server);
 	char ipname[64];
 
+
 	if (BadPtr(name))
 		name = "*";
 	ad[0] = ad[1] = ad[2] = ad[3] = 0;
@@ -450,9 +453,8 @@ int  inetport(aClient *cptr, char *name, int port)
 		    name, (unsigned int)port);
 		(void)strlcpy(cptr->name, me.name, sizeof cptr->name);
 	}
-	/*
-	 * At first, open a new socket
-	 */
+
+
 	if (cptr->fd == -1)
 	{
 		cptr->fd = socket(AFINET, SOCK_STREAM, 0);
@@ -481,11 +483,11 @@ int  inetport(aClient *cptr, char *name, int port)
 	{
 		server.SIN_FAMILY = AFINET;
 		/* per-port bindings, fixes /stats l */
-		
+
 #ifndef INET6
-		server.SIN_ADDR.S_ADDR = inet_addr(ipname);
+			server.SIN_ADDR.S_ADDR = inet_addr(ipname);
 #else
-		inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
+			inet_pton(AFINET, ipname, server.SIN_ADDR.S_ADDR);
 #endif
 		server.SIN_PORT = htons(port);
 		/*
@@ -557,7 +559,7 @@ int add_listener2(ConfigItem_listen *conf)
 	cptr->class = (ConfigItem_class *)conf;
 	cptr->umodes = conf->options ? conf->options : LISTENER_NORMAL;
 	if (cptr->fd >= 0)
-	{	
+	{
 		cptr->umodes |= LISTENER_BOUND;
 		conf->options |= LISTENER_BOUND;
 		conf->listener = cptr;
@@ -602,7 +604,7 @@ void close_listeners(void)
 			if (aconf->flag.temporary && (aconf->clients == 0))
 			{
 				close_connection(cptr);
-				/* need to start over because close_connection() may have 
+				/* need to start over because close_connection() may have
 				** rearranged local[]!
 				*/
 				reloop = 1;
@@ -847,7 +849,7 @@ int  check_client(aClient *cptr, char *username)
 	static char sockname[HOSTLEN + 1];
 	struct hostent *hp = NULL;
 	int  i;
-	
+
 	ClearAccess(cptr);
 	Debug((DEBUG_DNS, "ch_cl: check access for %s[%s]",
 	    cptr->name, inetntoa((char *)&cptr->ip)));
@@ -1134,7 +1136,7 @@ void set_sock_opts(int fd, aClient *cptr)
 	opt = 1;
 	if (setsockopt(fd, SOL_SOCKET, SO_DEBUG, (OPT_TYPE *)&opt,
 	    sizeof(opt)) < 0)
-		
+
 		report_error("setsockopt(SO_DEBUG) %s:%s", cptr);
 #endif /* _SOLARIS */
 #endif
@@ -1264,9 +1266,9 @@ void set_non_blocking(int fd, aClient *cptr)
 
 	if (ioctl(fd, FIONBIO, &res) < 0)
 	{
-		if (cptr) 
+		if (cptr)
 			report_error("ioctl(fd,FIONBIO) failed for %s:%s", cptr);
-		
+
 	}
 #else
 # if !defined(_WIN32)
@@ -1418,7 +1420,7 @@ add_con_refuse:
 	}
 
 	acptr->fd = fd;
-    add_local_client(acptr);
+    	add_local_client(acptr);
 	acptr->listener = cptr;
 	if (!acptr->listener->class)
 	{
@@ -1465,6 +1467,11 @@ void	start_of_normal_client_handshake(aClient *acptr)
 struct hostent *he;
 
 	acptr->status = STAT_UNKNOWN;
+	Hook *h;
+	for (h = Hooks[HOOKTYPE_LOCAL_PRE_DNS]; h; h = h->next)
+	{
+		int v = (*(h->func.intfunc))(acptr);
+	}
 
 	RunHook(HOOKTYPE_HANDSHAKE, acptr);
 
@@ -1501,7 +1508,7 @@ void proceed_normal_client_handshake(aClient *acptr, struct hostent *he)
 	acptr->hostp = he;
 	if (SHOWCONNECTINFO && !acptr->serv && !IsServersOnlyListener(acptr->listener))
 		sendto_one(acptr, "%s", acptr->hostp ? REPORT_FIN_DNS : REPORT_FAIL_DNS);
-	
+
 	if (!dns_special_flag && !DoingAuth(acptr))
 		SetAccess(acptr);
 }
@@ -1645,7 +1652,7 @@ int  read_message(time_t delay)
 int  read_message(time_t delay, fdlist *listp)
 #endif
 {
-/* 
+/*
    #undef FD_SET(x,y) do { if (fcntl(x, F_GETFD, &sockerr) == -1) abort(); FD_SET(x,y); } while(0)
 */	aClient *cptr;
 	int  nfds;
@@ -1704,7 +1711,7 @@ int  read_message(time_t delay, fdlist *listp)
 				continue;
 			if (IsLog(cptr))
 				continue;
-			
+
 			if (DoingAuth(cptr))
 			{
 				int s = TStime() - cptr->firsttime;
@@ -2062,7 +2069,7 @@ int  read_message(time_t delay, fdlist *listp)
 			   nextping = TStime();
 			   if (!cptr->listener)
 				cptr->listener = &me;
-		        
+
                       }
 	}
 
@@ -2394,6 +2401,8 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 	 * Might as well get sockhost from here, the connection is attempted
 	 * with it so if it fails its useless.
 	 */
+
+
 	cptr->fd = socket(AFINET, SOCK_STREAM, 0);
 	if (cptr->fd < 0)
 	{
@@ -2425,11 +2434,11 @@ static struct SOCKADDR *connect_inet(ConfigItem_link *aconf, aClient *cptr, int 
 #else
 		inet_pton(AF_INET6, aconf->bindip, server.SIN_ADDR.S_ADDR);
 #endif
-		if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
-		{
-			report_baderror("error binding to local port for %s:%s", cptr);
-			return NULL;
-		}
+			if (bind(cptr->fd, (struct SOCKADDR *)&server, sizeof(server)) == -1)
+			{
+				report_baderror("error binding to local port for %s:%s", cptr);
+				return NULL;
+			}
 	}
 
 	bzero((char *)&server, sizeof(server));

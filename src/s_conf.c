@@ -250,6 +250,8 @@ static OperFlag _ListenerFlags[] = {
 	{ LISTENER_JAVACLIENT, 	"java"},
 	{ LISTENER_MASK, 	"mask"},
 	{ LISTENER_REMOTEADMIN, "remoteadmin"},
+	{ LISTENER_SCTP, 	"sctp"},
+	{ LISTENER_SEQPACKET, 	"seqpacket"},
 	{ LISTENER_SERVERSONLY, "serversonly"},
 	{ LISTENER_SSL, 	"ssl"},
 	{ LISTENER_NORMAL, 	"standard"},
@@ -261,6 +263,8 @@ static OperFlag _LinkFlags[] = {
 	{ CONNECT_NODNSCACHE, "nodnscache" },
 	{ CONNECT_NOHOSTCHECK, "nohostcheck" },
 	{ CONNECT_QUARANTINE, "quarantine"},
+	{ CONNECT_SCTP,	"sctp"		  },
+	{ CONNECT_SEQPACKET,	"seqpacket"	  },
 	{ CONNECT_SSL,	"ssl"		  },
 	{ CONNECT_ZIP,	"zip"		  },
 };
@@ -2815,7 +2819,7 @@ int j;
 	return count;
 }
 
-ConfigItem_listen	*Find_listen(char *ipmask, int port)
+ConfigItem_listen	*Find_listen(char *ipmask, int port, int protocol)
 {
 	ConfigItem_listen	*p;
 
@@ -2824,9 +2828,9 @@ ConfigItem_listen	*Find_listen(char *ipmask, int port)
 
 	for (p = conf_listen; p; p = (ConfigItem_listen *) p->next)
 	{
-		if (!match(p->ip, ipmask) && (port == p->port))
+		if (!match(p->ip, ipmask) && (port == p->port) && (protocol == p->protocol))
 			return (p);
-		if (!match(ipmask, p->ip) && (port == p->port))
+		if (!match(ipmask, p->ip) && (port == p->port) && (protocol == p->protocol))
 			return (p);
 	}
 	return NULL;
@@ -3343,7 +3347,6 @@ int	_test_admin(ConfigFile *conf, ConfigEntry *ce)
 
 	if (requiredstuff.conf_admin)
 	{
-		config_warn_duplicate(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "admin");
 		return 0;
 	}
 
@@ -3804,6 +3807,12 @@ int	_test_oper(ConfigFile *conf, ConfigEntry *ce)
 	if (!ce->ce_vardata)
 	{
 		config_error_noname(ce->ce_fileptr->cf_filename, ce->ce_varlinenum, "oper");
+		errors++;
+	}
+	if (!strcasecmp(ce->ce_vardata, "default"))
+	{
+		config_error("%s:%d: Class cannot be named 'default', this class name is reserved for internal use.",
+			ce->ce_fileptr->cf_filename, ce->ce_varlinenum);
 		errors++;
 	}
 	for (cep = ce->ce_entries; cep; cep = cep->ce_next)
@@ -4654,6 +4663,7 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 	char	    copy[256];
 	char	    *ip;
 	char	    *port;
+	int         protocol;
 	int	    start, end, iport, isnew;
 	int tmpflags =0;
 
@@ -4692,13 +4702,19 @@ int	_conf_listen(ConfigFile *conf, ConfigEntry *ce)
 #ifndef USE_SSL
 	tmpflags &= ~LISTENER_SSL;
 #endif
+	if (tmpflags & LISTENER_SCTP) {
+		protocol = IPPROTO_SCTP;		
+	} else {
+		protocol = IPPROTO_TCP;
+	}
 	for (iport = start; iport < end; iport++)
 	{
-		if (!(listen = Find_listen(ip, iport)))
+		if (!(listen = Find_listen(ip, iport, protocol)))
 		{
 			listen = MyMallocEx(sizeof(ConfigItem_listen));
 			listen->ip = strdup(ip);
 			listen->port = iport;
+			listen->protocol = protocol;
 			isnew = 1;
 		} else
 			isnew = 0;
@@ -8938,8 +8954,10 @@ void	run_configuration(void)
 
 	for (listenptr = conf_listen; listenptr; listenptr = (ConfigItem_listen *) listenptr->next)
 	{
+		ircd_log(LOG_ERROR, "%i Port options for: 0x%x", listenptr->port, listenptr->options);
 		if (!(listenptr->options & LISTENER_BOUND))
 		{
+			ircd_log(LOG_ERROR, "%i Port2 options for: 0x%x", listenptr->port, listenptr->options);
 			if (add_listener2(listenptr) == -1)
 			{
 				ircd_log(LOG_ERROR, "Failed to bind to %s:%i", listenptr->ip, listenptr->port);
@@ -8950,6 +8968,7 @@ void	run_configuration(void)
 		}
 		else
 		{
+			ircd_log(LOG_ERROR, "Port2 options for %i: 0x%x", listenptr->port, listenptr->options);
 			if (listenptr->listener)
 			{
 				listenptr->listener->umodes = 

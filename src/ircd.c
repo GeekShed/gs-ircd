@@ -490,13 +490,10 @@ static TS try_connections(TS currenttime)
 				if (!match(deny->mask, aconf->servername)
 				    && crule_eval(deny->rule))
 					break;
-
 			if (!deny && connect_server(aconf, (aClient *)NULL,
 			    (struct hostent *)NULL) == 0)
-				sendto_realops
 				    ("Connection to %s[%s] activated.",
 				    aconf->servername, aconf->hostname);
-
 		}
 		if ((next > aconf->hold) || (next == 0))
 			next = aconf->hold;
@@ -1062,11 +1059,24 @@ static void generate_cloakkeys()
  */
 #define mytdiff(a, b)   ((long)a - (long)b)
 
+int OldUnreal_main(int argc, char *argv[]);
+
+
+long GSREV = _GSREV;
+char * GSVERSION_STRING = _GSVERSION_STRING;
+char * GSCODENAME = _GSCODENAME;
+
 #ifndef _WIN32
-int main(int argc, char *argv[])
+int main(int argc, char *argv[]) {
+	return OldUnreal_main(argc, argv);
+}
 #else
-int InitwIRCD(int argc, char *argv[])
+int InitwIRCD(int argc, char *argv[]) {
+	return OldUnreal_main(argc, argv);
+}
 #endif
+
+int OldUnreal_main(int argc, char *argv[])
 {
 #ifdef _WIN32
 	WORD wVersionRequested = MAKEWORD(1, 1);
@@ -1564,6 +1574,7 @@ int InitwIRCD(int argc, char *argv[])
 	 * We accept the first listen record 
 	 */
 	portnum = conf_listen->port;
+
 /*
  *      This is completely unneeded-Sts
    	me.ip.S_ADDR =
@@ -1823,7 +1834,7 @@ void SocketLoop(void *dummy)
 		if (nextconnect)
 			delay = MIN(nextping, nextconnect);
 		else
-			delay = nextping;
+		delay = nextping;
 		delay = MIN(nextdnscheck, delay);
 		delay = MIN(nextexpire, delay);
 		delay -= timeofday;

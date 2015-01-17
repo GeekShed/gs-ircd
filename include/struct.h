@@ -49,6 +49,9 @@
 #ifndef _WIN32
 #include <netinet/in.h>
 #include <netdb.h>
+#ifndef IPPROTO_SCTP
+#define IPPROTO_SCTP 132
+#endif
 #endif
 #ifdef STDDEFH
 # include <stddef.h>
@@ -177,7 +180,7 @@ typedef unsigned int u_int32_t;	/* XXX Hope this works! */
 #define SVIDLEN		30
 #define	TOPICLEN	307
 #define	CHANNELLEN	32
-#define	PASSWDLEN 	48	/* was 20, then 32, now 48. */
+#define	PASSWDLEN 	100	/* was 20, then 32, now 48. */
 #define	KEYLEN		23
 #define LINKLEN		32
 #define	BUFSIZE		512	/* WARNING: *DONT* CHANGE THIS!!!! */
@@ -983,6 +986,8 @@ typedef struct {
 #define LISTENER_MASK		0x000020
 #define LISTENER_SSL		0x000040
 #define LISTENER_BOUND		0x000080
+#define LISTENER_SCTP		0x000100
+#define LISTENER_SEQPACKET	0x000200
 
 #define IsServersOnlyListener(x)	((x) && ((x)->umodes & LISTENER_SERVERSONLY))
 
@@ -992,6 +997,8 @@ typedef struct {
 #define CONNECT_QUARANTINE	0x000008
 #define CONNECT_NODNSCACHE	0x000010
 #define CONNECT_NOHOSTCHECK	0x000020
+#define CONNECT_SCTP		0x000040
+#define CONNECT_SEQPACKET	0x000080
 
 #define SSLFLAG_FAILIFNOCERT 	0x1
 #define SSLFLAG_VERIFYCERT 	0x2
@@ -1062,6 +1069,7 @@ struct Client {
 	int authfd;		/* fd for rfc931 authentication */
         short slot;         /* my offset in the local fd table */
 	struct IN_ADDR ip;	/* keep real ip# too */
+	struct sockaddr_in6 newip;
 	u_short port;		/* and the remote port# too :-) */
 	struct hostent *hostp;
 	u_short watches;	/* Keep track of count of notifies */
@@ -1074,6 +1082,7 @@ struct Client {
 #ifdef DEBUGMODE
 	TS   cputime;
 #endif
+
 	char *error_str;	/* Quit reason set by dead_link in case of socket/buffer error */
 
 	char sasl_agent[NICKLEN + 1];
@@ -1273,6 +1282,7 @@ struct _configitem_listen {
 	ConfigFlag 	flag;
 	char		*ip;
 	int		port;
+	int		protocol;
 	int		options, clients;
 	aClient		*listener;
 };
