@@ -464,7 +464,7 @@ struct timeval tv_alpha, tv_beta;
 			if (!done)
 			{
 				/* Prepare the text [done here, to avoid useless CPU time] */
-				strlcpy(filtered, StripControlCodes(text), sizeof(filtered));
+				strlcpy(filtered, StripControlCodes((unsigned char *) text), sizeof(filtered));
 				done = 1;
 			}
 			p = ban->banstr + 3;
